@@ -1,0 +1,17 @@
+[Unit]
+Description=LightRAG Service
+After=network.target
+
+[Service]
+Type=simple
+User=your-user
+# Memory settings
+MemoryHigh=8G
+MemoryMax=12G
+WorkingDirectory=/path/to/dualrag
+ExecStart=/path/to/your/venv/bin/lightrag-server
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

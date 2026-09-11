@@ -1,0 +1,25 @@
+# SatQuery AI default configuration
+
+llm:
+  provider: groq            # groq | gemini | ollama | openai
+  model: openai/gpt-oss-20b
+  temperature: 0
+
+embedding:
+  model: moka-ai/m3e-base
+  device: cpu
+
+solution_space:
+  source_file: data/solutions/guidance.txt
+  index_dir: data/indices/solution_db
+  top_k: 1
+
+agent:
+  mode: full                # full | baseline | task_inference_only | solution_retrieval_only
+  verbose: false
+
+paths:
+  # Local evaluation JSONL files (not shipped in repo; use --input in run_eval.py)
+  eval_questions: data/eval/questions_planning.jsonl
+  eval_questions_rschatgpt: data/eval/question_rschatgpt.jsonl
+  default_image: examples/sample.png
