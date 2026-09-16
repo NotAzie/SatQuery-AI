@@ -40,7 +40,7 @@ class ModalityTool(Tool):
         "reports the texture and contrast characteristics that led to that call."
     )
     min_images = 1
-    max_images = 2
+    max_images = 1
 
     def run(self, context: ToolContext) -> ToolResult:
         started = time.perf_counter()
@@ -109,6 +109,16 @@ class ModalityTool(Tool):
             agreement = probe_top is heuristic_modality
             evidence["probe_agrees_with_heuristic"] = agreement
 
+        conflict = agreement is False and not evidence.get("overridden_by_hint")
+        if conflict:
+            context.warn(
+                "Modality evidence conflicts: the pixel heuristic and CLIP probe disagree. "
+                "The acquisition type is marked UNKNOWN; do not interpret colour or sensor "
+                "semantics as reliable without a known product label."
+            )
+            image.modality = Modality.UNKNOWN
+            image.modality_confidence = 0.0
+
         summary = self._summarise(
             context=context,
             heuristic=heuristic_modality,
@@ -117,6 +127,7 @@ class ModalityTool(Tool):
             colour_terms=colour_terms,
             probe_labels=probe_labels,
             agreement=agreement,
+            conflict=conflict,
         )
 
         confidence = image.modality_confidence
@@ -138,6 +149,7 @@ class ModalityTool(Tool):
                 "modality": image.modality.value,
                 "heuristic_modality": heuristic_modality.value,
                 "confidence": round(confidence, 4),
+                "conflict": conflict,
                 "evidence": evidence,
                 "explicit_hint_applied": bool(evidence.get("overridden_by_hint")),
             },
@@ -157,6 +169,7 @@ class ModalityTool(Tool):
         colour_terms: List[str],
         probe_labels: List[ScoredLabel],
         agreement: Any,
+        conflict: bool,
     ) -> str:
         image = context.primary
         parts: List[str] = []
@@ -206,7 +219,13 @@ class ModalityTool(Tool):
                 + " the pixel statistics."
             )
 
-        if image.modality is Modality.SAR:
+        if conflict:
+            parts.append(
+                "The independent signals conflict, so this result is UNKNOWN rather than a "
+                "sensor identification."
+            )
+
+        if image.modality is Modality.SAR or heuristic is Modality.SAR:
             parts.append(
                 "Because this is radar, questions about colour have no answer here: SAR measures "
                 "backscattered microwave energy, which depends on surface roughness and moisture, "

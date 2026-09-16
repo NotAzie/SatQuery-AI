@@ -31,8 +31,10 @@ from ..imaging import (
     align_pair,
     normalised_difference,
     otsu_threshold,
+    pair_correspondence,
     regions_from_score_map,
 )
+from ..errors import QueryError
 from ..schemas import BackendKind, Region, ToolName, ToolResult
 from .base import Tool, ToolContext
 
@@ -72,6 +74,38 @@ class ChangeDetectionTool(Tool):
         array_a, array_b, (width, height), align_warnings = align_pair(first, second)
         for warning in align_warnings:
             context.warn(warning)
+
+        aspect_a = first.width / max(first.height, 1)
+        aspect_b = second.width / max(second.height, 1)
+        aspect_delta = abs(aspect_a - aspect_b)
+        correspondence = pair_correspondence(array_a, array_b)
+        correspondence["aspect_ratio_delta"] = round(aspect_delta, 4)
+        correspondence["safe"] = bool(correspondence["safe"]) and aspect_delta <= 0.08
+        if aspect_delta > 0.08:
+            raise QueryError(
+                "The two images do not have a sufficiently corresponding footprint for safe "
+                "change detection.",
+                remediation=[
+                    "Provide the same geographic footprint with matching orientation and crop.",
+                    "Use co-registered epochs rather than unrelated screenshots or views.",
+                ],
+                context={"correspondence": correspondence},
+            )
+        if not correspondence["safe"]:
+            raise QueryError(
+                "The two epochs have insufficient pixel correspondence for a trustworthy "
+                "change result.",
+                remediation=[
+                    "Use co-registered images of the same footprint and acquisition geometry.",
+                    "Check for crop, rotation, cloud cover, or unrelated scenes before retrying.",
+                ],
+                context={"correspondence": correspondence},
+            )
+        if correspondence["pixel_correlation"] < 0.30:
+            context.warn(
+                "The epochs correspond only moderately after alignment; change regions are "
+                "indicative and should be reviewed against the source imagery."
+            )
 
         # -- Radiometric channel ------------------------------------------
         difference = normalised_difference(array_a, array_b)
@@ -170,6 +204,7 @@ class ChangeDetectionTool(Tool):
                 "epoch_a": first.filename,
                 "epoch_b": second.filename,
                 "aligned_size": [width, height],
+                "correspondence": correspondence,
                 "method": method,
                 "radiometric": {
                     "otsu_threshold": round(float(threshold), 5),
@@ -201,7 +236,10 @@ class ChangeDetectionTool(Tool):
                 "scene_transition": transition,
             },
             regions=regions,
-            confidence=round(float(np.clip(peak, 0.0, 1.0)), 4),
+            confidence=round(
+                float(np.clip(peak * min(correspondence["pixel_correlation"] / 0.30, 1.0), 0.0, 1.0)),
+                4,
+            ),
         )
 
     # ------------------------------------------------------------------

@@ -654,6 +654,14 @@ def align_pair(first: LoadedImage, second: LoadedImage) -> Tuple[np.ndarray, np.
     a = np.asarray(first.pil.resize((target_w, target_h), Image.LANCZOS), dtype=np.uint8)
     b = np.asarray(second.pil.resize((target_w, target_h), Image.LANCZOS), dtype=np.uint8)
 
+    shift, before_score, after_score = _estimate_translation(a, b)
+    if shift != (0, 0) and after_score - before_score >= 0.03:
+        b = _translate_array(b, shift[0], shift[1])
+        warnings.append(
+            f"Applied a small translation alignment of {shift[0]} px horizontally and "
+            f"{shift[1]} px vertically; residual registration quality is {after_score:.2f}."
+        )
+
     ratio_a = first.width / max(first.height, 1)
     ratio_b = second.width / max(second.height, 1)
     if abs(ratio_a - ratio_b) > 0.08:
@@ -663,6 +671,77 @@ def align_pair(first: LoadedImage, second: LoadedImage) -> Tuple[np.ndarray, np.
         )
 
     return a, b, (target_w, target_h), warnings
+
+
+def pair_correspondence(a: np.ndarray, b: np.ndarray) -> Dict[str, float]:
+    """Measure residual pixel correspondence after the alignment step.
+
+    This is deliberately a conservative image-space check, not a claim of
+    geospatial registration. It catches unrelated scenes and severe crop or
+    alignment failures before change scores are presented as observations.
+    """
+    score = _correlation(to_gray(a), to_gray(b))
+    return {
+        "pixel_correlation": round(score, 4),
+        # A real localized change can lower whole-frame correlation sharply;
+        # footprint/aspect checks provide the stronger guard against crops.
+        "minimum_safe_correlation": 0.10,
+        "safe": bool(score >= 0.10),
+    }
+
+
+def _correlation(first: np.ndarray, second: np.ndarray) -> float:
+    left = first.astype(np.float64).ravel()
+    right = second.astype(np.float64).ravel()
+    left -= left.mean()
+    right -= right.mean()
+    denominator = float(np.linalg.norm(left) * np.linalg.norm(right))
+    if denominator < 1e-9:
+        return 1.0 if np.allclose(first, second) else 0.0
+    return float(np.clip(np.dot(left, right) / denominator, -1.0, 1.0))
+
+
+def _translate_array(array: np.ndarray, dx: int, dy: int) -> np.ndarray:
+    shifted = np.roll(array, (dy, dx), axis=(0, 1))
+    if dy > 0:
+        shifted[:dy, :] = shifted[dy : dy + 1, :]
+    elif dy < 0:
+        shifted[dy:, :] = shifted[dy - 1 : dy, :]
+    if dx > 0:
+        shifted[:, :dx] = shifted[:, dx : dx + 1]
+    elif dx < 0:
+        shifted[:, dx:] = shifted[:, dx - 1 : dx]
+    return shifted
+
+
+def _estimate_translation(
+    first: np.ndarray, second: np.ndarray
+) -> Tuple[Tuple[int, int], float, float]:
+    """Find a small translational correction using a bounded correlation search."""
+    height, width = first.shape[:2]
+    scale = min(1.0, 128.0 / max(height, width))
+    size = (max(32, int(round(width * scale))), max(32, int(round(height * scale))))
+    first_small = np.asarray(Image.fromarray(first).resize(size, Image.BILINEAR))
+    second_small = np.asarray(Image.fromarray(second).resize(size, Image.BILINEAR))
+    first_gray = to_gray(first_small)
+    second_gray = to_gray(second_small)
+    limit_x = min(16, max(1, size[0] // 8))
+    limit_y = min(16, max(1, size[1] // 8))
+
+    best_shift = (0, 0)
+    before = _correlation(first_gray, second_gray)
+    best = before
+    for dy in range(-limit_y, limit_y + 1):
+        for dx in range(-limit_x, limit_x + 1):
+            candidate = _translate_array(second_gray, dx, dy)
+            score = _correlation(first_gray, candidate)
+            if score > best:
+                best = score
+                best_shift = (dx, dy)
+
+    full_dx = int(round(best_shift[0] / max(scale, 1e-9)))
+    full_dy = int(round(best_shift[1] / max(scale, 1e-9)))
+    return (full_dx, full_dy), before, best
 
 
 def normalised_difference(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -753,7 +832,9 @@ def analyse_modality(array: np.ndarray) -> Tuple[Modality, float, Dict[str, Any]
         return Modality.SAR, float(np.clip(sar_score, 0.0, 1.0)), evidence
     if sar_score <= 0.34:
         return Modality.OPTICAL, float(np.clip(1.0 - sar_score, 0.0, 1.0)), evidence
-    return Modality.UNKNOWN, float(1.0 - abs(sar_score - 0.5) * 2.0), evidence
+    # A score near 0.5 is ambiguity, not confidence. Keep UNKNOWN explicit
+    # instead of turning the midpoint into a deceptively high certainty.
+    return Modality.UNKNOWN, float(np.clip(abs(sar_score - 0.5) * 2.0, 0.0, 1.0)), evidence
 
 
 def apply_modality(image: LoadedImage, hint: Optional[Modality]) -> LoadedImage:

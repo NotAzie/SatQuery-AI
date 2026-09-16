@@ -48,6 +48,9 @@ def set_engine(engine: Optional[SatQueryEngine]) -> None:
 
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
     resolved = settings or get_settings()
+    # Bind one engine to this app. Health, capabilities, warmup, and queries
+    # must observe the same model registry in a long-lived server process.
+    engine = _engine or SatQueryEngine(resolved)
 
     app = FastAPI(
         title=resolved.app_name,
@@ -62,6 +65,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
     )
+    app.state.satquery_engine = engine
 
     if resolved.cors_origins:
         from fastapi.middleware.cors import CORSMiddleware
@@ -98,8 +102,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     @app.get("/api/v1/health", response_model=HealthResponse, summary="Readiness and setup state")
     async def health() -> HealthResponse:
-        engine = get_engine()
-        report = engine.health()
+        report = app.state.satquery_engine.health()
         return HealthResponse(
             status=report["status"],
             app=resolved.app_name,
@@ -120,7 +123,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         summary="What SatQuery can do right now",
     )
     async def capabilities() -> List[CapabilityInfo]:
-        return get_engine().capabilities()
+        return app.state.satquery_engine.capabilities()
 
     @app.get("/api/v1/config", summary="Effective configuration, with secrets redacted")
     async def config() -> JSONResponse:
@@ -128,7 +131,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     @app.post("/api/v1/warmup", summary="Load models now instead of on first query")
     async def warmup() -> JSONResponse:
-        return JSONResponse(get_engine().warmup())
+        return JSONResponse(app.state.satquery_engine.warmup())
 
     @app.post(
         "/api/v1/query",
@@ -151,7 +154,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         ),
         include_trace: bool = Form(True),
     ) -> QueryResponse:
-        engine = get_engine()
+        engine = app.state.satquery_engine
 
         uploads = []
         for upload in files or []:
@@ -182,7 +185,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         summary="Ask a question about imagery already on the server",
     )
     async def query_json(body: QueryRequest) -> QueryResponse:
-        engine = get_engine()
+        engine = app.state.satquery_engine
         if not body.image_paths:
             raise QueryError(
                 "The JSON endpoint needs image_paths; it has no upload channel.",
@@ -242,7 +245,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 remediation=remediation or ["Try a more specific place or pass coordinates."],
             ) from exc
 
-        return get_engine().answer(
+        return app.state.satquery_engine.answer(
             query,
             image_paths=[str(image_path)],
             modality_hint=_parse_modality(modality_hint),

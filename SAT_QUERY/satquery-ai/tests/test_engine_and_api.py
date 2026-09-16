@@ -223,6 +223,48 @@ def test_health_endpoint(client):
     assert "dependencies" in body
 
 
+def test_warmup_and_health_share_the_same_service_engine(settings, monkeypatch):
+    engine = SatQueryEngine(settings)
+    ready = {"value": False}
+
+    def status():
+        loaded = ["clip", "captioner", "vqa"] if ready["value"] else []
+        return {
+            "device": "cpu",
+            "dtype": "float32",
+            "practical": {
+                "available": True,
+                "ready": ready["value"],
+                "reason": None,
+                "loaded": loaded,
+                "load_errors": {},
+            },
+            "rsvlm": {"available": False, "ready": False, "reason": "not configured", "loaded": False},
+            "planner_llm": {"available": False, "reason": "no API key set", "model": "test", "base_url": "", "mode": "rules"},
+        }
+
+    monkeypatch.setattr(engine.registry, "status", status)
+
+    def warmup():
+        ready["value"] = True
+        return {"loaded": ["clip", "captioner", "vqa"], "errors": {}, "ready": True, "device": "cpu", "elapsed_s": 0.0}
+
+    monkeypatch.setattr(engine, "warmup", warmup)
+    set_engine(engine)
+    app = create_app(settings)
+    with TestClient(app) as test_client:
+        before = test_client.get("/api/v1/health").json()
+        warmed = test_client.post("/api/v1/warmup").json()
+        after = test_client.get("/api/v1/health").json()
+        capabilities = test_client.get("/api/v1/capabilities").json()
+    set_engine(None)
+
+    assert before["ready"] is False
+    assert warmed["ready"] is True
+    assert after["ready"] is True
+    assert all(item["available"] for item in capabilities)
+
+
 def test_capabilities_endpoint(client):
     response = client.get("/api/v1/capabilities")
     assert response.status_code == 200

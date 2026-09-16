@@ -54,17 +54,20 @@ class SceneClassificationTool(Tool):
 
         # Whole-scene pass.
         whole_embedding = embedder.embed_images([image.pil])
-        whole_probs = softmax(whole_embedding @ label_embeddings.T * logit_scale)[0]
+        whole_logits = (whole_embedding @ label_embeddings.T * logit_scale)[0]
 
         # 2x2 tiling: catches mixed scenes that a single global embedding blurs.
         tiles = self._quadrants(image.pil)
         tile_embeddings = embedder.embed_images(tiles)
-        tile_probs = softmax(tile_embeddings @ label_embeddings.T * logit_scale, axis=1)
+        tile_logits = tile_embeddings @ label_embeddings.T * logit_scale
 
-        # Weight the global view more heavily than any single tile; the tiles
-        # exist to surface minority land cover, not to outvote the whole scene.
-        combined = 0.55 * whole_probs + 0.45 * tile_probs.mean(axis=0)
-        combined = combined / max(float(combined.sum()), 1e-12)
+        # Fuse evidence before softmax. Averaging already-normalised tile
+        # probabilities lets uncertain tiles flatten the distribution and can
+        # promote unstable near-ties. Logit fusion preserves the model's
+        # relative evidence while letting the whole-scene view lead.
+        combined_logits = 0.65 * whole_logits + 0.35 * tile_logits.mean(axis=0)
+        combined = softmax(combined_logits)
+        tile_probs = softmax(tile_logits, axis=1)
 
         order = np.argsort(combined)[::-1]
         top_margin = float(combined[order[0]] - combined[order[1]]) if len(order) > 1 else 1.0

@@ -108,6 +108,19 @@ def test_modality_tool_works_without_an_embedding_backend(tools, settings, water
     assert result.backend is BackendKind.NONE
 
 
+def test_modality_conflict_is_marked_unknown_and_warned(tools, settings, vision, water_corner_scene):
+    image = load(water_corner_scene, settings)
+    context = build_context([image], settings, vision, query="what sensor is this?")
+    context.vision.embedder.similarity = lambda images, phrases: np.array([[1.0, 1.0, 1.0, 9.0, 9.0, 9.0]])
+
+    result = tools[ToolName.MODALITY].run(context)
+
+    assert result.data["conflict"] is True
+    assert result.data["modality"] == Modality.UNKNOWN.value
+    assert result.confidence == 0.0
+    assert any("conflict" in warning.lower() for warning in context.warnings)
+
+
 # ---------------------------------------------------------------------------
 # Scene classification
 # ---------------------------------------------------------------------------
@@ -474,9 +487,30 @@ def test_change_detection_warns_about_mismatched_footprints(tools, settings, vis
     after = load(make_scene(width=200, height=384), settings, name="t2.png")
     context = build_context([before, after], settings, vision)
 
-    tools[ToolName.CHANGE].run(context)
+    with pytest.raises(QueryError) as excinfo:
+        tools[ToolName.CHANGE].run(context)
 
-    assert any("aspect ratio" in warning for warning in context.warnings)
+    assert "sufficiently corresponding" in excinfo.value.message
+    assert excinfo.value.context["correspondence"]["aspect_ratio_delta"] > 0.08
+    assert any("same geographic footprint" in line for line in excinfo.value.remediation)
+
+
+def test_change_detection_refuses_poor_correspondence_same_aspect(tools, settings, vision):
+    from PIL import Image
+
+    before = load(make_scene(width=256, height=256), settings, name="t1.png")
+    unrelated = np.random.default_rng(7).integers(
+        0, 256, size=(256, 256, 3), dtype=np.uint8
+    )
+    after = load(Image.fromarray(unrelated), settings, name="t2.png")
+    context = build_context([before, after], settings, vision)
+
+    with pytest.raises(QueryError) as excinfo:
+        tools[ToolName.CHANGE].run(context)
+
+    assert "insufficient pixel correspondence" in excinfo.value.message
+    assert excinfo.value.context["correspondence"]["aspect_ratio_delta"] == 0.0
+    assert excinfo.value.context["correspondence"]["safe"] is False
 
 
 # ---------------------------------------------------------------------------

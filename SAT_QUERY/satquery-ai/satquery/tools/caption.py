@@ -244,6 +244,11 @@ class CaptionTool(Tool):
             signals["scene_score"] = leader.score
             signals["scene_group"] = leader.group
             signals["_labels"] = list(scene.labels)
+            signals["specific_labels"] = [
+                item.label
+                for item in scene.labels[:3]
+                if item.score >= max(0.08, leader.score * 0.35)
+            ]
             signals["group_mixture"] = scene.data.get("group_mixture", {})
             signals["distinct_tile_labels"] = scene.data.get("distinct_tile_labels")
         return signals
@@ -279,6 +284,13 @@ class CaptionTool(Tool):
                     f"Spatial consistency check: {tile_count} distinct land-use readings appear "
                     "across the four quadrants, so the scene should be interpreted as "
                     + ("mixed." if tile_count > 1 else "relatively homogeneous.")
+                )
+            specific_labels = supporting.get("specific_labels") or []
+            if len(specific_labels) > 1:
+                parts.append(
+                    "Specific overhead categories with supporting score are: "
+                    + "; ".join(specific_labels[:3])
+                    + "."
                 )
         parts.append("Visual caption: " + headline)
 

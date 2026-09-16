@@ -37,6 +37,7 @@ from ..taxonomy import contrast_set, phrase_for_target, phrase_variants_for_targ
 from .base import Tool, ToolContext
 
 RESPONSE_GRID = 32
+MIN_WINDOW_SUPPORT = 0.35
 
 
 class GroundingTool(Tool):
@@ -90,8 +91,15 @@ class GroundingTool(Tool):
         )
 
         peak = float(score_map.max())
+        support_fraction = float(diagnostics["window_support_fraction"])
+        peak_margin = float(peak - score_map.mean())
         # A weak peak means the contrast set beat the target everywhere.
-        present = peak >= 0.35 and spread > 0.015
+        present = (
+            peak >= MIN_WINDOW_SUPPORT
+            and spread > 0.015
+            and support_fraction >= 0.05
+            and peak_margin >= 0.05
+        )
         if not present:
             regions = []
 
@@ -113,6 +121,8 @@ class GroundingTool(Tool):
                 "window_score_std": diagnostics["window_score_std"],
                 "strong_window_count": diagnostics["strong_window_count"],
                 "window_support_fraction": diagnostics["window_support_fraction"],
+                "minimum_window_support": MIN_WINDOW_SUPPORT,
+                "peak_margin": round(peak_margin, 4),
                 "response_grid": [RESPONSE_GRID, RESPONSE_GRID],
                 "peak_response": round(peak, 4),
                 "mean_response": round(float(score_map.mean()), 4),
@@ -181,8 +191,10 @@ class GroundingTool(Tool):
         probabilities = softmax(
             np.concatenate([target_logits, contrast_logits], axis=1), axis=1
         )[:, 0]
-        top_cut = float(np.percentile(probabilities, 75.0))
-        strong_window_count = int(np.count_nonzero(probabilities >= top_cut))
+        # A relative percentile always labels 25% of windows as strong, even
+        # when the target loses to every contrast. Use an absolute calibrated
+        # target-vs-contrast probability for support instead.
+        strong_window_count = int(np.count_nonzero(probabilities >= MIN_WINDOW_SUPPORT))
 
         score_map = accumulate_window_scores(
             windows,

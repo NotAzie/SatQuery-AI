@@ -132,6 +132,8 @@ class VQATool(Tool):
         elif presence is not None:
             confidence = presence["score"]
 
+        evidence_verdict = self._presence_verdict(presence, agreement)
+
         summary = self._compose(
             context=context,
             question=question,
@@ -142,6 +144,7 @@ class VQATool(Tool):
             decode_score=decode_score,
             backend_kind=backend_kind,
             scene_context=scene_context,
+            evidence_verdict=evidence_verdict,
         )
 
         labels: List[ScoredLabel] = []
@@ -165,6 +168,7 @@ class VQATool(Tool):
                 "decode_score": round(decode_score, 4) if decode_score is not None else None,
                 "presence_probe": presence,
                 "cross_check_agreement": agreement,
+                "evidence_verdict": evidence_verdict,
                 "scene_context": scene_context,
             },
             labels=labels,
@@ -229,6 +233,22 @@ class VQATool(Tool):
         return None
 
     @staticmethod
+    def _presence_verdict(
+        presence: Optional[Dict[str, Any]], agreement: Optional[bool]
+    ) -> Optional[str]:
+        """Classify presence evidence without treating a weak score as fact."""
+        if presence is None:
+            return None
+        score = float(presence["score"])
+        if agreement is False:
+            return "unresolved"
+        if score >= 0.55 and agreement is True:
+            return "supported"
+        if score <= 0.25 and agreement is True:
+            return "not_supported"
+        return "weak"
+
+    @staticmethod
     def _presence_probe(context: ToolContext, target: str) -> Dict[str, Any]:
         """Independent CLIP check for whether the target appears at all.
 
@@ -283,13 +303,31 @@ class VQATool(Tool):
         decode_score: Optional[float],
         backend_kind: BackendKind,
         scene_context: Optional[Dict[str, Any]],
+        evidence_verdict: Optional[str],
     ) -> str:
         parts: List[str] = []
 
         answer = raw_answer.strip()
         if answer and not answer.endswith((".", "!", "?")):
             answer += "."
-        parts.append(answer[0].upper() + answer[1:] if answer else "No answer was produced.")
+        if presence is not None and evidence_verdict == "supported":
+            parts.append(
+                f"Yes - the image contains supported evidence of {presence['target_phrase']}."
+            )
+        elif presence is not None and evidence_verdict == "not_supported":
+            parts.append(
+                f"No - the image does not show strong evidence of {presence['target_phrase']}."
+            )
+        elif presence is not None and evidence_verdict == "unresolved":
+            parts.append(
+                f"Unresolved: the model answer and spatial evidence disagree about "
+                f"{presence['target_phrase']}."
+            )
+        else:
+            parts.append(answer[0].upper() + answer[1:] if answer else "No answer was produced.")
+
+        if presence is not None and answer:
+            parts.append(f"The generative VQA answer was: {answer}")
 
         if presence is not None:
             verdict = "supports" if agreement else "contradicts"
