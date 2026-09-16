@@ -68,6 +68,10 @@ MODALITY_TERMS = (
     "modality", "radar or optical", "image quality", "what instrument",
 )
 
+EO_INSPECT_TERMS = ("inspect raster", "inspect eo", "metadata", "crs", "georeference", "bands")
+RASTER_STATS_TERMS = ("raster statistics", "pixel statistics", "histogram", "valid pixels", "statistics")
+INDEX_TERMS = ("ndvi", "ndwi", "mndwi", "ndbi", "nbr", "evi", "spectral index", "calculate index")
+
 PRESENCE_STARTERS = (
     "is there", "are there", "is it", "are any", "any ", "does this", "do you see",
     "can you see", "does the image", "does it contain", "is the", "are the",
@@ -229,6 +233,9 @@ class QueryRouter:
         locate_hits = _contains(text, LOCATE_TERMS)
         scene_hits = _contains(text, SCENE_TERMS)
         caption_hits = _contains(text, CAPTION_TERMS)
+        index_hits = _contains(text, INDEX_TERMS)
+        inspect_hits = _contains(text, EO_INSPECT_TERMS)
+        stats_hits = _contains(text, RASTER_STATS_TERMS)
 
         # Two images plus comparison language is unambiguous.
         if change_hits and image_count >= 2:
@@ -250,6 +257,13 @@ class QueryRouter:
                 0.9,
                 f"The query asks about the sensor or acquisition type ({modality_hits[0]}).",
             )
+
+        if index_hits:
+            return Intent.SPECTRAL_INDEX, 0.95, f"The query requests a registered spectral index ({index_hits[0]})."
+        if inspect_hits:
+            return Intent.EO_INSPECTION, 0.9, f"The query requests raster metadata ({inspect_hits[0]})."
+        if stats_hits:
+            return Intent.RASTER_STATISTICS, 0.9, f"The query requests raster statistics ({stats_hits[0]})."
 
         # Counting outranks locating: "how many buildings and where" is
         # answered by the counting tool, which grounds internally anyway.
@@ -412,4 +426,8 @@ class QueryRouter:
             if resolved:
                 arguments["target"] = resolved
             return arguments
+        if tool is ToolName.SPECTRAL_INDEX:
+            for name in ("ndvi", "ndwi", "mndwi", "ndbi", "nbr", "evi"):
+                if name in query.lower():
+                    return {"index": name}
         return {}

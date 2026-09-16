@@ -11,6 +11,7 @@ from .grounding import GroundingTool
 from .modality import ModalityTool
 from .scene import SceneClassificationTool
 from .vqa import VQATool
+from .eo import EOInspectionTool, RasterStatisticsTool, SpectralIndexTool
 
 
 def build_tools() -> Dict[ToolName, Tool]:
@@ -23,6 +24,9 @@ def build_tools() -> Dict[ToolName, Tool]:
         CountingTool(),
         ChangeDetectionTool(),
         ModalityTool(),
+        EOInspectionTool(),
+        RasterStatisticsTool(),
+        SpectralIndexTool(),
     )
     return {tool.name: tool for tool in tools}
 
@@ -37,6 +41,9 @@ INTENT_TO_TOOL: Dict[Intent, ToolName] = {
     Intent.PRESENCE: ToolName.VQA,
     Intent.CHANGE_DETECTION: ToolName.CHANGE,
     Intent.MODALITY_ANALYSIS: ToolName.MODALITY,
+    Intent.EO_INSPECTION: ToolName.EO_INSPECTION,
+    Intent.RASTER_STATISTICS: ToolName.RASTER_STATISTICS,
+    Intent.SPECTRAL_INDEX: ToolName.SPECTRAL_INDEX,
 }
 
 __all__ = [
@@ -50,6 +57,9 @@ __all__ = [
     "Tool",
     "ToolContext",
     "VQATool",
+    "EOInspectionTool",
+    "RasterStatisticsTool",
+    "SpectralIndexTool",
     "build_tools",
     "INTENT_TO_TOOL",
 ]

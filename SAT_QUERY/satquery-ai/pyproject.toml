@@ -32,6 +32,13 @@ dependencies = [
 vision = ["torch>=2.1", "transformers>=4.38"]
 large = ["accelerate", "sentencepiece"]
 dev = ["pytest>=8.0"]
+eo = [
+  "rasterio>=1.4",
+  "pyproj>=3.6",
+  "shapely>=2.0",
+  "pystac>=1.10",
+  "pystac-client>=0.8",
+]
 
 [project.scripts]
 satquery = "satquery.__main__:main"

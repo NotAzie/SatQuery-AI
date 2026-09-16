@@ -292,6 +292,31 @@ def load_image_from_path(path: str, settings: Settings) -> LoadedImage:
             context={"path": str(resolved)},
         )
 
+    if suffix in {".tif", ".tiff", ".cog"}:
+        try:
+            import rasterio
+
+            with rasterio.open(resolved) as dataset:
+                preview = dataset.read(
+                    indexes=list(range(1, min(dataset.count, 3) + 1)),
+                    out_shape=(min(dataset.count, 3), dataset.height, dataset.width),
+                ).astype(np.float32)
+            if preview.shape[0] == 1:
+                preview = np.repeat(preview, 3, axis=0)
+            elif preview.shape[0] == 2:
+                preview = np.concatenate([preview, preview[:1]], axis=0)
+            stretched = []
+            for band in preview[:3]:
+                low, high = np.nanpercentile(band, (2.0, 98.0))
+                stretched.append(np.zeros_like(band, dtype=np.uint8) if high <= low else np.clip((band - low) / (high - low) * 255.0, 0, 255).astype(np.uint8))
+            payload = io.BytesIO()
+            Image.fromarray(np.stack(stretched, axis=2), mode="RGB").save(payload, format="PNG")
+            return load_image_from_bytes(payload.getvalue(), resolved.name, settings, source=str(resolved))
+        except ImportError as exc:
+            raise ImageError(
+                "GeoTIFF input requires the optional EO dependency rasterio.",
+                remediation=["Install with: python -m pip install -e .[eo]"],
+            ) from exc
     payload = resolved.read_bytes()
     return load_image_from_bytes(payload, resolved.name, settings, source=str(resolved))
 

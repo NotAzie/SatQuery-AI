@@ -1,11 +1,12 @@
 # SatQuery AI Context
 
-- **Purpose:** RGB satellite/aerial image question answering with routed captioning, VQA, scene classification, semantic grounding, counting, modality heuristics, and two-image change analysis.
-- **Stage:** Phase 0 baseline complete; Phase 1/2 implementation exists; current work is repository organization before the next stage.
+- **Purpose:** Earth-observation image and raster analysis with routed captioning, VQA, scene classification, semantic grounding, scientific raster operations, discovery, and spectral indices.
+- **Stage:** Phase 0 baseline frozen; Stage 1 EO foundation implemented additively; later agent planning is not implemented.
 - **Product source:** `satquery-ai/satquery/`
 - **Product tests:** `satquery-ai/tests/`
 - **Essential docs:** `satquery-ai/README.md`, `docs/baseline/BASELINE.md`, `docs/development/PHASE1_TEST_PLAN.md`
 - **Architecture entry point:** `satquery-ai/satquery/orchestrator.py`; API in `satquery-ai/satquery/api.py`; CLI in `satquery-ai/satquery/__main__.py`.
+- **EO entry point:** `satquery-ai/satquery/eo/`; deterministic EO tools are in `satquery-ai/satquery/tools/eo.py`.
 - **Formal benchmarks:** `benchmarks/`; Phase 0 results are authoritative and must not be rewritten.
 - **Research:** `research/`; external projects/models/datasets only.
 - **Experiments:** `experiments/` when created; prototypes and notebooks do not belong in product source.

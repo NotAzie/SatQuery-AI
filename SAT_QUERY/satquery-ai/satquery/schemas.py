@@ -32,6 +32,9 @@ class Intent(str, Enum):
     PRESENCE = "PRESENCE"
     CHANGE_DETECTION = "CHANGE_DETECTION"
     MODALITY_ANALYSIS = "MODALITY_ANALYSIS"
+    EO_INSPECTION = "EO_INSPECTION"
+    RASTER_STATISTICS = "RASTER_STATISTICS"
+    SPECTRAL_INDEX = "SPECTRAL_INDEX"
 
 
 class ToolName(str, Enum):
@@ -42,6 +45,9 @@ class ToolName(str, Enum):
     COUNTING = "counting"
     CHANGE = "change_detection"
     MODALITY = "modality_analysis"
+    EO_INSPECTION = "inspect_eo_data"
+    RASTER_STATISTICS = "raster_statistics"
+    SPECTRAL_INDEX = "calculate_spectral_index"
 
 
 class BackendKind(str, Enum):

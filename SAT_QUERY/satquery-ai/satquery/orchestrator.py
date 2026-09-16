@@ -93,6 +93,9 @@ CAPABILITY_DOCS: Dict[ToolName, Tuple[Intent, str, int]] = {
         "CLIP probe.",
         1,
     ),
+    ToolName.EO_INSPECTION: (Intent.EO_INSPECTION, "Inspects EO raster metadata without inventing unavailable geospatial fields.", 1),
+    ToolName.RASTER_STATISTICS: (Intent.RASTER_STATISTICS, "Computes valid-pixel statistics for an EO raster.", 1),
+    ToolName.SPECTRAL_INDEX: (Intent.SPECTRAL_INDEX, "Calculates a registered spectral index from resolved bands.", 1),
 }
 
 
@@ -236,9 +239,19 @@ class SatQueryEngine:
                     f"{image.width}x{image.height} to fit SATQUERY_MAX_IMAGE_PX."
                 )
 
-        # 2. Backends -----------------------------------------------------
+        # 2. Route --------------------------------------------------------
         step_started = time.perf_counter()
-        vision = self.vision_suite()
+        plan = self.router.route(query, image_count=len(images), force_tool=force_tool)
+        route_latency = _elapsed(step_started)
+
+        # 3. Backends -----------------------------------------------------
+        step_started = time.perf_counter()
+        scientific = plan.intent in {
+            Intent.EO_INSPECTION,
+            Intent.RASTER_STATISTICS,
+            Intent.SPECTRAL_INDEX,
+        }
+        vision = VisionSuite(None, None, None, None) if scientific else self.vision_suite()
         trace.append(
             TraceStep(
                 step="backend_selection",
@@ -249,16 +262,12 @@ class SatQueryEngine:
                 detail=_describe_backends(vision),
             )
         )
-
-        # 3. Route --------------------------------------------------------
-        step_started = time.perf_counter()
-        plan = self.router.route(query, image_count=len(images), force_tool=force_tool)
         trace.append(
             TraceStep(
                 step="intent_router",
                 kind="reasoning",
                 status=StepStatus.OK,
-                latency_ms=_elapsed(step_started),
+                latency_ms=route_latency,
                 backend=plan.router,
                 detail=(
                     f"{plan.intent.value} (confidence {plan.confidence:.2f}) - {plan.rationale}"
@@ -454,6 +463,18 @@ class SatQueryEngine:
 
         infos: List[CapabilityInfo] = []
         for tool_name, (intent, description, required) in CAPABILITY_DOCS.items():
+            if tool_name in {ToolName.EO_INSPECTION, ToolName.RASTER_STATISTICS, ToolName.SPECTRAL_INDEX}:
+                infos.append(
+                    CapabilityInfo(
+                        tool=tool_name,
+                        intent=intent,
+                        description=description,
+                        requires_images=required,
+                        backend_preference=[BackendKind.NONE],
+                        available=True,
+                    )
+                )
+                continue
             # Grounding, scene, and counting are CLIP-shaped: a generative-only
             # strong backend cannot stand in for an embedder.
             needs_embedder = tool_name in {

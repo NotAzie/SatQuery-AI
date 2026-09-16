@@ -1,0 +1,6 @@
+# Optional Stage 1 EO foundation dependencies
+rasterio>=1.4
+pyproj>=3.6
+shapely>=2.0
+pystac>=1.10
+pystac-client>=0.8

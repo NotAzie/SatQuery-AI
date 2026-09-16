@@ -8,6 +8,11 @@ This inventory records open-source projects considered for Phase 0. No new depen
 |---|---|---|---|---|
 | [TorchGeo](https://github.com/torchgeo/torchgeo) | https://github.com/torchgeo/torchgeo | Geospatial datasets, samplers, transforms, benchmarks, and pretrained models | MIT | Evaluated; not integrated | Future geospatial/multispectral phases |
 | [torchgeo-bench](https://github.com/torchgeo/torchgeo-bench) | https://github.com/torchgeo/torchgeo-bench | Config-driven frozen-backbone evaluation | MIT | Evaluated; not integrated | Future benchmark expansion |
+| [Rasterio](https://github.com/rasterio/rasterio) | https://github.com/rasterio/rasterio | GeoTIFF/COG IO, windows, CRS, transforms | BSD-3-Clause | Integrated optionally | Stage 1 EO data/raster layer |
+| [PyProj](https://github.com/pyproj4/pyproj) | https://github.com/pyproj4/pyproj | CRS and geodesic calculations | MIT | Integrated optionally | Stage 1 scientific raster engine |
+| [Shapely](https://github.com/shapely/shapely) | https://github.com/shapely/shapely | Geometry operations | BSD-3-Clause | Dependency declared; current core path does not require it | Stage 1/2 zonal and vector operations |
+| [PySTAC](https://github.com/stac-utils/pystac) | https://github.com/stac-utils/pystac | STAC object model | Apache-2.0 | Integrated optionally | Stage 1 discovery |
+| [PySTAC Client](https://github.com/stac-utils/pystac-client) | https://github.com/stac-utils/pystac-client | Provider-neutral STAC API search | Apache-2.0 | Integrated optionally | Stage 1 discovery |
 | [Transformers](https://github.com/huggingface/transformers) | https://github.com/huggingface/transformers | Model loading and inference APIs | Apache-2.0 | Integrated | Current product |
 | [PyTorch](https://github.com/pytorch/pytorch) | https://github.com/pytorch/pytorch | Tensor runtime and model execution | BSD-style | Integrated | Current product |
 | [Pillow](https://python-pillow.org/) | https://github.com/python-pillow/Pillow | Image decoding and processing | HPND | Integrated | Current product |
