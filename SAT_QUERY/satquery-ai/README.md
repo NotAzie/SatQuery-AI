@@ -149,9 +149,9 @@ Phase 1 established the operational baseline:
 - Health and capabilities report readiness rather than only import availability.
 - Tool minimum and maximum image counts are enforced.
 - Loaded model objects and grounding image embeddings are reused in persistent processes.
-- The canonical source is `satquery-ai/satquery`; historical outer modules are quarantined under `legacy_outer_modules`.
+- The canonical source is `satquery-ai/satquery`; historical outer modules are quarantined under `archive/legacy_outer_modules`.
 - Deterministic tests do not depend on Hugging Face cache state.
-- Phase 1 acceptance artifacts are saved under `test_runs/phase1/`.
+- Phase 1 acceptance artifacts are saved under `artifacts/reports/phase1/`.
 
 Run the Phase 1 verification suite:
 
@@ -215,10 +215,8 @@ satquery-ai/
     ui.py                   HTML demo console
   plugins/image_fetcher/    optional satellite snapshot utility
   tests/                    deterministic and acceptance tests
-  docs/                     Phase 1 test plan
-  scripts/run_phase1.py    archived Phase 1 test runner
-  test_runs/phase1/         generated test reports, not source code
-  legacy_outer_modules/     quarantined historical duplicate modules
+  docs/                     product documentation pointers
+  scripts/run_phase1.py     Phase 1 test runner
   pyproject.toml            package/build/test configuration
   requirements.txt          runtime dependencies
   requirements-dev.txt      pytest dependency
@@ -228,7 +226,7 @@ satquery-ai/
 
 There is one canonical Python package root: `satquery-ai/satquery`.
 
-The following historical duplicate modules were found at the outer workspace level and moved to `legacy_outer_modules/`:
+The following historical duplicate modules were found at the outer workspace level and moved to `archive/legacy_outer_modules/`:
 
 ```text
 api.py
@@ -239,15 +237,15 @@ registry.py
 router.py
 ```
 
-They are not runnable entry points and should not be edited or imported. The quarantine also has no README now, so it cannot be mistaken for a second project guide.
+They are not runnable entry points and should not be edited or imported.
 
 Other similarly named files are not duplicate source roots:
 
 - `satquery-ai/satquery_ai.egg-info/` is generated packaging metadata.
 - `satquery-ai/plugins/` is an optional plugin namespace, not a second core package.
-- `data/`, `docs/`, `scripts/`, `tests/`, and `test_runs/` are support directories.
+- `data/`, `docs/`, `scripts/`, and `tests/` are product support directories.
 - The outer `.venv`, `.env`, and `.env.example` are workspace-level environment files; run commands from `satquery-ai` so configuration and imports resolve predictably.
-- The outer `AUDIT_REPORT.md` is a repository audit artifact, not executable project code.
+- The historical audit is preserved under `archive/reports/AUDIT_REPORT.md`.
 
 No conflicting `satquery` package entry point was found. The canonical CLI is `satquery-ai/satquery/__main__.py`, exposed through the `satquery` console script and `python -m satquery`.
 

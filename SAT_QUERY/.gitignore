@@ -1,0 +1,30 @@
+# Local environments and secrets
+.venv/
+**/.venv/
+venv/
+.env
+**/.env
+
+# Python and test caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+**/.pytest_cache/
+*.egg-info/
+**/*.egg-info/
+
+# Build output
+build/
+dist/
+
+# Local generated outputs outside the tracked baseline reports
+artifacts/logs/
+artifacts/predictions/
+artifacts/temporary/
+experiments/outputs/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/

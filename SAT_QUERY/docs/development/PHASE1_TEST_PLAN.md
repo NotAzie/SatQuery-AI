@@ -4,8 +4,8 @@
 
 This document defines the verification package for SatQuery AI Phase 1. Phase 1 is an optimization and reliability phase. It verifies that the current architecture is faster to operate after warmup, truthful about readiness, strict about request validation, deterministic in tests, and clear about its canonical source path.
 
-The acceptance suite is [tests/test_phase1_acceptance.py](../tests/test_phase1_acceptance.py).
-Saved run artifacts are kept separately under [test_runs/phase1](../test_runs/phase1).
+The acceptance suite is [tests/test_phase1_acceptance.py](../../satquery-ai/tests/test_phase1_acceptance.py).
+Saved run artifacts are kept separately under [artifacts/reports/phase1](../../artifacts/reports/phase1).
 
 ## Scope
 
@@ -76,7 +76,7 @@ cd C:\Users\mazin\HACKATHON\SAT_QUERY\satquery-ai
 ```
 
 This runs deterministic Phase 1 acceptance checks and creates a new UTC
-timestamped folder under `test_runs/phase1/`. The folder contains:
+timestamped folder under `artifacts/reports/phase1/`. The folder contains:
 
 - `REPORT.md` — readable command results, counts, profile, environment notes, and verdict
 - `summary.json` — machine-readable run metadata
@@ -202,7 +202,7 @@ Remove-Item Env:SATQUERY_ACCEPTANCE_QUERY_TIMEOUT
 
 ### Reading a saved result
 
-Open the newest directory under `test_runs/phase1/` and inspect `REPORT.md`
+Open the newest directory under `artifacts/reports/phase1/` and inspect `REPORT.md`
 first. The report lists the exact command, exit code, duration, pass/fail/
 skipped counts, selected profile, whether real acceptance was enabled, and raw
 output file locations. Use `summary.json` for automation or comparison between

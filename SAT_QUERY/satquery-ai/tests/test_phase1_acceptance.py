@@ -69,8 +69,8 @@ def test_canonical_package_path_is_explicit_and_importable():
     assert imported.parent.parent == PACKAGE_ROOT, (
         f"satquery imported from {imported}; expected the canonical package under {PACKAGE_ROOT}"
     )
-    assert (PROJECT_ROOT / "legacy_outer_modules").is_dir(), (
-        "Duplicate outer modules are not quarantined under legacy_outer_modules."
+    assert (PROJECT_ROOT / "archive" / "legacy_outer_modules").is_dir(), (
+        "Duplicate outer modules are not quarantined under archive/legacy_outer_modules."
     )
 
 

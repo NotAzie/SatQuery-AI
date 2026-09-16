@@ -22,7 +22,7 @@ from typing import Sequence
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = PACKAGE_ROOT.parent
-RESULTS_ROOT = PACKAGE_ROOT / "test_runs" / "phase1"
+RESULTS_ROOT = PROJECT_ROOT / "artifacts" / "reports" / "phase1"
 DURATION_PATTERN = re.compile(r"PHASE1_LATENCY query=.*? seconds=(?P<seconds>\d+(?:\.\d+)?)")
 
 

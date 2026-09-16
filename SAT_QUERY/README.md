@@ -1,8 +1,18 @@
 # SatQuery AI
 
-The canonical project is [`satquery-ai`](satquery-ai/). This outer README is only a pointer so the workspace root does not look like a second Python project.
+The canonical product is [`satquery-ai`](satquery-ai/). This repository is organized into product, documentation, research, benchmarks, artifacts, and archive areas.
 
-Read the complete setup, usage, Phase 1/Phase 2 notes, limitations, and repository audit in [satquery-ai/README.md](satquery-ai/README.md).
+Start with [docs/AI_CONTEXT.md](docs/AI_CONTEXT.md) and [docs/PROJECT_MAP.md](docs/PROJECT_MAP.md). Read product setup and usage in [satquery-ai/README.md](satquery-ai/README.md), and the authoritative baseline in [docs/baseline/BASELINE.md](docs/baseline/BASELINE.md).
+
+Repository areas:
+
+- `satquery-ai/` - active product and tests
+- `docs/` - authoritative project documentation
+- `research/` - reference-only material
+- `benchmarks/` - formal evaluation infrastructure and preserved baseline results
+- `configs/` - reproducible configuration
+- `artifacts/` - generated reports and outputs
+- `archive/` - historical material
 
 Run commands from the canonical package directory:
 
