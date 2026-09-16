@@ -2,7 +2,8 @@
 
 Baseline date: 2026-09-16
 Baseline branch: `v1.0.0`
-Baseline tag: `v0.1-baseline` (created after this report and the baseline artifacts were committed)
+Baseline artifact commit: `0777e7d6515376d8b67a6aa8f814f9ee9f45ece3`
+Baseline tag: `v0.1-baseline` (final tag commit includes the metadata update after this artifact commit)
 Canonical package: `satquery-ai/`
 
 ## 1. Executive summary
@@ -115,7 +116,7 @@ Environment captured on the baseline machine:
 
 - OS: Windows 11, build `10.0.26200`
 - Python: `3.14.5`
-- CPU: Intel64 Family 6 Model 186, 16 logical processors reported by the host; no usable GPU reported
+- CPU: Intel64 Family 6 Model 186; no usable GPU reported by the host or Torch
 - RAM: approximately 16 GB
 - Torch: `2.14.0`
 - Transformers: `5.17.0`
