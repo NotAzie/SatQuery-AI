@@ -139,6 +139,7 @@ DEVICE_CHOICES = {"auto", "cpu", "cuda", "mps"}
 DTYPE_CHOICES = {"auto", "float32", "float16", "bfloat16"}
 ROUTER_CHOICES = {"rules", "llm", "hybrid"}
 RSVLM_KIND_CHOICES = {"auto", "vision2seq", "causal_lm", "blip2", "geochat"}
+PROFILE_CHOICES = {"fast", "quality"}
 
 
 @dataclass(frozen=True)
@@ -152,6 +153,7 @@ class Settings:
     problem_statement: str = "SIH26167"
 
     # -- Compute ------------------------------------------------------------
+    profile: str = "quality"
     device: str = "auto"
     dtype: str = "auto"
     inference_batch_size: int = 16
@@ -246,6 +248,29 @@ class Settings:
                 ],
             )
 
+        profile = (_env("SATQUERY_PROFILE", "quality") or "quality").lower()
+        if profile not in PROFILE_CHOICES:
+            raise ConfigurationError(
+                f"SATQUERY_PROFILE must be one of {sorted(PROFILE_CHOICES)}, got {profile!r}.",
+                remediation=[
+                    "fast    - CLIP-Base, two grounding scales, and a small window budget",
+                    "quality - CLIP-Large and the broader grounding defaults",
+                ],
+            )
+
+        profile_clip_model = (
+            "openai/clip-vit-base-patch32"
+            if profile == "fast"
+            else cls.clip_model
+        )
+        profile_scales = (
+            (0.5,)
+            if profile == "fast"
+            else (0.5, 0.35, 0.25, 0.18)
+        )
+        profile_max_windows = 16 if profile == "fast" else 320
+        profile_stride = 0.9 if profile == "fast" else 0.5
+
         rsvlm_kind = (_env("SATQUERY_RSVLM_KIND", "auto") or "auto").lower()
         if rsvlm_kind not in RSVLM_KIND_CHOICES:
             raise ConfigurationError(
@@ -287,12 +312,15 @@ class Settings:
         )
 
         settings = cls(
+            profile=profile,
             device=device,
             dtype=dtype,
-            inference_batch_size=_env_int("SATQUERY_BATCH_SIZE", 16, minimum=1),
+            inference_batch_size=_env_int(
+                "SATQUERY_BATCH_SIZE", 32 if profile == "fast" else 16, minimum=1
+            ),
             caption_model=_env("SATQUERY_CAPTION_MODEL", cls.caption_model) or cls.caption_model,
             vqa_model=_env("SATQUERY_VQA_MODEL", cls.vqa_model) or cls.vqa_model,
-            clip_model=_env("SATQUERY_CLIP_MODEL", cls.clip_model) or cls.clip_model,
+            clip_model=_env("SATQUERY_CLIP_MODEL", profile_clip_model) or profile_clip_model,
             hf_token=_env("SATQUERY_HF_TOKEN") or _env("HF_TOKEN") or _env("HUGGINGFACE_TOKEN"),
             hf_cache_dir=_env("SATQUERY_HF_CACHE") or _env("HF_HOME"),
             hf_local_files_only=_env_bool("SATQUERY_HF_LOCAL_ONLY", False),
@@ -316,9 +344,11 @@ class Settings:
             max_upload_mb=_env_float("SATQUERY_MAX_UPLOAD_MB", 40.0),
             allow_image_paths=_env_bool("SATQUERY_ALLOW_IMAGE_PATHS", True),
             image_root=image_root,
-            grounding_scales=_env_float_list("SATQUERY_GROUNDING_SCALES", cls.grounding_scales),
-            grounding_max_windows=_env_int("SATQUERY_GROUNDING_MAX_WINDOWS", 320, minimum=16),
-            grounding_stride_ratio=_env_float("SATQUERY_GROUNDING_STRIDE_RATIO", 0.5),
+            grounding_scales=_env_float_list("SATQUERY_GROUNDING_SCALES", profile_scales),
+            grounding_max_windows=_env_int(
+                "SATQUERY_GROUNDING_MAX_WINDOWS", profile_max_windows, minimum=16
+            ),
+            grounding_stride_ratio=_env_float("SATQUERY_GROUNDING_STRIDE_RATIO", profile_stride),
             grounding_min_region_frac=_env_float("SATQUERY_GROUNDING_MIN_REGION_FRAC", 0.0035),
             grounding_max_regions=_env_int("SATQUERY_GROUNDING_MAX_REGIONS", 24, minimum=1),
             grounding_percentile=_env_float("SATQUERY_GROUNDING_PERCENTILE", 88.0),

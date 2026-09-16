@@ -19,6 +19,10 @@ def clean_env(monkeypatch):
 
 def test_defaults_are_usable_without_any_env():
     settings = Settings.from_env(dotenv_path=None)
+    assert settings.profile == "quality"
+    assert settings.clip_model == "openai/clip-vit-large-patch14"
+    assert settings.grounding_scales == (0.5, 0.35, 0.25, 0.18)
+    assert settings.grounding_max_windows == 320
     assert settings.device == "auto"
     assert settings.router_mode == "hybrid"
     assert settings.rsvlm_enabled is False
@@ -39,6 +43,15 @@ def test_env_overrides_are_typed(monkeypatch):
     assert settings.max_upload_mb == 2.5
     assert settings.allow_image_paths is False
     assert settings.grounding_scales == (0.6, 0.4, 0.2)
+
+
+def test_fast_profile_is_explicit_and_latency_first(monkeypatch):
+    monkeypatch.setenv("SATQUERY_PROFILE", "fast")
+    settings = Settings.from_env(dotenv_path=None)
+    assert settings.clip_model == "openai/clip-vit-base-patch32"
+    assert settings.grounding_scales == (0.5,)
+    assert settings.grounding_max_windows == 16
+    assert settings.grounding_stride_ratio == 0.9
 
 
 def test_invalid_device_is_rejected_with_guidance(monkeypatch):

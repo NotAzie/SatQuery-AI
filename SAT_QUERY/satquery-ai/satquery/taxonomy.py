@@ -144,6 +144,31 @@ TARGET_PHRASES: Dict[str, str] = {
     "shadow": "dark shadows cast by tall structures",
 }
 
+# Average several overhead-native descriptions in embedding space so grounding
+# is less dependent on one brittle wording for common remote-sensing targets.
+TARGET_PHRASE_VARIANTS: Dict[str, Tuple[str, ...]] = {
+    "building": (
+        "building rooftops seen from directly above",
+        "dense built-up rooftops in satellite imagery",
+        "individual houses and building footprints viewed from above",
+    ),
+    "road": (
+        "paved roads and streets seen from above",
+        "linear road corridors and intersections in satellite imagery",
+        "transport roads crossing the scene from above",
+    ),
+    "water": (
+        "a body of water seen from above",
+        "blue or dark open water in satellite imagery",
+        "a water surface contrasting with surrounding land",
+    ),
+    "vegetation": (
+        "tree canopy and vegetation seen from above",
+        "green vegetated land cover in satellite imagery",
+        "continuous vegetation or planted fields viewed from above",
+    ),
+}
+
 #: Generic alternatives every grounding run scores against. Without a contrast
 #: set, CLIP similarity is an unanchored number; with one, each window gets a
 #: softmax over "is this the target, or one of these other things", which is a
@@ -180,6 +205,13 @@ def phrase_for_target(target: str) -> str:
     return f"{key} seen from directly above in a satellite image"
 
 
+def phrase_variants_for_target(target: str) -> Tuple[str, ...]:
+    """Return a small overhead-native ensemble for common targets."""
+    key = target.strip().lower()
+    singular = key[:-1] if key.endswith("s") and len(key) > 3 else key
+    return TARGET_PHRASE_VARIANTS.get(singular, (phrase_for_target(target),))
+
+
 def contrast_set(target_phrase: str) -> List[str]:
     """Contrast alternatives, excluding anything too close to the target."""
     target_words = set(target_phrase.lower().split())
@@ -198,17 +230,18 @@ def contrast_set(target_phrase: str) -> List[str]:
 #: Caption conditioning prefixes, ensembled for richer descriptions.
 CAPTION_PROMPTS_OPTICAL: Tuple[str, ...] = (
     "",
-    "an aerial view of",
-    "a satellite image showing",
-    "this overhead image contains",
-    "the land cover in this aerial photo is",
+    "an overhead satellite image showing",
+    "a remote sensing image containing",
+    "this top-down land-use scene contains",
+    "the dominant land cover in this satellite image is",
+    "an aerial image viewed from directly above showing",
 )
 
 CAPTION_PROMPTS_SAR: Tuple[str, ...] = (
     "",
-    "a grayscale radar image showing",
-    "this overhead radar image contains",
-    "the terrain in this radar image is",
+    "a grayscale overhead radar image showing",
+    "this SAR backscatter image contains",
+    "the land-cover structure in this radar image is",
 )
 
 

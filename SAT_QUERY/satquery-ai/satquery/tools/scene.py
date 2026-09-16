@@ -67,6 +67,8 @@ class SceneClassificationTool(Tool):
         combined = combined / max(float(combined.sum()), 1e-12)
 
         order = np.argsort(combined)[::-1]
+        top_margin = float(combined[order[0]] - combined[order[1]]) if len(order) > 1 else 1.0
+        tile_support = float(np.mean(np.argmax(tile_probs, axis=1) == order[0]))
         ranked: List[ScoredLabel] = [
             ScoredLabel(
                 label=SCENE_LABELS[index],
@@ -80,7 +82,9 @@ class SceneClassificationTool(Tool):
         tile_leaders = self._tile_leaders(tile_probs)
         homogeneity = len({leader for leader, _ in tile_leaders})
 
-        summary = self._summarise(ranked, group_mixture, tile_leaders, homogeneity)
+        summary = self._summarise(
+            ranked, group_mixture, tile_leaders, homogeneity, top_margin, tile_support
+        )
 
         result = self.result(
             summary=summary,
@@ -99,6 +103,11 @@ class SceneClassificationTool(Tool):
                     )
                 ],
                 "distinct_tile_labels": homogeneity,
+                "top_label_margin": round(top_margin, 4),
+                "top_label_tile_support": round(tile_support, 4),
+                "evidence_quality": (
+                    "stable" if top_margin >= 0.05 and tile_support >= 0.5 else "mixed"
+                ),
                 "taxonomy_size": len(SCENE_LABELS),
                 "prompt_templates": len(templates),
             },
@@ -145,6 +154,8 @@ class SceneClassificationTool(Tool):
         group_mixture: Dict[str, float],
         tile_leaders: List[Tuple[str, float]],
         homogeneity: int,
+        top_margin: float,
+        tile_support: float,
     ) -> str:
         leader = ranked[0]
         parts = [
@@ -181,6 +192,11 @@ class SceneClassificationTool(Tool):
             parts.append(
                 f"The quadrants disagree, so this is a mixed scene - {distinct}."
             )
+
+        parts.append(
+            f"Evidence stability: the leading label is {top_margin * 100:.1f} percentage points "
+            f"ahead of the runner-up and leads {tile_support * 100:.0f}% of quadrants."
+        )
 
         if leader.score < 0.25:
             parts.append(

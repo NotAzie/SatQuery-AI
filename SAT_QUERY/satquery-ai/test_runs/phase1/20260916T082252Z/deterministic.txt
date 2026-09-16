@@ -1,0 +1,11 @@
+....ss.
+=================================== PASSES ====================================
+=========================== short test summary info ===========================
+PASSED tests/test_phase1_acceptance.py::test_canonical_package_path_is_explicit_and_importable
+PASSED tests/test_phase1_acceptance.py::test_quality_profile_is_the_default_and_fast_is_explicit
+PASSED tests/test_phase1_acceptance.py::test_tool_image_cardinality_rejects_missing_and_extra_images
+PASSED tests/test_phase1_acceptance.py::test_health_and_capabilities_are_honest_before_models_are_loaded
+PASSED tests/test_phase1_acceptance.py::test_acceptance_configuration_is_self_describing
+SKIPPED [1] tests\test_phase1_acceptance.py:129: Set SATQUERY_RUN_REAL_ACCEPTANCE=1 for real-model acceptance.
+SKIPPED [1] tests\test_phase1_acceptance.py:162: Set SATQUERY_RUN_REAL_ACCEPTANCE=1 for real-model acceptance.
+5 passed, 2 skipped in 2.18s

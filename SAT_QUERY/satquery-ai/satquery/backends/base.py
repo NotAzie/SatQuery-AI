@@ -49,19 +49,19 @@ def chunked(items: Sequence[Any], size: int) -> Iterable[Sequence[Any]]:
 #: CLIP classification, and it matters more here than on natural images because
 #: overhead imagery is far from CLIP's training distribution.
 OPTICAL_TEMPLATES: Tuple[str, ...] = (
-    "a satellite image of {}",
-    "an aerial photograph of {}",
-    "a top-down overhead view of {}",
-    "a remote sensing image showing {}",
-    "a high resolution aerial view of {}",
-    "satellite imagery of {} seen from above",
+    "a remote sensing satellite image of {}",
+    "an overhead land-use image showing {}",
+    "a nadir aerial image of {} seen from directly above",
+    "a top-down remote-sensing image showing {}",
+    "a high resolution satellite scene containing {}",
+    "overhead imagery of {} with visible land-cover structure",
 )
 
 SAR_TEMPLATES: Tuple[str, ...] = (
-    "a synthetic aperture radar image of {}",
-    "a grayscale SAR amplitude image of {}",
-    "a radar backscatter image showing {}",
-    "an overhead radar image of {}",
+    "a synthetic aperture radar remote sensing image of {}",
+    "a grayscale SAR amplitude image showing {}",
+    "a radar backscatter image of {} seen from above",
+    "an overhead radar land-cover image containing {}",
 )
 
 

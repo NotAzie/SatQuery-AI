@@ -1,0 +1,71 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+
+Loading weights:   0%|          | 0/398 [00:00<?, ?it/s]
+Loading weights: 100%|##########| 398/398 [00:00<00:00, 49747.68it/s]
+
+Loading weights:   0%|          | 0/616 [00:00<?, ?it/s]
+Loading weights:   4%|4         | 27/616 [00:00<00:02, 268.29it/s]
+Loading weights:   9%|8         | 54/616 [00:00<00:03, 179.07it/s]
+Loading weights:  13%|#2        | 78/616 [00:00<00:02, 196.93it/s]
+Loading weights:  16%|#6        | 100/616 [00:00<00:04, 119.77it/s]
+Loading weights:  19%|#8        | 116/616 [00:00<00:04, 111.57it/s]
+Loading weights:  21%|##1       | 130/616 [00:01<00:05, 91.19it/s] 
+Loading weights:  23%|##2       | 141/616 [00:01<00:05, 92.67it/s]
+Loading weights:  25%|##4       | 152/616 [00:01<00:06, 73.79it/s]
+Loading weights:  26%|##6       | 161/616 [00:01<00:06, 66.36it/s]
+Loading weights:  28%|##8       | 174/616 [00:01<00:05, 76.36it/s]
+Loading weights:  30%|##9       | 183/616 [00:01<00:05, 77.23it/s]
+Loading weights: 100%|##########| 616/616 [00:01<00:00, 326.17it/s]
+
+Loading weights:   0%|          | 0/788 [00:00<?, ?it/s]
+Loading weights:   3%|3         | 25/788 [00:00<00:03, 226.13it/s]
+Loading weights:   6%|6         | 48/788 [00:00<00:04, 151.69it/s]
+Loading weights:   8%|8         | 65/788 [00:00<00:04, 155.54it/s]
+Loading weights:  10%|#         | 82/788 [00:00<00:08, 83.54it/s] 
+Loading weights:  14%|#3        | 108/788 [00:00<00:05, 115.84it/s]
+Loading weights:  16%|#6        | 129/788 [00:00<00:04, 135.70it/s]
+Loading weights:  19%|#8        | 149/788 [00:01<00:04, 148.20it/s]
+Loading weights:  21%|##1       | 168/788 [00:01<00:04, 154.94it/s]
+Loading weights:  24%|##3       | 186/788 [00:01<00:04, 137.68it/s]
+Loading weights:  26%|##5       | 203/788 [00:01<00:04, 136.70it/s]
+Loading weights:  28%|##8       | 224/788 [00:01<00:03, 151.92it/s]
+Loading weights: 100%|##########| 788/788 [00:01<00:00, 481.68it/s]
+.
+Loading weights:   0%|          | 0/398 [00:00<?, ?it/s]
+Loading weights: 100%|##########| 398/398 [00:00<00:00, 28243.04it/s]
+
+Loading weights:   0%|          | 0/616 [00:00<?, ?it/s]
+Loading weights:   3%|2         | 17/616 [00:00<00:04, 138.36it/s]
+Loading weights:   6%|5         | 35/616 [00:00<00:03, 157.55it/s]
+Loading weights:   9%|8         | 53/616 [00:00<00:03, 163.31it/s]
+Loading weights:  11%|#1        | 70/616 [00:00<00:06, 83.47it/s] 
+Loading weights:  13%|#3        | 82/616 [00:00<00:08, 64.24it/s]
+Loading weights:  15%|#5        | 93/616 [00:01<00:07, 71.63it/s]
+Loading weights:  17%|#6        | 103/616 [00:01<00:07, 70.29it/s]
+Loading weights:  18%|#8        | 112/616 [00:01<00:08, 61.18it/s]
+Loading weights:  21%|##        | 129/616 [00:01<00:06, 80.26it/s]
+Loading weights:  23%|##2       | 139/616 [00:01<00:06, 71.53it/s]
+Loading weights:  24%|##4       | 148/616 [00:01<00:06, 73.88it/s]
+Loading weights: 100%|##########| 616/616 [00:01<00:00, 328.72it/s]
+
+Loading weights:   0%|          | 0/788 [00:00<?, ?it/s]
+Loading weights:   2%|2         | 18/788 [00:00<00:04, 172.89it/s]
+Loading weights:   5%|4         | 39/788 [00:00<00:04, 183.94it/s]
+Loading weights:   7%|7         | 58/788 [00:00<00:04, 158.84it/s]
+Loading weights:  10%|9         | 75/788 [00:00<00:07, 89.83it/s] 
+Loading weights:  12%|#2        | 95/788 [00:00<00:06, 112.88it/s]
+Loading weights:  17%|#6        | 131/788 [00:00<00:03, 169.69it/s]
+Loading weights:  20%|#9        | 154/788 [00:00<00:03, 183.02it/s]
+Loading weights:  22%|##2       | 176/788 [00:01<00:03, 169.25it/s]
+Loading weights:  25%|##4       | 196/788 [00:01<00:04, 122.15it/s]
+Loading weights:  27%|##6       | 212/788 [00:01<00:04, 127.28it/s]
+Loading weights: 100%|##########| 788/788 [00:01<00:00, 507.31it/s]
+.
+=================================== PASSES ====================================
+_______________ test_warmup_health_capabilities_and_model_reuse _______________
+------------------------------ Captured log call ------------------------------
+WARNING  huggingface_hub.utils._http:_http.py:965 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+=========================== short test summary info ===========================
+PASSED tests/test_phase1_acceptance.py::test_warmup_health_capabilities_and_model_reuse
+PASSED tests/test_phase1_acceptance.py::test_post_warmup_caption_scene_and_grounding_smoke
+2 passed, 5 deselected in 88.25s (0:01:28)
