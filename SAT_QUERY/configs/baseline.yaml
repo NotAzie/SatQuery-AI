@@ -1,0 +1,44 @@
+baseline_name: satquery-phase0
+baseline_date_utc: 2026-09-16
+canonical_package: satquery-ai
+python_requires: ">=3.10"
+profile: quality
+device: auto
+dtype: auto
+models:
+  caption: Salesforce/blip-image-captioning-large
+  vqa: Salesforce/blip-vqa-base
+  clip_quality: openai/clip-vit-large-patch14
+  clip_fast: openai/clip-vit-base-patch32
+  revisions: not pinned in current configuration
+image_processing:
+  max_image_pixels: 1536
+  max_upload_mb: 40
+  supported_suffixes: [jpg, jpeg, png, bmp, webp, tif, tiff, gif, ppm, pgm]
+  normalize_to: RGB
+  geospatial_metadata_preserved: false
+quality_profile:
+  grounding_scales: [0.5, 0.35, 0.25, 0.18]
+  grounding_max_windows: 320
+  grounding_stride_ratio: 0.5
+fast_profile:
+  grounding_scales: [0.5]
+  grounding_max_windows: 16
+  grounding_stride_ratio: 0.9
+change_detection:
+  patch_grid: 16
+  minimum_region_fraction: 0.004
+  correspondence_refusal_threshold: 0.10
+  aspect_ratio_refusal_delta: 0.08
+runtime:
+  cache_size: 128
+  batch_size_quality: 16
+  batch_size_fast: 32
+  host: 127.0.0.1
+  port: 8000
+benchmark:
+  local_fixture_dir: satquery-ai/data/fetched_images
+  default_profile: fast
+  cold_start_includes_model_warmup: true
+  warm_iterations: 1
+  ground_truth_status: unavailable_for_current_fixtures

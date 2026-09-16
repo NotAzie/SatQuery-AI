@@ -1,0 +1,18 @@
+{
+  "schema_version": "0.1",
+  "manifest_date_utc": "2026-09-16",
+  "status": "baseline_smoke_set_without_ground_truth",
+  "source_directory": "satquery-ai/data/fetched_images",
+  "provider": "Esri World Imagery via plugins/image_fetcher/satellite_fetcher.py",
+  "geocoders": ["Nominatim", "Photon"],
+  "license_status": "not fully captured in current fixture sidecars; verify provider terms before redistribution",
+  "samples": [
+    {"id": "chennai-12-84295-80-15541-z18", "file": "12-84295-80-15541-z18-20260916T091406Z.jpg", "sha256": "DABF5A3E176E841E270A784B5526457557BEE16F41C871213A26DDDE6620F4A1", "size": [2048, 2048], "modality": "unknown_optical_likely", "ground_truth": false, "notes": "Coordinates encoded in filename; exact provider metadata absent."},
+    {"id": "coordinates-12-96975-79-16066-z16", "file": "12-96975-79-16066-z16-20260916T075401Z.jpg", "sha256": "62D2200264D9D89DD7B0D2B9A41CB70D924C86880687219A1F571B0E0410EDB8", "size": [2048, 2048], "modality": "unknown_optical_likely", "ground_truth": false, "notes": "Coordinates encoded in filename; exact provider metadata absent."},
+    {"id": "mumbai-airport", "file": "chhatrapati-shivaji-maharaj-international-airport-nehru-road-z16-20260915T104042Z.jpg", "sha256": "40CCF2FCD4E5F3C1A3939E0C6C35FCFF3A2109D66051A2E1A11C766ECB2D0B40", "size": [1024, 1024], "modality": "unknown_optical_likely", "ground_truth": false, "notes": "Place slug in filename; geocoder response not archived."},
+    {"id": "krmm-school-college", "file": "krmm-school-and-kumararani-meena-mutthaiah-college-crescent--z16-20260916T005312Z.jpg", "sha256": "84B9912EA5A400977F47F7CE64478D64989F9199D6A9CBA4C628A0AC596D72BD", "size": [1024, 1024], "modality": "unknown_optical_likely", "ground_truth": false, "notes": "Place slug in filename; geocoder response not archived."},
+    {"id": "taj-mahal-duplicate-a", "file": "taj-mahal-taj-east-gate-road-taj-ganj-agra-uttar-pradesh-282-z18-20260916T131820Z.jpg", "sha256": "099AB1CE91ADEB3A1428E8859B37068485508404F40711A46E66048D305D8555", "size": [2048, 2048], "modality": "unknown_optical_likely", "ground_truth": false, "notes": "Duplicate content of the next file; exact provider metadata absent."},
+    {"id": "taj-mahal-duplicate-b", "file": "taj-mahal-taj-east-gate-road-taj-ganj-agra-uttar-pradesh-282-z18-20260916T131951Z.jpg", "sha256": "099AB1CE91ADEB3A1428E8859B37068485508404F40711A46E66048D305D8555", "size": [2048, 2048], "modality": "unknown_optical_likely", "ground_truth": false, "notes": "Duplicate content of the previous file."},
+    {"id": "vit-chennai", "file": "vit-chennai-administrative-block-vandalur-mambakkam-kelambak-z19-20260916T091513Z.jpg", "sha256": "9A5FE35191A7CE8D740597FEC26872D27B6FCE08972C7156A6454CCAD3DE7B40", "size": [2048, 2048], "modality": "unknown_optical_likely", "ground_truth": false, "notes": "Place slug in filename; geocoder response not archived."}
+  ]
+}

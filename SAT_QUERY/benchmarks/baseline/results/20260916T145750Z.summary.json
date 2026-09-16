@@ -1,0 +1,45 @@
+{
+  "accuracy_metrics": "not_evaluable_without_ground_truth",
+  "environment": {
+    "device": "auto",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "profile": "fast",
+    "python": "3.14.5 (tags/v3.14.5:5607950, May 10 2026, 10:43:50) [MSC v.1944 64 bit (AMD64)]",
+    "versions": {
+      "Pillow": "12.3.0",
+      "fastapi": "0.141.1",
+      "httpx": "0.28.1",
+      "numpy": "2.5.3",
+      "pydantic": "2.13.5",
+      "torch": "2.14.0",
+      "transformers": "5.17.0"
+    }
+  },
+  "failed_queries": 0,
+  "profile": "fast",
+  "query_count": 6,
+  "results_file": "benchmarks\\baseline\\results\\20260916T145750Z.jsonl",
+  "run_id": "20260916T145750Z",
+  "samples": [
+    "12-84295-80-15541-z18-20260916T091406Z.jpg"
+  ],
+  "schema_version": "0.1",
+  "successful_queries": 6,
+  "warm_query_latency_ms": {
+    "max": 80690.679,
+    "median": 3100.616,
+    "min": 765.398
+  },
+  "warmup": {
+    "device": "cpu",
+    "elapsed_s": 34.6,
+    "errors": {},
+    "loaded": [
+      "clip",
+      "captioner",
+      "vqa"
+    ],
+    "ready": true
+  },
+  "warmup_seconds": 34.608
+}

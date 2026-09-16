@@ -1,0 +1,11 @@
+{
+  "schema_version": "0.1",
+  "queries": [
+    {"id": "caption.scene", "task": "captioning", "query": "describe this scene"},
+    {"id": "scene.land_use", "task": "scene_classification", "query": "classify the land use"},
+    {"id": "grounding.buildings", "task": "grounding", "query": "where are the buildings"},
+    {"id": "vqa.buildings", "task": "vqa_presence", "query": "are there buildings?"},
+    {"id": "vqa.water", "task": "vqa_presence", "query": "is there water?"},
+    {"id": "scene.dominant_land_cover", "task": "scene_classification", "query": "what is the dominant land cover?"}
+  ]
+}
