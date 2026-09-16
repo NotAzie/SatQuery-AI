@@ -1,0 +1,21 @@
+# --- Core service (required) ------------------------------------------------
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.6
+python-multipart>=0.0.9
+numpy>=1.24
+Pillow>=10.0
+httpx>=0.26
+
+# --- Vision models (required to answer any question about an image) ---------
+# Install a torch build matching your hardware. CPU-only:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+# CUDA 12.1:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+torch>=2.1
+transformers>=4.38
+
+# --- Optional ---------------------------------------------------------------
+# accelerate        # sharded loading for large RS-VLM checkpoints
+# sentencepiece     # tokenizers used by some VLM checkpoints
+# python-dotenv     # .env parsing (SatQuery has a built-in fallback parser)
