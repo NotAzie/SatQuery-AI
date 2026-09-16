@@ -73,20 +73,26 @@ class VQATool(Tool):
                 answer_method = getattr(answerer, "answer", None)
                 if callable(answer_method):
                     raw_answer, decode_score = cast(
-                        Tuple[str, Optional[float]], answer_method(image.pil, question)
+                        Tuple[str, Optional[float]],
+                        answer_method(image.pil, self._backend_question(context, question)),
                     )
                 else:
-                    raw_answer = answerer.generate([image.pil], question).strip()
+                    raw_answer = answerer.generate(
+                        [image.pil], self._backend_question(context, question)
+                    ).strip()
         elif hasattr(answerer, "answer"):
             answer_method = getattr(answerer, "answer", None)
             if callable(answer_method):
                 raw_answer, decode_score = cast(
-                    Tuple[str, Optional[float]], answer_method(image.pil, question)
+                    Tuple[str, Optional[float]],
+                    answer_method(image.pil, self._backend_question(context, question)),
                 )
             else:
                 raw_answer = answerer.generate([image.pil], question).strip()
         else:
-            raw_answer = answerer.generate([image.pil], question).strip()
+            raw_answer = answerer.generate(
+                [image.pil], self._backend_question(context, question)
+            ).strip()
 
         if not raw_answer:
             raw_answer = "the model produced no answer for this question"
@@ -97,6 +103,20 @@ class VQATool(Tool):
         presence: Optional[Dict[str, Any]] = None
         if is_yes_no and target and context.vision.has_embedder:
             presence = self._presence_probe(context, target)
+
+        scene_context: Optional[Dict[str, Any]] = None
+        if not is_yes_no and context.vision.has_embedder:
+            try:
+                scene_result = context.run_tool(ToolName.SCENE)
+                if scene_result.labels:
+                    scene_context = {
+                        "label": scene_result.labels[0].label,
+                        "group": scene_result.labels[0].group,
+                        "score": scene_result.labels[0].score,
+                        "evidence_quality": scene_result.data.get("evidence_quality"),
+                    }
+            except Exception as exc:
+                context.warn(f"Scene evidence did not contribute to VQA ({exc.__class__.__name__}).")
 
         polarity = self._polarity(raw_answer)
         agreement: Optional[bool] = None
@@ -121,6 +141,7 @@ class VQATool(Tool):
             agreement=agreement,
             decode_score=decode_score,
             backend_kind=backend_kind,
+            scene_context=scene_context,
         )
 
         labels: List[ScoredLabel] = []
@@ -144,10 +165,20 @@ class VQATool(Tool):
                 "decode_score": round(decode_score, 4) if decode_score is not None else None,
                 "presence_probe": presence,
                 "cross_check_agreement": agreement,
+                "scene_context": scene_context,
             },
             labels=labels,
             confidence=round(confidence, 4) if confidence is not None else None,
         )
+
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _backend_question(context: ToolContext, question: str) -> str:
+        """Give practical VQA overhead context without changing user wording."""
+        if context.primary.modality is Modality.SAR:
+            return f"In this overhead SAR radar image, answer this question: {question}"
+        return f"In this overhead satellite image, answer this question: {question}"
 
     # ------------------------------------------------------------------
 
@@ -251,6 +282,7 @@ class VQATool(Tool):
         agreement: Optional[bool],
         decode_score: Optional[float],
         backend_kind: BackendKind,
+        scene_context: Optional[Dict[str, Any]],
     ) -> str:
         parts: List[str] = []
 
@@ -278,6 +310,14 @@ class VQATool(Tool):
             parts.append(
                 f"Decoder confidence for this answer is {decode_score:.2f}; that is a "
                 "sequence likelihood, not a calibrated probability."
+            )
+
+        if scene_context is not None:
+            parts.append(
+                f"Scene evidence provides context: {scene_context['label']} "
+                f"({scene_context['score'] * 100:.1f}% zero-shot mass), "
+                f"grouped as {scene_context['group']}; evidence is "
+                f"{scene_context.get('evidence_quality') or 'unrated'}."
             )
 
         if context.primary.modality is Modality.SAR:

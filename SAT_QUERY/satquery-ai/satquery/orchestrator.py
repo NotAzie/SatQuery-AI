@@ -449,7 +449,8 @@ class SatQueryEngine:
         status = self.registry.status()
         practical_ok = bool(status["practical"]["available"])
         strong_ok = bool(status["rsvlm"]["available"])
-        any_backend = practical_ok or strong_ok
+        practical_ready = bool(status["practical"].get("ready"))
+        strong_ready = bool(status["rsvlm"].get("ready"))
 
         infos: List[CapabilityInfo] = []
         for tool_name, (intent, description, required) in CAPABILITY_DOCS.items():
@@ -461,16 +462,16 @@ class SatQueryEngine:
                 ToolName.COUNTING,
             }
             if needs_embedder:
-                available = practical_ok
-                reason = None if practical_ok else status["practical"]["reason"]
+                available = practical_ready and status["practical"].get("loaded", []).count("clip") > 0
+                reason = None if available else "CLIP is not warmed and ready; run `python -m satquery warmup`."
                 preference = [BackendKind.PRACTICAL]
             elif tool_name is ToolName.MODALITY:
-                available = True
-                reason = None
+                available = practical_ready and status["practical"].get("loaded", []).count("clip") > 0
+                reason = None if available else "The practical CLIP backend is not warmed and ready."
                 preference = [BackendKind.PRACTICAL]
             else:
-                available = any_backend
-                reason = None if any_backend else "no vision backend is installed or configured"
+                available = strong_ready or practical_ready
+                reason = None if available else "A required vision backend is not warmed and ready."
                 preference = (
                     [BackendKind.RSVLM, BackendKind.PRACTICAL]
                     if strong_ok
@@ -495,7 +496,7 @@ class SatQueryEngine:
 
         status = self.registry.status()
         dependencies = probe_dependencies()
-        ready = bool(status["practical"]["available"] or status["rsvlm"]["available"])
+        ready = bool(status["practical"].get("ready") or status["rsvlm"].get("ready"))
 
         actions: List[str] = []
         if not dependencies.get("torch", {}).get("installed"):
@@ -504,6 +505,8 @@ class SatQueryEngine:
             )
         if not dependencies.get("transformers", {}).get("installed"):
             actions.append("pip install transformers")
+        if status["practical"]["available"] and not status["practical"].get("ready"):
+            actions.append("Run `python -m satquery warmup` to load and verify the practical models.")
         if ready and not status["rsvlm"]["available"]:
             actions.append(
                 "Optional: set SATQUERY_RSVLM_PATH and SATQUERY_RSVLM_ENABLED=true to enable "
@@ -543,16 +546,26 @@ class SatQueryEngine:
                     loaded.append(name)
                 except SatQueryError as exc:
                     errors[name] = exc.message
+                except Exception as exc:
+                    errors[name] = str(exc)
         if status["rsvlm"]["available"]:
             try:
                 self.registry.rsvlm()
                 loaded.append("rsvlm")
             except SatQueryError as exc:
                 errors["rsvlm"] = exc.message
+            except Exception as exc:
+                errors["rsvlm"] = str(exc)
+
+        final_status = self.registry.status()
 
         return {
             "loaded": loaded,
             "errors": errors,
+            "ready": bool(
+                final_status["practical"].get("ready")
+                or final_status["rsvlm"].get("ready")
+            ),
             "device": self.registry.resolve_device(),
             "elapsed_s": round(time.perf_counter() - started, 2),
         }

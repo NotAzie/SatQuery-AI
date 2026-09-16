@@ -1,0 +1,58 @@
+{
+  "timestamp_utc": "20260916T083035Z",
+  "run_directory": "satquery-ai\\test_runs\\phase1\\20260916T083035Z",
+  "package_root": "C:\\Users\\mazin\\HACKATHON\\SAT_QUERY\\satquery-ai",
+  "python_executable": "C:\\Users\\mazin\\HACKATHON\\SAT_QUERY\\.venv\\Scripts\\python.exe",
+  "profile": "fast",
+  "real_acceptance_enabled": true,
+  "commands": [
+    {
+      "command": [
+        "C:\\Users\\mazin\\HACKATHON\\SAT_QUERY\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "tests/test_phase1_acceptance.py",
+        "-s",
+        "-rA"
+      ],
+      "returncode": 0,
+      "duration_s": 3.279,
+      "output_file": "satquery-ai\\test_runs\\phase1\\20260916T083035Z\\deterministic.txt",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 2,
+      "key_durations_s": []
+    },
+    {
+      "command": [
+        "C:\\Users\\mazin\\HACKATHON\\SAT_QUERY\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "tests/test_phase1_acceptance.py",
+        "-s",
+        "-rA",
+        "-m",
+        "real_acceptance"
+      ],
+      "returncode": 0,
+      "duration_s": 85.228,
+      "output_file": "satquery-ai\\test_runs\\phase1\\20260916T083035Z\\real_acceptance.txt",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "key_durations_s": [
+        35.668,
+        0.777,
+        1.389
+      ]
+    }
+  ],
+  "environment_notes": [
+    "Working directory: C:\\Users\\mazin\\HACKATHON\\SAT_QUERY\\satquery-ai",
+    "Python version: 3.12.10",
+    "Configured SATQUERY_PROFILE: fast",
+    "Real acceptance uses existing fetched images under data/fetched_images when available.",
+    "The runner does not alter source modules or change model defaults."
+  ],
+  "final_verdict": "PASS"
+}

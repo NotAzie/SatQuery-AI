@@ -211,6 +211,17 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 
         <div class="field">
           <label for="files">Imagery</label>
+          <label style="margin: 0 0 8px; color: var(--ink);">
+            <input id="locationMode" type="checkbox" /> Fetch real satellite imagery from a location
+          </label>
+          <div id="locationFields" style="display:none; margin-bottom:12px;">
+            <input id="place" type="text" placeholder="Place or address, e.g. VIT Chennai, Vandalur" />
+            <div class="row" style="margin-top:8px;">
+              <input id="latitude" type="text" placeholder="Latitude (optional)" />
+              <input id="longitude" type="text" placeholder="Longitude (optional)" />
+            </div>
+            <input id="zoom" type="text" placeholder="Zoom (optional, default 18)" style="margin-top:8px;" />
+          </div>
           <div class="drop" id="drop" tabindex="0" role="button">
             <strong>Drop images or browse</strong>
             <span>Two images unlock change detection</span>
@@ -334,16 +345,31 @@ async function loadStatus() {
 
     const ready = health.ready;
     const strong = health.backends && health.backends.rsvlm && health.backends.rsvlm.available;
+    const practical = health.backends && health.backends.practical;
     const planner = health.backends && health.backends.planner_llm && health.backends.planner_llm.available;
 
     line.innerHTML = '';
-    addStatus(line, ready ? 'ok' : 'bad', 'Vision', ready ? (strong ? 'RS VLM + CLIP' : 'BLIP + CLIP') : 'not configured');
+    addStatus(
+      line,
+      ready ? 'ok' : (practical && practical.available ? 'warn' : 'bad'),
+      'Vision',
+      ready ? (strong ? 'RS VLM + CLIP' : 'BLIP + CLIP')
+        : (practical && practical.available ? 'installed; warmup required' : 'not configured')
+    );
     addStatus(line, 'ok', 'Device', health.device);
     addStatus(line, planner ? 'ok' : 'warn', 'Planner', planner ? health.backends.planner_llm.model : 'rule routing');
     addStatus(line, 'ok', 'Version', health.version);
 
-    if (!ready && health.setup_actions && health.setup_actions.length) {
-      showNotice('SatQuery has no vision backend yet, so it will refuse to answer rather than guess.',
+    if (!ready && practical && practical.available) {
+      showNotice(
+        'Vision models are installed but not loaded in this server process. Warm them up here before asking a question.',
+        health.setup_actions,
+        false,
+        'Warm up models',
+        warmupModels
+      );
+    } else if (!ready && health.setup_actions && health.setup_actions.length) {
+      showNotice('SatQuery has no usable vision backend yet, so it will refuse to answer rather than guess.',
                  health.setup_actions, true);
     }
 
@@ -359,6 +385,24 @@ async function loadStatus() {
   } catch (err) {
     line.innerHTML = '';
     addStatus(line, 'bad', 'API', 'unreachable');
+  }
+}
+
+async function warmupModels() {
+  clearNotices();
+  showNotice('Loading vision models in this server process. This can take a while on first run.', [], false);
+  try {
+    const response = await fetch('/api/v1/warmup', { method: 'POST' });
+    const result = await response.json();
+    if (!response.ok || result.errors && Object.keys(result.errors).length) {
+      const errors = Object.entries(result.errors || {}).map(([name, error]) => name + ': ' + error);
+      showNotice('Model warmup failed. Check the reported model errors.', errors, true);
+      return;
+    }
+    await loadStatus();
+    showNotice('Vision models are ready in this server process.', [], false);
+  } catch (error) {
+    showNotice('Could not reach the warmup endpoint.', [String(error)], true);
   }
 }
 
@@ -403,6 +447,15 @@ $('files').addEventListener('change', (e) => {
   e.target.value = '';
   renderFiles();
 });
+$('locationMode').addEventListener('change', (e) => {
+  const enabled = e.target.checked;
+  $('locationFields').style.display = enabled ? 'block' : 'none';
+  $('drop').style.display = enabled ? 'none' : 'block';
+  if (enabled) {
+    state.files = [];
+    renderFiles();
+  }
+});
 $('drop').addEventListener('click', () => $('files').click());
 $('drop').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('files').click(); }
@@ -422,7 +475,7 @@ $('drop').addEventListener('drop', (e) => {
 
 function clearNotices() { $('notices').innerHTML = ''; }
 
-function showNotice(text, bullets, bad) {
+function showNotice(text, bullets, bad, actionLabel, action) {
   const div = document.createElement('div');
   div.className = 'notice' + (bad ? ' bad' : '');
   const p = document.createElement('div');
@@ -432,6 +485,14 @@ function showNotice(text, bullets, bad) {
     const ul = document.createElement('ul');
     bullets.forEach((b) => { const li = document.createElement('li'); li.textContent = b; ul.appendChild(li); });
     div.appendChild(ul);
+  }
+  if (actionLabel && action) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'run';
+    button.textContent = actionLabel;
+    button.addEventListener('click', action);
+    div.appendChild(button);
   }
   $('notices').appendChild(div);
 }
@@ -631,6 +692,16 @@ function renderError(status, body) {
 async function run() {
   const query = $('query').value.trim();
   if (!query) { showNotice('Enter a question first.', [], true); return; }
+  const locationMode = $('locationMode').checked;
+  const hasCoordinates = $('latitude').value.trim() && $('longitude').value.trim();
+  if (locationMode && (!$('place').value.trim() && !hasCoordinates)) {
+    showNotice('Enter a place/address or both latitude and longitude.', [], true);
+    return;
+  }
+  if (!locationMode && !state.files.length) {
+    showNotice('Attach an image or enable location fetch mode.', [], true);
+    return;
+  }
 
   const button = $('run');
   button.disabled = true;
@@ -643,10 +714,19 @@ async function run() {
   form.append('include_trace', 'true');
   if ($('modality').value) form.append('modality_hint', $('modality').value);
   if ($('tool').value) form.append('force_tool', $('tool').value);
-  state.files.forEach((file) => form.append('files', file, file.name));
+  let endpoint = '/api/v1/query';
+  if (locationMode) {
+    endpoint = '/api/v1/query/location';
+    if ($('place').value.trim()) form.append('place', $('place').value.trim());
+    if ($('latitude').value.trim()) form.append('latitude', $('latitude').value.trim());
+    if ($('longitude').value.trim()) form.append('longitude', $('longitude').value.trim());
+    if ($('zoom').value.trim()) form.append('zoom', $('zoom').value.trim());
+  } else {
+    state.files.forEach((file) => form.append('files', file, file.name));
+  }
 
   try {
-    const res = await fetch('/api/v1/query', { method: 'POST', body: form });
+    const res = await fetch(endpoint, { method: 'POST', body: form });
     const body = await res.json();
     if (!res.ok) { renderError(res.status, body); } else { renderResponse(body); }
   } catch (err) {

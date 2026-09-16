@@ -135,6 +135,17 @@ class Tool(abc.ABC):
                 remediation=self._image_remediation(),
                 context={"tool": self.name.value, "supplied": count, "required": self.min_images},
             )
+        if count > self.max_images:
+            noun = "image" if self.max_images == 1 else "images"
+            raise QueryError(
+                f"{self.name.value} accepts at most {self.max_images} {noun}, "
+                f"but {count} were supplied.",
+                remediation=[
+                    f"Send no more than {self.max_images} image{'s' if self.max_images != 1 else ''} "
+                    f"for {self.name.value}."
+                ],
+                context={"tool": self.name.value, "supplied": count, "maximum": self.max_images},
+            )
 
     def _image_remediation(self) -> List[str]:
         if self.min_images >= 2:

@@ -26,9 +26,11 @@ from ..taxonomy import GROUP_DESCRIPTIONS, caption_prompts
 from .base import Tool, ToolContext
 
 RSVLM_CAPTION_PROMPT = (
-    "Describe this remote sensing image in detail. Cover the dominant land cover, any "
-    "built structures or infrastructure, the spatial layout, and anything notable about "
-    "the scene. Be specific and concrete."
+    "Analyse this overhead remote-sensing image as a satellite image analyst. Describe "
+    "only visible evidence: the dominant land cover, built structures and infrastructure, "
+    "surface patterns, and spatial layout using compass or quadrant language when useful. "
+    "Distinguish observation from inference, avoid street-level assumptions, and say when "
+    "the resolution does not support a precise claim."
 )
 
 
@@ -263,15 +265,22 @@ class CaptionTool(Tool):
         headline = variants[0]
         if not headline.endswith("."):
             headline += "."
-        parts.append(headline)
 
         if supporting.get("scene_label"):
             group = supporting.get("scene_group") or ""
             parts.append(
-                f"Zero-shot classification reads the footprint as {supporting['scene_label']} "
-                f"({supporting['scene_score'] * 100:.0f}%), which is "
+                f"Overhead land-use evidence reads the footprint as {supporting['scene_label']} "
+                f"({supporting['scene_score'] * 100:.0f}% zero-shot mass), which is "
                 f"{GROUP_DESCRIPTIONS.get(group, group or 'unclassified')}."
             )
+            if supporting.get("distinct_tile_labels") is not None:
+                tile_count = supporting["distinct_tile_labels"]
+                parts.append(
+                    f"Spatial consistency check: {tile_count} distinct land-use readings appear "
+                    "across the four quadrants, so the scene should be interpreted as "
+                    + ("mixed." if tile_count > 1 else "relatively homogeneous.")
+                )
+        parts.append("Visual caption: " + headline)
 
         mixture = supporting.get("group_mixture") or {}
         if len(mixture) > 1:
@@ -299,7 +308,7 @@ class CaptionTool(Tool):
                 parts.append("Dominant tones across the frame: " + "; ".join(colours) + ".")
 
         parts.append(
-            f"Texture statistics: mean intensity {texture['mean_intensity']:.0f}, standard "
+            f"Remote-sensing evidence: Texture statistics: mean intensity {texture['mean_intensity']:.0f}, standard "
             f"deviation {texture['intensity_std']:.0f}, edge density "
             f"{texture['edge_density']:.3f} - "
             + (

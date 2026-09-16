@@ -199,6 +199,57 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             include_trace=body.include_trace,
         )
 
+    @app.post(
+        "/api/v1/query/location",
+        response_model=QueryResponse,
+        summary="Fetch satellite imagery for a location, then analyze it",
+    )
+    async def query_location(
+        query: str = Form(..., description="Question about the fetched satellite image."),
+        place: Optional[str] = Form(None, description="Place name or address."),
+        latitude: Optional[float] = Form(None, description="Latitude in decimal degrees."),
+        longitude: Optional[float] = Form(None, description="Longitude in decimal degrees."),
+        zoom: Optional[int] = Form(None, description="Satellite imagery zoom level."),
+        modality_hint: Optional[str] = Form(None, description="OPTICAL or SAR."),
+        force_tool: Optional[str] = Form(None, description="Pin a capability."),
+        include_trace: bool = Form(True),
+    ) -> QueryResponse:
+        """Optional no-upload flow: fetch one image, then use normal orchestration."""
+        place = place.strip() or None if place is not None else None
+        try:
+            from plugins.image_fetcher.satellite_fetcher import fetch_satellite_image
+        except ImportError as exc:
+            raise QueryError(
+                "The optional image-fetcher plugin is not installed.",
+                remediation=[
+                    "Run this endpoint from the canonical satquery-ai directory.",
+                    "Install the local package with: python -m pip install -e .",
+                ],
+            ) from exc
+
+        try:
+            image_path = fetch_satellite_image(
+                place=place,
+                latitude=latitude,
+                longitude=longitude,
+                zoom=zoom,
+            )
+        except Exception as exc:
+            message = getattr(exc, "message", str(exc))
+            remediation = list(getattr(exc, "remediation", []))
+            raise QueryError(
+                f"Could not fetch satellite imagery: {message}",
+                remediation=remediation or ["Try a more specific place or pass coordinates."],
+            ) from exc
+
+        return get_engine().answer(
+            query,
+            image_paths=[str(image_path)],
+            modality_hint=_parse_modality(modality_hint),
+            force_tool=_parse_tool(force_tool),
+            include_trace=include_trace,
+        )
+
     return app
 
 

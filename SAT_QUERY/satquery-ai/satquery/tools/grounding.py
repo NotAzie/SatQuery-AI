@@ -33,7 +33,7 @@ from ..imaging import (
     regions_from_score_map,
 )
 from ..schemas import BackendKind, Region, ToolName, ToolResult
-from ..taxonomy import contrast_set, phrase_for_target
+from ..taxonomy import contrast_set, phrase_for_target, phrase_variants_for_target
 from .base import Tool, ToolContext
 
 RESPONSE_GRID = 32
@@ -105,9 +105,14 @@ class GroundingTool(Tool):
             data={
                 "target": target,
                 "target_phrase": diagnostics["target_phrase"],
+                "target_variants": diagnostics["target_variants"],
                 "contrast_phrases": diagnostics["contrast_phrases"],
                 "windows_scored": diagnostics["window_count"],
                 "scales_used": diagnostics["scales"],
+                "window_score_mean": diagnostics["window_score_mean"],
+                "window_score_std": diagnostics["window_score_std"],
+                "strong_window_count": diagnostics["strong_window_count"],
+                "window_support_fraction": diagnostics["window_support_fraction"],
                 "response_grid": [RESPONSE_GRID, RESPONSE_GRID],
                 "peak_response": round(peak, 4),
                 "mean_response": round(float(score_map.mean()), 4),
@@ -138,8 +143,9 @@ class GroundingTool(Tool):
         embedder = context.vision.embedder
 
         target_phrase = phrase_for_target(target)
+        target_variants = phrase_variants_for_target(target)
         contrasts = contrast_set(target_phrase)
-        phrases = [target_phrase] + contrasts
+        phrases = list(target_variants) + contrasts
 
         windows = generate_windows(
             image.width,
@@ -154,12 +160,29 @@ class GroundingTool(Tool):
             for window in windows
         ]
 
-        window_embeddings = embedder.embed_images(crops)
+        embedding_cache_key = context.cache_key(
+            self.name,
+            "window-embeddings",
+            tuple(settings.grounding_scales),
+            settings.grounding_stride_ratio,
+            settings.grounding_max_windows,
+        )
+        window_embeddings = context.cache.get(embedding_cache_key)
+        if window_embeddings is None:
+            window_embeddings = embedder.embed_images(crops)
+            context.cache.put(embedding_cache_key, window_embeddings)
         phrase_embeddings = embedder.embed_texts(phrases)
         logit_scale = embedder.logit_scale()
 
         logits = window_embeddings @ phrase_embeddings.T * logit_scale
-        probabilities = softmax(logits, axis=1)[:, 0]
+        target_width = len(target_variants)
+        target_logits = logits[:, :target_width].mean(axis=1, keepdims=True)
+        contrast_logits = logits[:, target_width:]
+        probabilities = softmax(
+            np.concatenate([target_logits, contrast_logits], axis=1), axis=1
+        )[:, 0]
+        top_cut = float(np.percentile(probabilities, 75.0))
+        strong_window_count = int(np.count_nonzero(probabilities >= top_cut))
 
         score_map = accumulate_window_scores(
             windows,
@@ -171,9 +194,14 @@ class GroundingTool(Tool):
 
         diagnostics = {
             "target_phrase": target_phrase,
+            "target_variants": list(target_variants),
             "contrast_phrases": contrasts,
             "window_count": len(windows),
             "scales": sorted({round(window.scale, 3) for window in windows}, reverse=True),
+            "window_score_mean": round(float(probabilities.mean()), 4),
+            "window_score_std": round(float(probabilities.std()), 4),
+            "strong_window_count": strong_window_count,
+            "window_support_fraction": round(strong_window_count / max(len(windows), 1), 4),
         }
         return score_map, diagnostics
 

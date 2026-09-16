@@ -156,10 +156,12 @@ def test_downsampling_is_surfaced_as_a_warning(engine):
     assert "Notes:" in response.answer
 
 
-def test_engine_refuses_when_no_vision_backend_exists(settings):
+def test_engine_refuses_when_no_vision_backend_exists(settings, monkeypatch):
+    missing = {name: {"installed": False, "version": None} for name in (
+        "torch", "transformers", "PIL", "numpy", "httpx", "accelerate", "sentencepiece"
+    )}
+    monkeypatch.setattr("satquery.registry.probe_dependencies", lambda: missing)
     bare = SatQueryEngine(settings)
-    # The real vision_suite() is used here; neither torch nor transformers is
-    # installed in this environment, so it must refuse rather than improvise.
     with pytest.raises(ResourceNotConfiguredError) as excinfo:
         bare.answer("Describe this scene", uploads=[upload()])
 
@@ -167,16 +169,29 @@ def test_engine_refuses_when_no_vision_backend_exists(settings):
     assert any("pip install torch transformers" in line for line in excinfo.value.remediation)
 
 
-def test_capabilities_reflect_backend_availability(engine):
+def test_capabilities_reflect_backend_availability(engine, monkeypatch):
+    missing = {name: {"installed": False, "version": None} for name in (
+        "torch", "transformers", "PIL", "numpy", "httpx", "accelerate", "sentencepiece"
+    )}
+    monkeypatch.setattr("satquery.registry.probe_dependencies", lambda: missing)
     capabilities = engine.capabilities()
     by_tool = {capability.tool: capability for capability in capabilities}
 
     assert set(by_tool) == set(ToolName)
     assert by_tool[ToolName.CHANGE].requires_images == 2
-    assert by_tool[ToolName.MODALITY].available is True
-    # Without torch installed, the CLIP-shaped capabilities report unavailable.
+    assert by_tool[ToolName.MODALITY].available is False
     assert by_tool[ToolName.GROUNDING].available is False
     assert by_tool[ToolName.GROUNDING].unavailable_reason
+
+
+def test_tool_rejects_extra_images_before_execution(engine):
+    with pytest.raises(QueryError, match="accepts at most 1"):
+        engine.answer("Describe this", uploads=[upload(), upload()])
+
+
+def test_change_tool_rejects_more_than_two_images(engine):
+    with pytest.raises(QueryError, match="accepts at most 2"):
+        engine.answer("What changed?", uploads=[upload(), upload(), upload()])
 
 
 def test_health_reports_missing_dependencies_with_actions(engine):
@@ -280,6 +295,29 @@ def test_query_endpoint_without_an_image_returns_a_helpful_error(client):
     body = response.json()
     assert body["error"] == "query_error"
     assert any("Attach" in line for line in body["remediation"])
+
+
+def test_location_endpoint_accepts_coordinates_without_empty_place(client, monkeypatch, tmp_path):
+    image_path = tmp_path / "location.png"
+    image_path.write_bytes(to_png_bytes(make_scene(urban_box=(230, 0, 384, 140))))
+    monkeypatch.setattr(
+        "plugins.image_fetcher.satellite_fetcher.fetch_satellite_image",
+        lambda **kwargs: image_path,
+    )
+
+    response = client.post(
+        "/api/v1/query/location",
+        data={
+            "query": "describe this scene",
+            "place": "",
+            "latitude": "12.842946",
+            "longitude": "80.155410",
+            "zoom": "18",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["answer"]
 
 
 def test_query_endpoint_rejects_a_corrupt_upload(client):

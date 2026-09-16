@@ -43,3 +43,6 @@ include = ["satquery*", "plugins*"]
 testpaths = ["tests"]
 pythonpath = [".", "tests"]
 addopts = "-q --tb=short"
+markers = [
+  "real_acceptance: loads the configured Hugging Face models and runs real-image smoke checks",
+]

@@ -94,6 +94,7 @@ class ModelRegistry:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._models: Dict[str, LoadedModel] = {}
+        self._load_errors: Dict[str, str] = {}
         self._locks: Dict[str, threading.Lock] = {}
         self._registry_lock = threading.Lock()
         self._device: Optional[str] = None
@@ -185,7 +186,11 @@ class ModelRegistry:
 
             started = time.perf_counter()
             logger.info("Loading %s ...", key)
-            model, processor, model_id = builder()
+            try:
+                model, processor, model_id = builder()
+            except Exception as exc:
+                self._load_errors[key] = str(exc)
+                raise
             elapsed = time.perf_counter() - started
 
             loaded = LoadedModel(
@@ -198,6 +203,7 @@ class ModelRegistry:
                 load_seconds=round(elapsed, 3),
             )
             self._models[key] = loaded
+            self._load_errors.pop(key, None)
             logger.info("Loaded %s (%s) in %.2fs", key, model_id, elapsed)
             return loaded
 
@@ -423,6 +429,11 @@ class ModelRegistry:
         torch_ok = bool(deps.get("torch", {}).get("installed"))
         transformers_ok = bool(deps.get("transformers", {}).get("installed"))
         practical_ok = torch_ok and transformers_ok
+        practical_ready = all(self.is_loaded(key) for key in ("clip", "captioner", "vqa"))
+        practical_load_error = next(
+            (self._load_errors[key] for key in ("clip", "captioner", "vqa") if key in self._load_errors),
+            None,
+        )
 
         rsvlm_reason: Optional[str] = None
         if not self.settings.strong_backend_requested:
@@ -451,14 +462,21 @@ class ModelRegistry:
             "dtype": self.settings.dtype,
             "practical": {
                 "available": practical_ok,
-                "reason": None if practical_ok else "torch and transformers must be installed",
+                "ready": practical_ready,
+                "reason": (
+                    None
+                    if practical_ok and practical_load_error is None
+                    else practical_load_error or "torch and transformers must be installed"
+                ),
                 "caption_model": self.settings.caption_model,
                 "vqa_model": self.settings.vqa_model,
                 "clip_model": self.settings.clip_model,
                 "loaded": [key for key in self.loaded_keys() if key != "rsvlm"],
+                "load_errors": dict(self._load_errors),
             },
             "rsvlm": {
                 "available": rsvlm_reason is None,
+                "ready": self.is_loaded("rsvlm"),
                 "reason": rsvlm_reason,
                 "path": self.settings.rsvlm_path,
                 "kind": self.settings.rsvlm_kind,
@@ -477,6 +495,7 @@ class ModelRegistry:
         """Drop every cached model and release accelerator memory."""
         with self._registry_lock:
             self._models.clear()
+            self._load_errors.clear()
         if _has_module("torch"):
             torch = importlib.import_module("torch")
             if torch.cuda.is_available():
