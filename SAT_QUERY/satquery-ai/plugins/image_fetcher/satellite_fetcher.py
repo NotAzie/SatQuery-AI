@@ -18,6 +18,8 @@ from urllib.request import Request, urlopen
 
 from PIL import Image
 
+TARGET_ZOOMS = {"general": 18, "water": 18, "road": 19, "building": 20, "vehicle": 20}
+
 
 class SatelliteFetchError(RuntimeError):
     """Raised when the optional image fetcher cannot produce an image."""
@@ -275,3 +277,27 @@ def fetch_satellite_image(
     path = target_dir / f"{_slug(location.label) or 'satellite'}-z{selected_zoom}-{timestamp}.jpg"
     path.write_bytes(payload)
     return path.resolve()
+
+
+def fetch_zoomed_geotiff(*, latitude: float, longitude: float, target: str = "general", zoom: Optional[int] = None, width: int = 2048, height: int = 2048, output_dir: str = "tests/real_eo_zoom/images", settings: Optional[FetcherSettings] = None) -> tuple[Path, Path]:
+    """Request a small server-rendered extent; never upscale an existing image."""
+    settings = settings or FetcherSettings.from_env(); _validate_coordinates(latitude, longitude)
+    target = target.strip().lower()
+    if target not in TARGET_ZOOMS: raise SatelliteFetchError(f"Unknown target {target!r}.", [f"Choose one of {sorted(TARGET_ZOOMS)}."])
+    selected = TARGET_ZOOMS[target] if zoom is None else zoom
+    if not 1 <= selected <= 20: raise SatelliteFetchError("Zoom must be between 1 and 20.")
+    if not 512 <= width <= 4096 or not 512 <= height <= 4096: raise SatelliteFetchError("width and height must each be in 512..4096.")
+    span = 360.0 * (max(width, height) / 256.0) / (2**selected); lon_span = min(span / max(.1, abs(math.cos(math.radians(latitude)))), 359.0); bounds = (longitude-lon_span/2, max(-90.,latitude-span/2), longitude+lon_span/2, min(90.,latitude+span/2))
+    params={"bbox":",".join(str(x) for x in bounds),"bboxSR":"4326","imageSR":"4326","size":f"{width},{height}","format":"jpg","f":"image"}
+    payload=_request_bytes(Request(f"{settings.provider_url}?{urlencode(params)}",headers={"User-Agent":settings.user_agent}),settings,"zoomed satellite image")
+    try:
+        image=Image.open(io.BytesIO(payload)).convert("RGB")
+        if image.size != (width,height): raise ValueError(image.size)
+        import numpy as np; import rasterio
+        from rasterio.transform import from_bounds
+    except Exception as exc: raise SatelliteFetchError("Could not decode or GeoTIFF-wrap the server imagery.", ["Install rasterio and retry."]) from exc
+    destination=Path(output_dir); destination.mkdir(parents=True,exist_ok=True); stamp=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"); base=destination/f"{target}-z{selected}-{latitude:.5f}-{longitude:.5f}-{stamp}"; tif,meta=base.with_suffix(".tif"),base.with_suffix(".json"); data=np.asarray(image).transpose(2,0,1)
+    with rasterio.open(tif,"w",driver="GTiff",width=width,height=height,count=3,dtype=data.dtype,crs="EPSG:4326",transform=from_bounds(*bounds,width,height),compress="deflate") as dst:
+        dst.write(data); dst.set_band_description(1,"red"); dst.set_band_description(2,"green"); dst.set_band_description(3,"blue"); dst.update_tags(source="Esri World Imagery export",target=target,requested_zoom=str(selected),requested_bounds=json.dumps(bounds),native_resolution_note="Provider mosaic native GSD varies by location; requested zoom is not a native-GSD guarantee.")
+    meta.write_text(json.dumps({"source":"Esri World Imagery export","provider_url":settings.provider_url,"target":target,"latitude":latitude,"longitude":longitude,"requested_zoom":selected,"width":width,"height":height,"bounds":bounds,"crs":"EPSG:4326","transform":"affine derived from provider-requested bbox","tile_based":False,"note":"Server-rendered export; no client interpolation or tile stitching."},indent=2),encoding="utf-8")
+    return tif.resolve(),meta.resolve()

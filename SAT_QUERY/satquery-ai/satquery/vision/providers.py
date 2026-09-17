@@ -36,9 +36,12 @@ class Segmenter(ABC):
 class GroundingDinoDetector(Detector):
     """Optional Transformers Grounding DINO adapter."""
 
-    def __init__(self, model_id: str = "IDEA-Research/grounding-dino-tiny", *, device: str = "cpu") -> None:
+    def __init__(self, model_id: str = "IDEA-Research/grounding-dino-tiny", *, device: str = "cpu", threshold: float = 0.25) -> None:
         self.model_id = model_id
         self.device = device
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError("Grounding DINO threshold must be in [0, 1].")
+        self.threshold = threshold
         self._processor = None
         self._model = None
 
@@ -61,17 +64,20 @@ class GroundingDinoDetector(Detector):
         with torch.no_grad():
             outputs = self._model(**inputs)
         result = self._processor.post_process_grounded_object_detection(
-            outputs, input_ids=inputs.get("input_ids"), threshold=0.25, text_threshold=0.25, target_sizes=[image.size[::-1]], text_labels=[list(labels)]
+            outputs, input_ids=inputs.get("input_ids"), threshold=self.threshold, text_threshold=self.threshold, target_sizes=[image.size[::-1]], text_labels=[list(labels)]
         )[0]
         detections = []
         width, height = image.size
         for box, score, label in zip(result["boxes"], result["scores"], result.get("text_labels", result.get("labels", []))):
             values = [float(value) for value in box.tolist()]
+            if not all(np.isfinite(values)):
+                continue
             x0, x1 = sorted((max(0.0, min(width, values[0])), max(0.0, min(width, values[2]))))
             y0, y1 = sorted((max(0.0, min(height, values[1])), max(0.0, min(height, values[3]))))
             if x1 <= x0 or y1 <= y0:
                 continue
-            detections.append(Detection(str(label), float(score), (x0, y0, x1, y1), "GroundingDINO", self.model_id))
+            detections.append(Detection(str(label), float(score), (x0, y0, x1, y1), "GroundingDINO", self.model_id,
+                                        metadata={"raw_box": values, "clamped": values != [x0, y0, x1, y1], "threshold": self.threshold}))
         return detections
 
 

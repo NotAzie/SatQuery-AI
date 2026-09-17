@@ -23,6 +23,22 @@ artifacts/logs/
 artifacts/predictions/
 artifacts/temporary/
 artifacts/outputs/
+satquery-ai/tests/real_eo/data/raw/
+satquery-ai/tests/real_eo/data/processed/
+satquery-ai/tests/real_eo/results/report.json
+satquery-ai/tests/real_eo/results/report.md
+satquery-ai/tests/real_eo/results/evidence/
+satquery-ai/tests/real_eo/images/
+satquery-ai/tests/real_eo/crops/
+satquery-ai/tests/real_eo/tiles/
+satquery-ai/tests/real_eo/outputs/
+satquery-ai/tests/real_eo/reports/
+satquery-ai/tests/real_eo_zoom/images/
+satquery-ai/tests/real_eo_zoom/crops/
+satquery-ai/tests/real_eo_zoom/tiles/
+satquery-ai/tests/real_eo_zoom/outputs/
+satquery-ai/tests/real_eo_zoom/reports/
+satquery-ai/tests/real_eo_zoom/report.json
 experiments/outputs/
 
 # OS/editor files

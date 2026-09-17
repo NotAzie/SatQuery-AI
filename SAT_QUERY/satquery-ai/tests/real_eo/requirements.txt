@@ -1,0 +1,5 @@
+# Explicit dependencies for this opt-in real EO harness only.
+-r ../../requirements-eo.txt
+planetary-computer>=1.0
+transformers>=4.48
+torch>=2.1
