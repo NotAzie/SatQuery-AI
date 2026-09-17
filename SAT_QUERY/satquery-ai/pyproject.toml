@@ -52,4 +52,5 @@ pythonpath = [".", "tests"]
 addopts = "-q --tb=short"
 markers = [
   "real_acceptance: loads the configured Hugging Face models and runs real-image smoke checks",
+  "real_stage2: downloads and runs Grounding DINO/SAM2 checkpoints against a real EO image",
 ]

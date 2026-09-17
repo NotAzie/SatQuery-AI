@@ -22,6 +22,7 @@ dist/
 artifacts/logs/
 artifacts/predictions/
 artifacts/temporary/
+artifacts/outputs/
 experiments/outputs/
 
 # OS/editor files

@@ -20,8 +20,8 @@ This inventory records open-source projects considered for Phase 0. No new depen
 | [OpenAI CLIP model card](https://huggingface.co/openai/clip-vit-large-patch14) | https://huggingface.co/openai/clip-vit-large-patch14 | Zero-shot image/text similarity | Model-card terms and deployment cautions apply | Integrated as baseline | Current Phase 0/2 baseline |
 | [Salesforce BLIP caption model](https://huggingface.co/Salesforce/blip-image-captioning-large) | https://huggingface.co/Salesforce/blip-image-captioning-large | Image captioning | BSD-3-Clause | Integrated as baseline | Current Phase 0/2 baseline |
 | [Salesforce BLIP VQA model](https://huggingface.co/Salesforce/blip-vqa-base) | https://huggingface.co/Salesforce/blip-vqa-base | Visual question answering | BSD-3-Clause | Integrated as baseline | Current Phase 0/2 baseline |
-| [Grounding DINO](https://github.com/IDEA-Research/GroundingDINO) | https://github.com/IDEA-Research/GroundingDINO | Open-vocabulary object detection | Apache-2.0 | Evaluated; lazy adapter added, no checkpoint configured | Stage 2 detection |
-| [SAM 2](https://github.com/facebookresearch/sam2) | https://github.com/facebookresearch/sam2 | Promptable image/video segmentation | Apache-2.0 | Evaluated; lazy adapter added, no checkpoint configured | Stage 2 segmentation |
+| [Grounding DINO](https://github.com/IDEA-Research/GroundingDINO) | https://github.com/IDEA-Research/GroundingDINO | Open-vocabulary object detection | Apache-2.0 | Integrated optionally; real CPU run completed with `IDEA-Research/grounding-dino-tiny` | Stage 2 detection |
+| [SAM 2](https://github.com/facebookresearch/sam2) | https://github.com/facebookresearch/sam2 | Promptable image/video segmentation | Apache-2.0 | Integrated optionally; real CPU run completed with `facebook/sam2.1-hiera-tiny` | Stage 2 segmentation |
 
 ## Selection notes
 

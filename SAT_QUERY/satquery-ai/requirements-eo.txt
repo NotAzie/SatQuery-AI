@@ -4,3 +4,5 @@ pyproj>=3.6
 shapely>=2.0
 pystac>=1.10
 pystac-client>=0.8
+# Required only for the optional SAM2 Transformers adapter.
+torchvision

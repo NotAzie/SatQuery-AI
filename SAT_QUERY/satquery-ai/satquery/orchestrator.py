@@ -47,6 +47,7 @@ from .schemas import (
 )
 from .router import QueryRouter
 from .tools import INTENT_TO_TOOL, ResultCache, Tool, ToolContext, build_tools
+from .vision.providers import GroundingDinoDetector, Sam2Segmenter
 
 logger = logging.getLogger("satquery.orchestrator")
 
@@ -113,6 +114,8 @@ class SatQueryEngine:
         self.cache = ResultCache(self.settings.cache_size)
         self._practical = PracticalVisionFactory(self.registry, self.settings)
         self._rsvlm: Optional[RSVLMVision] = None
+        self._detector: Optional[GroundingDinoDetector] = None
+        self._segmenter: Optional[Sam2Segmenter] = None
 
     # -- Vision assembly ---------------------------------------------------
 
@@ -254,6 +257,8 @@ class SatQueryEngine:
             Intent.RASTER_STATISTICS,
             Intent.SPECTRAL_INDEX,
             Intent.VISUAL_MEASUREMENT,
+            Intent.OBJECT_DETECTION,
+            Intent.SEGMENTATION,
         }
         vision = VisionSuite(None, None, None, None) if scientific else self.vision_suite()
         trace.append(
@@ -381,6 +386,21 @@ class SatQueryEngine:
             warnings=context.warnings,
             invoke=context.invoke,
         )
+        if tool_name is ToolName.DETECT_OBJECTS and "provider" not in scoped.arguments:
+            if self.settings.detector_model:
+                if self._detector is None:
+                    self._detector = GroundingDinoDetector(self.settings.detector_model, device=self.registry.resolve_device())
+                scoped.arguments["provider"] = self._detector
+        if tool_name is ToolName.SEGMENT_REGION and "provider" not in scoped.arguments:
+            if self.settings.segmenter_model:
+                if self._segmenter is None:
+                    self._segmenter = Sam2Segmenter(self.settings.segmenter_model, device=self.registry.resolve_device())
+                scoped.arguments["provider"] = self._segmenter
+            if tool_name is ToolName.SEGMENT_REGION and "detector" not in scoped.arguments:
+                if self.settings.detector_model:
+                    if self._detector is None:
+                        self._detector = GroundingDinoDetector(self.settings.detector_model, device=self.registry.resolve_device())
+                    scoped.arguments["detector"] = self._detector
 
         try:
             tool.validate(scoped)
@@ -479,7 +499,8 @@ class SatQueryEngine:
                     )
                 )
                 continue
-            if tool_name in {ToolName.DETECT_OBJECTS, ToolName.SEGMENT_REGION}:
+            if tool_name is ToolName.DETECT_OBJECTS:
+                available = bool(self.settings.detector_model)
                 infos.append(
                     CapabilityInfo(
                         tool=tool_name,
@@ -487,8 +508,22 @@ class SatQueryEngine:
                         description=description,
                         requires_images=required,
                         backend_preference=[BackendKind.PRACTICAL],
-                        available=False,
-                        unavailable_reason="No detector/segmenter provider is configured; configure an optional Grounding DINO or SAM2 adapter.",
+                        available=available,
+                        unavailable_reason=None if available else "SATQUERY_DETECTOR_MODEL is not configured.",
+                    )
+                )
+                continue
+            if tool_name is ToolName.SEGMENT_REGION:
+                available = bool(self.settings.segmenter_model)
+                infos.append(
+                    CapabilityInfo(
+                        tool=tool_name,
+                        intent=intent,
+                        description=description,
+                        requires_images=required,
+                        backend_preference=[BackendKind.PRACTICAL],
+                        available=available,
+                        unavailable_reason=None if available else "SATQUERY_SEGMENTER_MODEL is not configured.",
                     )
                 )
                 continue

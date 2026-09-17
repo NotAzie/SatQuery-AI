@@ -168,6 +168,13 @@ class Settings:
     caption_max_new_tokens: int = 48
     vqa_max_new_tokens: int = 24
 
+    # -- Optional Stage 2 visual providers ---------------------------------
+    detector_model: Optional[str] = None
+    segmenter_model: Optional[str] = None
+    visual_tile_size: int = 1024
+    visual_tile_overlap: float = 0.2
+    visual_confidence_threshold: float = 0.25
+
     # -- Strong remote-sensing VLM backend (optional) -----------------------
     rsvlm_enabled: bool = False
     rsvlm_path: Optional[str] = None
@@ -326,6 +333,11 @@ class Settings:
             hf_local_files_only=_env_bool("SATQUERY_HF_LOCAL_ONLY", False),
             caption_max_new_tokens=_env_int("SATQUERY_CAPTION_MAX_TOKENS", 48, minimum=8),
             vqa_max_new_tokens=_env_int("SATQUERY_VQA_MAX_TOKENS", 24, minimum=2),
+            detector_model=_env("SATQUERY_DETECTOR_MODEL"),
+            segmenter_model=_env("SATQUERY_SEGMENTER_MODEL"),
+            visual_tile_size=_env_int("SATQUERY_VISUAL_TILE_SIZE", 1024, minimum=64),
+            visual_tile_overlap=_env_float("SATQUERY_VISUAL_TILE_OVERLAP", 0.2),
+            visual_confidence_threshold=_env_float("SATQUERY_VISUAL_CONFIDENCE", 0.25),
             rsvlm_enabled=rsvlm_enabled,
             rsvlm_path=rsvlm_path,
             rsvlm_kind=rsvlm_kind,
@@ -363,6 +375,16 @@ class Settings:
         return settings
 
     def validate(self) -> None:
+        if not 0.0 <= self.visual_tile_overlap < 1.0:
+            raise ConfigurationError(
+                "SATQUERY_VISUAL_TILE_OVERLAP must fall in [0, 1).",
+                remediation=["Use 0.2 for 20% tile overlap."],
+            )
+        if not 0.0 <= self.visual_confidence_threshold <= 1.0:
+            raise ConfigurationError(
+                "SATQUERY_VISUAL_CONFIDENCE must fall in [0, 1].",
+                remediation=["Use a confidence threshold such as 0.25."],
+            )
         if not 0.0 < self.grounding_stride_ratio <= 1.0:
             raise ConfigurationError(
                 "SATQUERY_GROUNDING_STRIDE_RATIO must fall in (0, 1].",

@@ -64,8 +64,14 @@ class GroundingDinoDetector(Detector):
             outputs, input_ids=inputs.get("input_ids"), threshold=0.25, text_threshold=0.25, target_sizes=[image.size[::-1]], text_labels=[list(labels)]
         )[0]
         detections = []
+        width, height = image.size
         for box, score, label in zip(result["boxes"], result["scores"], result.get("text_labels", result.get("labels", []))):
-            detections.append(Detection(str(label), float(score), tuple(float(value) for value in box.tolist()), "GroundingDINO", self.model_id))
+            values = [float(value) for value in box.tolist()]
+            x0, x1 = sorted((max(0.0, min(width, values[0])), max(0.0, min(width, values[2]))))
+            y0, y1 = sorted((max(0.0, min(height, values[1])), max(0.0, min(height, values[3]))))
+            if x1 <= x0 or y1 <= y0:
+                continue
+            detections.append(Detection(str(label), float(score), (x0, y0, x1, y1), "GroundingDINO", self.model_id))
         return detections
 
 
@@ -93,12 +99,14 @@ class Sam2Segmenter(Segmenter):
             raise ValueError("SAM2 segmentation requires box prompts in this adapter.")
         self._load()
         import torch
-        pixel_boxes = [[[list(box) for box in boxes]]]
+        pixel_boxes = [[list(box) for box in boxes]]
         inputs = self._processor(images=image, input_boxes=pixel_boxes, return_tensors="pt").to(self.device)
         with torch.no_grad():
             outputs = self._model(**inputs, multimask_output=False)
         masks = self._processor.post_process_masks(outputs.pred_masks, inputs["original_sizes"])[0]
         results = []
         for index, mask in enumerate(masks):
-            results.append(Segmentation("prompted-region", float(outputs.iou_scores[0, index, 0].sigmoid().item()), mask[0].bool().cpu().numpy(), "SAM2", self.model_id))
+            mask_array = mask[0] if mask.ndim == 3 else mask
+            score = outputs.iou_scores[0, index, 0]
+            results.append(Segmentation("prompted-region", float(score.sigmoid().item()), mask_array.bool().cpu().numpy(), "SAM2", self.model_id))
         return results

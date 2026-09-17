@@ -50,13 +50,21 @@ class SegmentRegionTool(Tool):
         boxes = context.arguments.get("boxes")
         if not isinstance(provider, Segmenter):
             raise RuntimeError("No segmenter is configured. Configure a SAM2 or EO-trained Segmenter provider.")
+        detector = context.arguments.get("detector")
+        detected = []
+        if not boxes and isinstance(detector, Detector):
+            target = context.target or "object"
+            detected = detector.detect(context.primary.pil, [target])
+            boxes = [item.box for item in detected[:3]]
+        if not boxes:
+            raise RuntimeError("Segmentation requires boxes or a configured detector to generate box prompts.")
         segmentations = provider.segment(context.primary.pil, boxes)
         return self.result(
             summary=f"Segmenter returned {len(segmentations)} machine-generated masks.",
             started=started,
             backend=BackendKind.PRACTICAL,
             model=provider.model_id,
-            data={"segmentations": [measure_mask(item) for item in segmentations], "mask_count": len(segmentations)},
+            data={"segmentations": [measure_mask(item) for item in segmentations], "mask_count": len(segmentations), "source_detections": [item.__dict__ for item in detected]},
             confidence=max((item.confidence for item in segmentations), default=0.0),
         )
 
