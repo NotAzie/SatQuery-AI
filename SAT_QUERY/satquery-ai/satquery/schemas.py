@@ -38,6 +38,7 @@ class Intent(str, Enum):
     OBJECT_DETECTION = "OBJECT_DETECTION"
     SEGMENTATION = "SEGMENTATION"
     VISUAL_MEASUREMENT = "VISUAL_MEASUREMENT"
+    IMAGERY_DISCOVERY = "IMAGERY_DISCOVERY"
 
 
 class ToolName(str, Enum):
@@ -54,6 +55,7 @@ class ToolName(str, Enum):
     DETECT_OBJECTS = "detect_objects"
     SEGMENT_REGION = "segment_region"
     MEASURE = "measure_visual_evidence"
+    DISCOVER_IMAGERY = "discover_imagery"
 
 
 class BackendKind(str, Enum):

@@ -67,3 +67,7 @@ The same configured providers were also exercised through `SatQueryEngine`:
 ## Measurement limitation
 
 The input is a fetched RGB JPEG, not a georeferenced GeoTIFF/COG. Pixel counts, pixel boxes, image fractions, and confidence are available. Physical area, hectares, km2, and geographic footprints are unavailable and were not invented. Geo-referenced measurement is covered separately by deterministic synthetic GeoTIFF tests.
+
+## Detection quality limitation
+
+This acceptance run proves real model-backed execution, not production EO accuracy. Grounding DINO produced broad regions on the satellite scene, and SAM2 propagated broad prompts into large masks. Building coverage was incomplete, vehicle evidence was sparse or absent, and road/water outputs were broad. These generic checkpoints require EO-specific validation or fine-tuning before object-level interpretation is considered reliable.

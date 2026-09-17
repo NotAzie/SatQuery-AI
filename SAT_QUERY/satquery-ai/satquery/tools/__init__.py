@@ -13,6 +13,7 @@ from .scene import SceneClassificationTool
 from .vqa import VQATool
 from .eo import EOInspectionTool, RasterStatisticsTool, SpectralIndexTool
 from .vision import DetectObjectsTool, MeasureVisualEvidenceTool, SegmentRegionTool
+from .discovery import DiscoverImageryTool
 
 
 def build_tools() -> Dict[ToolName, Tool]:
@@ -31,6 +32,7 @@ def build_tools() -> Dict[ToolName, Tool]:
         DetectObjectsTool(),
         SegmentRegionTool(),
         MeasureVisualEvidenceTool(),
+        DiscoverImageryTool(),
     )
     return {tool.name: tool for tool in tools}
 
@@ -51,6 +53,7 @@ INTENT_TO_TOOL: Dict[Intent, ToolName] = {
     Intent.OBJECT_DETECTION: ToolName.DETECT_OBJECTS,
     Intent.SEGMENTATION: ToolName.SEGMENT_REGION,
     Intent.VISUAL_MEASUREMENT: ToolName.MEASURE,
+    Intent.IMAGERY_DISCOVERY: ToolName.DISCOVER_IMAGERY,
 }
 
 __all__ = [
@@ -70,6 +73,7 @@ __all__ = [
     "DetectObjectsTool",
     "SegmentRegionTool",
     "MeasureVisualEvidenceTool",
+    "DiscoverImageryTool",
     "build_tools",
     "INTENT_TO_TOOL",
 ]

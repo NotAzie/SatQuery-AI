@@ -40,4 +40,8 @@ Ordinary JPEG/PNG inputs are explicit non-georeferenced RGB fallbacks. They can 
 
 The existing router recognizes EO inspection, raster statistics, and spectral-index queries. The existing orchestrator routes these requests before model backend construction, so deterministic scientific tools do not require BLIP/CLIP warmup. Results use the existing `ToolResult`, trace, error, and capability schemas.
 
+## Next increment: discovery integration
+
+`discover_imagery` now exposes the existing STAC provider through the same tool registry. It is metadata-only: candidates are `DISCOVERED`, and the tool explicitly reports that downloading and analysis have not occurred. Authentication/provider failures remain visible rather than falling back to old local imagery.
+
 The optional dependency set is in `satquery-ai/requirements-eo.txt` and `pyproject.toml` as `satquery-ai[eo]`: Rasterio, PyProj, Shapely, PySTAC, and PySTAC-Client. Core RGB installation remains unchanged.

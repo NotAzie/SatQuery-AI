@@ -74,6 +74,7 @@ INDEX_TERMS = ("ndvi", "ndwi", "mndwi", "ndbi", "nbr", "evi", "spectral index", 
 DETECT_TERMS = ("detect", "find all", "identify objects", "object detection")
 SEGMENT_TERMS = ("segment", "segmentation", "mask", "outline")
 MEASURE_TERMS = ("calculate area", "measure area", "how large", "density", "count detected")
+DISCOVERY_TERMS = ("find imagery", "find satellite imagery", "search imagery", "latest imagery", "imagery near", "imagery between")
 
 PRESENCE_STARTERS = (
     "is there", "are there", "is it", "are any", "any ", "does this", "do you see",
@@ -242,6 +243,7 @@ class QueryRouter:
         detect_hits = _contains(text, DETECT_TERMS)
         segment_hits = _contains(text, SEGMENT_TERMS)
         measure_hits = _contains(text, MEASURE_TERMS)
+        discovery_hits = _contains(text, DISCOVERY_TERMS)
 
         # Two images plus comparison language is unambiguous.
         if change_hits and image_count >= 2:
@@ -272,6 +274,8 @@ class QueryRouter:
             return Intent.OBJECT_DETECTION, 0.9, f"The query requests machine-generated detection ({detect_hits[0]})."
         if measure_hits:
             return Intent.VISUAL_MEASUREMENT, 0.85, f"The query requests deterministic measurement ({measure_hits[0]})."
+        if discovery_hits:
+            return Intent.IMAGERY_DISCOVERY, 0.9, f"The query requests imagery discovery ({discovery_hits[0]})."
         if inspect_hits:
             return Intent.EO_INSPECTION, 0.9, f"The query requests raster metadata ({inspect_hits[0]})."
         if stats_hits:

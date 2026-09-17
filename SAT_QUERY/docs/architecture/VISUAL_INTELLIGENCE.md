@@ -25,3 +25,20 @@ Stage 2 adds a model-agnostic evidence layer above the Stage 1 EO data/raster en
 ## Open-source decisions
 
 Grounding DINO is the selected open-vocabulary detector because it has an Apache-2.0 license, a Transformers integration, CPU support, and a direct text-to-box API. It is not assumed to be EO-accurate without domain validation. SAM2 is the selected promptable segmenter because it supports box/point prompts and Apache-2.0 checkpoints, but its runtime requirements make it optional and cloud/GPU-oriented.
+
+## Current quality status
+
+The real pipeline is technically functional but is not production-quality EO object interpretation. The real-EO acceptance runs demonstrated model loading, real boxes, real masks, geospatial metadata handling, measurements, and evidence rendering. They also showed incomplete building coverage, sparse or absent vehicle evidence, broad road and water regions, and SAM2 masks that can cover most of the scene. Grounding DINO and SAM2 are generic vision models rather than EO-specialized models, and CPU inference is slow.
+
+These limitations are known technical debt, not solved accuracy claims.
+
+## Future Detection Improvements
+
+- EO-specific pretrained detectors and segmentation models
+- Fine-tuned remote-sensing checkpoints
+- Higher-quality licensed EO datasets and quantitative benchmarks
+- Object-scale-aware inference and genuinely higher-resolution imagery
+- Class-specific prompts and detector thresholds
+- Small-object and vehicle-detection improvements
+- More selective SAM2 prompts and mask validation
+- Precision/recall, mAP, IoU, and false-positive evaluation on EO ground truth

@@ -100,6 +100,7 @@ CAPABILITY_DOCS: Dict[ToolName, Tuple[Intent, str, int]] = {
     ToolName.DETECT_OBJECTS: (Intent.OBJECT_DETECTION, "Runs a configured object detector and returns evidence-backed boxes.", 1),
     ToolName.SEGMENT_REGION: (Intent.SEGMENTATION, "Runs a configured segmenter and returns measurable masks.", 1),
     ToolName.MEASURE: (Intent.VISUAL_MEASUREMENT, "Measures supplied detections or masks deterministically.", 1),
+    ToolName.DISCOVER_IMAGERY: (Intent.IMAGERY_DISCOVERY, "Searches configured STAC metadata without downloading imagery.", 0),
 }
 
 
@@ -212,7 +213,8 @@ class SatQueryEngine:
         images = self.ingest(
             uploads=uploads, image_paths=image_paths, modality_hint=modality_hint
         )
-        if not images:
+        discovery_request = any(term in query.lower() for term in ("find imagery", "find satellite imagery", "search imagery", "latest imagery", "imagery near", "imagery between"))
+        if not images and not discovery_request:
             raise QueryError(
                 "No image was supplied, and SatQuery answers questions about imagery rather "
                 "than from general knowledge.",
@@ -259,6 +261,7 @@ class SatQueryEngine:
             Intent.VISUAL_MEASUREMENT,
             Intent.OBJECT_DETECTION,
             Intent.SEGMENTATION,
+            Intent.IMAGERY_DISCOVERY,
         }
         vision = VisionSuite(None, None, None, None) if scientific else self.vision_suite()
         trace.append(
