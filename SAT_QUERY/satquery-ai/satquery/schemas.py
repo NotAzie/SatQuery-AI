@@ -35,6 +35,9 @@ class Intent(str, Enum):
     EO_INSPECTION = "EO_INSPECTION"
     RASTER_STATISTICS = "RASTER_STATISTICS"
     SPECTRAL_INDEX = "SPECTRAL_INDEX"
+    OBJECT_DETECTION = "OBJECT_DETECTION"
+    SEGMENTATION = "SEGMENTATION"
+    VISUAL_MEASUREMENT = "VISUAL_MEASUREMENT"
 
 
 class ToolName(str, Enum):
@@ -48,6 +51,9 @@ class ToolName(str, Enum):
     EO_INSPECTION = "inspect_eo_data"
     RASTER_STATISTICS = "raster_statistics"
     SPECTRAL_INDEX = "calculate_spectral_index"
+    DETECT_OBJECTS = "detect_objects"
+    SEGMENT_REGION = "segment_region"
+    MEASURE = "measure_visual_evidence"
 
 
 class BackendKind(str, Enum):

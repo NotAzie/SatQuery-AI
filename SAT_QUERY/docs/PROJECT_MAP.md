@@ -8,6 +8,7 @@
 | `benchmarks/` | Formal evaluation | Baseline manifests, queries, runners, metrics, preserved results | Ad hoc experiments and caches | When benchmarking |
 | `configs/` | Reproducible configuration | Baseline and future experiment configs | Secrets and generated state | When configuration matters |
 | `satquery-ai/satquery/eo/` | EO foundation | Metadata, STAC discovery, raster math, spectral indices | VLM prompting and UI code | Yes for EO tasks |
+| `satquery-ai/satquery/vision/` | Visual intelligence | Detection/segmentation contracts, tiling, merging, measurement | Model weights and generated outputs | Yes for Stage 2 tasks |
 | `artifacts/` | Generated outputs | Phase reports, predictions, logs, temporary outputs | Source code and benchmark definitions | Usually no |
 | `archive/` | Preserved historical material | Legacy modules and superseded audits | Active implementation | Usually no |
 | `experiments/` | Experimental work | Future prototypes, notebooks, model trials, experiment outputs | Product code and formal baseline results | Only for experiment tasks |

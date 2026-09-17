@@ -96,6 +96,9 @@ CAPABILITY_DOCS: Dict[ToolName, Tuple[Intent, str, int]] = {
     ToolName.EO_INSPECTION: (Intent.EO_INSPECTION, "Inspects EO raster metadata without inventing unavailable geospatial fields.", 1),
     ToolName.RASTER_STATISTICS: (Intent.RASTER_STATISTICS, "Computes valid-pixel statistics for an EO raster.", 1),
     ToolName.SPECTRAL_INDEX: (Intent.SPECTRAL_INDEX, "Calculates a registered spectral index from resolved bands.", 1),
+    ToolName.DETECT_OBJECTS: (Intent.OBJECT_DETECTION, "Runs a configured object detector and returns evidence-backed boxes.", 1),
+    ToolName.SEGMENT_REGION: (Intent.SEGMENTATION, "Runs a configured segmenter and returns measurable masks.", 1),
+    ToolName.MEASURE: (Intent.VISUAL_MEASUREMENT, "Measures supplied detections or masks deterministically.", 1),
 }
 
 
@@ -250,6 +253,7 @@ class SatQueryEngine:
             Intent.EO_INSPECTION,
             Intent.RASTER_STATISTICS,
             Intent.SPECTRAL_INDEX,
+            Intent.VISUAL_MEASUREMENT,
         }
         vision = VisionSuite(None, None, None, None) if scientific else self.vision_suite()
         trace.append(
@@ -463,7 +467,7 @@ class SatQueryEngine:
 
         infos: List[CapabilityInfo] = []
         for tool_name, (intent, description, required) in CAPABILITY_DOCS.items():
-            if tool_name in {ToolName.EO_INSPECTION, ToolName.RASTER_STATISTICS, ToolName.SPECTRAL_INDEX}:
+            if tool_name in {ToolName.EO_INSPECTION, ToolName.RASTER_STATISTICS, ToolName.SPECTRAL_INDEX, ToolName.MEASURE}:
                 infos.append(
                     CapabilityInfo(
                         tool=tool_name,
@@ -472,6 +476,19 @@ class SatQueryEngine:
                         requires_images=required,
                         backend_preference=[BackendKind.NONE],
                         available=True,
+                    )
+                )
+                continue
+            if tool_name in {ToolName.DETECT_OBJECTS, ToolName.SEGMENT_REGION}:
+                infos.append(
+                    CapabilityInfo(
+                        tool=tool_name,
+                        intent=intent,
+                        description=description,
+                        requires_images=required,
+                        backend_preference=[BackendKind.PRACTICAL],
+                        available=False,
+                        unavailable_reason="No detector/segmenter provider is configured; configure an optional Grounding DINO or SAM2 adapter.",
                     )
                 )
                 continue

@@ -71,6 +71,9 @@ MODALITY_TERMS = (
 EO_INSPECT_TERMS = ("inspect raster", "inspect eo", "metadata", "crs", "georeference", "bands")
 RASTER_STATS_TERMS = ("raster statistics", "pixel statistics", "histogram", "valid pixels", "statistics")
 INDEX_TERMS = ("ndvi", "ndwi", "mndwi", "ndbi", "nbr", "evi", "spectral index", "calculate index")
+DETECT_TERMS = ("detect", "find all", "identify objects", "object detection")
+SEGMENT_TERMS = ("segment", "segmentation", "mask", "outline")
+MEASURE_TERMS = ("calculate area", "measure area", "how large", "density", "count detected")
 
 PRESENCE_STARTERS = (
     "is there", "are there", "is it", "are any", "any ", "does this", "do you see",
@@ -236,6 +239,9 @@ class QueryRouter:
         index_hits = _contains(text, INDEX_TERMS)
         inspect_hits = _contains(text, EO_INSPECT_TERMS)
         stats_hits = _contains(text, RASTER_STATS_TERMS)
+        detect_hits = _contains(text, DETECT_TERMS)
+        segment_hits = _contains(text, SEGMENT_TERMS)
+        measure_hits = _contains(text, MEASURE_TERMS)
 
         # Two images plus comparison language is unambiguous.
         if change_hits and image_count >= 2:
@@ -260,6 +266,12 @@ class QueryRouter:
 
         if index_hits:
             return Intent.SPECTRAL_INDEX, 0.95, f"The query requests a registered spectral index ({index_hits[0]})."
+        if segment_hits:
+            return Intent.SEGMENTATION, 0.9, f"The query requests a mask or segmentation ({segment_hits[0]})."
+        if detect_hits:
+            return Intent.OBJECT_DETECTION, 0.9, f"The query requests machine-generated detection ({detect_hits[0]})."
+        if measure_hits:
+            return Intent.VISUAL_MEASUREMENT, 0.85, f"The query requests deterministic measurement ({measure_hits[0]})."
         if inspect_hits:
             return Intent.EO_INSPECTION, 0.9, f"The query requests raster metadata ({inspect_hits[0]})."
         if stats_hits:
@@ -430,4 +442,6 @@ class QueryRouter:
             for name in ("ndvi", "ndwi", "mndwi", "ndbi", "nbr", "evi"):
                 if name in query.lower():
                     return {"index": name}
+                if tool is ToolName.DETECT_OBJECTS:
+                    return {"labels": [resolved]} if resolved else {}
         return {}

@@ -262,7 +262,11 @@ def test_warmup_and_health_share_the_same_service_engine(settings, monkeypatch):
     assert before["ready"] is False
     assert warmed["ready"] is True
     assert after["ready"] is True
-    assert all(item["available"] for item in capabilities)
+    available = {item["tool"] for item in capabilities if item["available"]}
+    assert "caption" in available
+    assert "inspect_eo_data" in available
+    assert "detect_objects" not in available
+    assert "segment_region" not in available
 
 
 def test_capabilities_endpoint(client):

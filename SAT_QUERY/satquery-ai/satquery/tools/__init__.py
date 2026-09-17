@@ -12,6 +12,7 @@ from .modality import ModalityTool
 from .scene import SceneClassificationTool
 from .vqa import VQATool
 from .eo import EOInspectionTool, RasterStatisticsTool, SpectralIndexTool
+from .vision import DetectObjectsTool, MeasureVisualEvidenceTool, SegmentRegionTool
 
 
 def build_tools() -> Dict[ToolName, Tool]:
@@ -27,6 +28,9 @@ def build_tools() -> Dict[ToolName, Tool]:
         EOInspectionTool(),
         RasterStatisticsTool(),
         SpectralIndexTool(),
+        DetectObjectsTool(),
+        SegmentRegionTool(),
+        MeasureVisualEvidenceTool(),
     )
     return {tool.name: tool for tool in tools}
 
@@ -44,6 +48,9 @@ INTENT_TO_TOOL: Dict[Intent, ToolName] = {
     Intent.EO_INSPECTION: ToolName.EO_INSPECTION,
     Intent.RASTER_STATISTICS: ToolName.RASTER_STATISTICS,
     Intent.SPECTRAL_INDEX: ToolName.SPECTRAL_INDEX,
+    Intent.OBJECT_DETECTION: ToolName.DETECT_OBJECTS,
+    Intent.SEGMENTATION: ToolName.SEGMENT_REGION,
+    Intent.VISUAL_MEASUREMENT: ToolName.MEASURE,
 }
 
 __all__ = [
@@ -60,6 +67,9 @@ __all__ = [
     "EOInspectionTool",
     "RasterStatisticsTool",
     "SpectralIndexTool",
+    "DetectObjectsTool",
+    "SegmentRegionTool",
+    "MeasureVisualEvidenceTool",
     "build_tools",
     "INTENT_TO_TOOL",
 ]
