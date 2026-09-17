@@ -39,6 +39,10 @@ satquery-ai/tests/real_eo_zoom/tiles/
 satquery-ai/tests/real_eo_zoom/outputs/
 satquery-ai/tests/real_eo_zoom/reports/
 satquery-ai/tests/real_eo_zoom/report.json
+satquery-ai/tests/real_eo_tiled/tiles/
+satquery-ai/tests/real_eo_tiled/images/
+satquery-ai/tests/real_eo_tiled/outputs/
+satquery-ai/tests/real_eo_tiled/reports/
 experiments/outputs/
 
 # OS/editor files
