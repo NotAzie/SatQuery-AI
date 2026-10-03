@@ -75,6 +75,7 @@ DETECT_TERMS = ("detect", "find all", "identify objects", "object detection")
 SEGMENT_TERMS = ("segment", "segmentation", "mask", "outline")
 MEASURE_TERMS = ("calculate area", "measure area", "how large", "density", "count detected")
 DISCOVERY_TERMS = ("find imagery", "find satellite imagery", "search imagery", "latest imagery", "imagery near", "imagery between")
+WATER_ANALYSIS_TERMS = ("calculate water area", "water area", "water-covered", "water covered", "percentage of water", "water fraction", "analyze water", "analyse water", "water mask", "water bodies larger")
 
 PRESENCE_STARTERS = (
     "is there", "are there", "is it", "are any", "any ", "does this", "do you see",
@@ -244,6 +245,7 @@ class QueryRouter:
         segment_hits = _contains(text, SEGMENT_TERMS)
         measure_hits = _contains(text, MEASURE_TERMS)
         discovery_hits = _contains(text, DISCOVERY_TERMS)
+        water_hits = _contains(text, WATER_ANALYSIS_TERMS)
 
         # Two images plus comparison language is unambiguous.
         if change_hits and image_count >= 2:
@@ -268,6 +270,8 @@ class QueryRouter:
 
         if index_hits:
             return Intent.SPECTRAL_INDEX, 0.95, f"The query requests a registered spectral index ({index_hits[0]})."
+        if water_hits:
+            return Intent.WATER_ANALYSIS, 0.95, f"The query requests spectral water analysis ({water_hits[0]})."
         if segment_hits:
             return Intent.SEGMENTATION, 0.9, f"The query requests a mask or segmentation ({segment_hits[0]})."
         if detect_hits:

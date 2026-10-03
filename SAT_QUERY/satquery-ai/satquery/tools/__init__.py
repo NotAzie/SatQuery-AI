@@ -14,6 +14,7 @@ from .vqa import VQATool
 from .eo import EOInspectionTool, RasterStatisticsTool, SpectralIndexTool
 from .vision import DetectObjectsTool, MeasureVisualEvidenceTool, SegmentRegionTool
 from .discovery import DiscoverImageryTool
+from .water import WaterAnalysisTool
 
 
 def build_tools() -> Dict[ToolName, Tool]:
@@ -33,6 +34,7 @@ def build_tools() -> Dict[ToolName, Tool]:
         SegmentRegionTool(),
         MeasureVisualEvidenceTool(),
         DiscoverImageryTool(),
+        WaterAnalysisTool(),
     )
     return {tool.name: tool for tool in tools}
 
@@ -54,6 +56,7 @@ INTENT_TO_TOOL: Dict[Intent, ToolName] = {
     Intent.SEGMENTATION: ToolName.SEGMENT_REGION,
     Intent.VISUAL_MEASUREMENT: ToolName.MEASURE,
     Intent.IMAGERY_DISCOVERY: ToolName.DISCOVER_IMAGERY,
+    Intent.WATER_ANALYSIS: ToolName.WATER_ANALYSIS,
 }
 
 __all__ = [
@@ -74,6 +77,7 @@ __all__ = [
     "SegmentRegionTool",
     "MeasureVisualEvidenceTool",
     "DiscoverImageryTool",
+    "WaterAnalysisTool",
     "build_tools",
     "INTENT_TO_TOOL",
 ]

@@ -101,6 +101,7 @@ CAPABILITY_DOCS: Dict[ToolName, Tuple[Intent, str, int]] = {
     ToolName.SEGMENT_REGION: (Intent.SEGMENTATION, "Runs a configured segmenter and returns measurable masks.", 1),
     ToolName.MEASURE: (Intent.VISUAL_MEASUREMENT, "Measures supplied detections or masks deterministically.", 1),
     ToolName.DISCOVER_IMAGERY: (Intent.IMAGERY_DISCOVERY, "Searches configured STAC metadata without downloading imagery.", 0),
+    ToolName.WATER_ANALYSIS: (Intent.WATER_ANALYSIS, "Extracts and measures water from multispectral spectral indices.", 1),
 }
 
 
@@ -262,6 +263,7 @@ class SatQueryEngine:
             Intent.OBJECT_DETECTION,
             Intent.SEGMENTATION,
             Intent.IMAGERY_DISCOVERY,
+            Intent.WATER_ANALYSIS,
         }
         vision = VisionSuite(None, None, None, None) if scientific else self.vision_suite()
         trace.append(
@@ -490,7 +492,7 @@ class SatQueryEngine:
 
         infos: List[CapabilityInfo] = []
         for tool_name, (intent, description, required) in CAPABILITY_DOCS.items():
-            if tool_name in {ToolName.EO_INSPECTION, ToolName.RASTER_STATISTICS, ToolName.SPECTRAL_INDEX, ToolName.MEASURE}:
+            if tool_name in {ToolName.EO_INSPECTION, ToolName.RASTER_STATISTICS, ToolName.SPECTRAL_INDEX, ToolName.MEASURE, ToolName.WATER_ANALYSIS}:
                 infos.append(
                     CapabilityInfo(
                         tool=tool_name,
