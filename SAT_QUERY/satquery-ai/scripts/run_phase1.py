@@ -165,7 +165,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         env["SATQUERY_ACCEPTANCE_QUERY_TIMEOUT"] = args.timeout
 
     commands: list[CommandResult] = []
-    base = [sys.executable, "-m", "pytest", "tests/test_phase1_acceptance.py", "-s", "-rA"]
+    acceptance_test = PROJECT_ROOT / "tests" / "test_phase1_acceptance.py"
+    base = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-c",
+        str(PACKAGE_ROOT / "pyproject.toml"),
+        str(acceptance_test),
+        "-s",
+        "-rA",
+    ]
     deterministic_env = env.copy()
     deterministic_env.pop("SATQUERY_RUN_REAL_ACCEPTANCE", None)
     deterministic_env.pop("SATQUERY_PROFILE", None)

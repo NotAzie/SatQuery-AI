@@ -17,6 +17,7 @@ class SatQueryError(Exception):
 
     status_code: int = 500
     code: str = "satquery_error"
+    recoverable: bool = False
 
     def __init__(
         self,
@@ -24,11 +25,14 @@ class SatQueryError(Exception):
         *,
         remediation: Optional[List[str]] = None,
         context: Optional[Dict[str, Any]] = None,
+        recoverable: Optional[bool] = None,
     ) -> None:
         super().__init__(message)
         self.message = message
         self.remediation = remediation or []
         self.context = context or {}
+        if recoverable is not None:
+            self.recoverable = recoverable
 
     def to_payload(self) -> Dict[str, Any]:
         return {
@@ -75,7 +79,21 @@ class DependencyMissingError(ResourceNotConfiguredError):
         )
 
 
-class ModelLoadError(SatQueryError):
+class ValidationError(SatQueryError):
+    """Raised when a platform contract or operation input is invalid."""
+
+    status_code = 422
+    code = "validation_error"
+
+
+class ModelError(SatQueryError):
+    """Base class for model discovery, loading, and inference failures."""
+
+    status_code = 503
+    code = "model_error"
+
+
+class ModelLoadError(ModelError):
     """Raised when a model was found but could not be instantiated."""
 
     status_code = 503
@@ -101,7 +119,13 @@ class QueryError(SatQueryError):
     code = "query_error"
 
 
-class ToolExecutionError(SatQueryError):
+class ExecutionError(SatQueryError):
+    """Raised when workflow execution cannot complete as requested."""
+
+    code = "execution_error"
+
+
+class ToolExecutionError(ExecutionError):
     """Raised when a specialist tool fails mid-run."""
 
     status_code = 500
@@ -118,3 +142,50 @@ class RoutingError(SatQueryError):
 
     status_code = 422
     code = "routing_error"
+
+
+class ConnectorError(SatQueryError):
+    """Base class for connector lifecycle and acquisition failures."""
+
+    status_code = 502
+    code = "connector_error"
+
+
+class AuthenticationError(ConnectorError):
+    status_code = 401
+    code = "authentication_error"
+
+
+class NetworkError(ConnectorError):
+    code = "network_error"
+    recoverable = True
+
+
+class OperationTimeoutError(ConnectorError):
+    status_code = 504
+    code = "timeout_error"
+    recoverable = True
+
+
+class RateLimitError(ConnectorError):
+    status_code = 429
+    code = "rate_limit_error"
+    recoverable = True
+
+
+class ReasoningError(SatQueryError):
+    """Base class for future reasoning-module failures."""
+
+    code = "reasoning_error"
+
+
+class ExtensionError(SatQueryError):
+    """Raised when an extension cannot be discovered or registered."""
+
+    code = "extension_error"
+
+
+class CacheError(SatQueryError):
+    """Raised when a cache backend fails an operation."""
+
+    code = "cache_error"

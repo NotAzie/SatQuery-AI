@@ -208,6 +208,9 @@ class QueryResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     request_id: str
+    platform_mission_id: Optional[str] = None
+    platform_investigation_id: Optional[str] = None
+    platform_execution_id: Optional[str] = None
     timestamp_utc: str = Field(default_factory=utc_now_iso)
     query: str
     answer: str

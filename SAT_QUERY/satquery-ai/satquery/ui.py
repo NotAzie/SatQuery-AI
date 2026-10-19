@@ -14,7 +14,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>SatQuery AI</title>
+<title>SatQuery — Earth Intelligence</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
@@ -192,15 +192,96 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <div class="wrap">
 
   <header>
-    <h1 class="brand">SatQuery<span> AI</span></h1>
+    <h1 class="brand">SatQuery<span> Earth Intelligence</span></h1>
     <p class="tagline">
-      Ask a satellite or aerial image a question in plain language. The router picks a
-      vision capability, runs it against the actual pixels, and shows you which one answered.
+      Investigate Earth through registered sensing capabilities, datasets, and traceable observations.
+      Image analysis is one available capability in the platform.
     </p>
     <div class="statusline" id="statusline">
       <span><span class="dot warn"></span>Checking backends&hellip;</span>
     </div>
   </header>
+
+  <section class="card" style="margin-bottom:20px;">
+    <h2>Earth Intelligence workspace <span class="badge" id="platformState">loading</span></h2>
+    <div class="body">
+      <div class="split">
+        <div>
+          <label for="earthQuestion">Investigation objective</label>
+          <textarea id="earthQuestion" placeholder="What environmental conditions are reported near this location?"></textarea>
+          <div class="field">
+            <label for="earthQuery">Optional structured EarthQuery override</label>
+            <textarea id="earthQuery" placeholder='{"point":[80.15,12.84],"requested_variables":["air_temperature_2m"]}'></textarea>
+          </div>
+          <div class="row">
+            <button class="run" id="startInvestigation" type="button">Create investigation</button>
+            <button class="run" id="refreshPlatform" type="button">Refresh platform view</button>
+          </div>
+        </div>
+        <div>
+          <label>Capability matrix and runtime</label>
+          <pre class="trace" id="platformSummary">Loading registered Earth capabilities&hellip;</pre>
+          <label style="margin-top:12px;">Investigation design, execution, evidence coverage, provenance</label>
+          <pre class="trace" id="platformResult">No platform investigation selected.</pre>
+          <div id="reasoningWorkspace" class="field" style="display:none; margin-top:14px;">
+            <label>Scientific conclusion</label><pre class="trace" id="reasoningConclusion"></pre>
+            <label>Hypothesis lifecycle and rule applicability</label><pre class="trace" id="reasoningHypotheses"></pre>
+            <label>Supporting evidence</label><pre class="trace" id="reasoningSupport"></pre>
+            <label>Contradicting evidence</label><pre class="trace" id="reasoningContradictions"></pre>
+            <label>Evidence reliability and independence</label><pre class="trace" id="reasoningEvidence"></pre>
+            <label>Uncertainty by source</label><pre class="trace" id="reasoningUncertainty"></pre>
+            <label>Alternatives and investigation refinement</label><pre class="trace" id="reasoningGaps"></pre>
+            <label>Reasoning trace and reproducibility</label><pre class="trace" id="reasoningTrace"></pre>
+          </div>
+          <button class="run" id="executeInvestigation" type="button" disabled>Execute observation task</button>
+          <button class="run" id="resumeInvestigation" type="button" disabled>Resume from checkpoints</button>
+          <button class="run" id="cancelInvestigation" type="button" disabled>Request cancellation</button>
+          <div class="field" style="margin-top:14px;">
+            <label for="earthObjectDeclaration">Explicit Earth Object declaration JSON</label>
+            <textarea id="earthObjectDeclaration" placeholder='{"identity_namespace":"source-system","identity_value":"feature-id","object_type":"earth:Feature","declared_by":"reviewer-or-adapter-id","observation_ids":["observation-id"],"evidence_ids":[],"lifecycle":"observed"}'></textarea>
+            <button class="run" id="materializeEarthObject" type="button" disabled>Materialize from investigation evidence</button>
+            <button class="run" id="reevaluateWithEarthObjects" type="button" disabled>Re-evaluate with Earth Objects</button>
+            <label>Canonical Earth Objects</label><pre class="trace" id="earthObjects">No Earth Objects materialized.</pre>
+            <label>Evidence-backed object relationships</label><pre class="trace" id="earthObjectGraph">No object relationships recorded.</pre>
+          </div>
+        </div>
+      </div>
+      <div class="field" style="margin-top:18px;">
+        <label for="missionExplorer">Mission history</label>
+        <select id="missionExplorer"><option value="">No missions loaded</option></select>
+        <label for="investigationExplorer" style="margin-top:10px;">Investigations in selected mission</label>
+        <select id="investigationExplorer"><option value="">No investigation selected</option></select>
+        <label for="investigationCompareSelect" style="margin-top:10px;">Compare investigations</label>
+        <select id="investigationCompareSelect" multiple size="4"></select>
+        <button class="run" id="compareInvestigations" type="button">Compare recorded measurements</button>
+        <pre class="trace" id="investigationComparison">Select at least two investigations to compare explicit canonical measurements.</pre>
+        <label style="margin-top:10px;">Evidence-linked investigation report</label>
+        <pre class="trace" id="investigationReport">No investigation selected.</pre>
+        <label style="margin-top:10px;">Exact-support temporal observation stacks</label>
+        <pre class="trace" id="observationStacks">No compatible multi-time observation stacks are available.</pre>
+        <label style="margin-top:10px;">Temporal sample differences (descriptive only; no trend inference)</label>
+        <pre class="trace" id="temporalDifferences">No exact-support temporal comparisons are available.</pre>
+        <label style="margin-top:10px;">Execution graph</label>
+        <pre class="trace" id="executionGraph">No execution has been recorded.</pre>
+        <label>Durable execution event journal</label>
+        <pre class="trace" id="executionEvents">No execution events have been recorded.</pre>
+        <pre class="trace" id="missionHistory">Select a mission and investigation to inspect stored platform records.</pre>
+      </div>
+      <div class="field" style="margin-top:18px;">
+        <label>Earth Memory search · optional explicit bounds</label>
+        <input id="memoryTerms" type="text" placeholder="Literal terms (optional)" />
+        <input id="memoryVariable" type="text" placeholder="Exact canonical variable, e.g. ndvi" style="margin-top:8px;" />
+        <input id="memoryBbox" type="text" placeholder="min x, min y, max x, max y" style="margin-top:8px;" />
+        <input id="memoryCrs" type="text" value="OGC:CRS84" placeholder="CRS required with bounds" style="margin-top:8px;" />
+        <div class="row" style="margin-top:8px;">
+          <input id="memoryStart" type="text" placeholder="Start (ISO-8601 with timezone)" />
+          <input id="memoryEnd" type="text" placeholder="End (ISO-8601 with timezone)" />
+        </div>
+        <button class="run" id="searchEarthMemory" type="button">Search recorded Earth evidence</button>
+        <pre class="trace" id="earthMemoryResults">No Earth Memory search performed.</pre>
+      </div>
+    </div>
+  </section>
 
   <div class="grid">
 
@@ -304,7 +385,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <script>
 'use strict';
 
-const state = { files: [], response: null, activeImage: 0, objectUrls: [] };
+const state = { files: [], response: null, activeImage: 0, objectUrls: [], investigationId: null, missionId: null };
 
 const EXAMPLES = [
   'Describe this scene in detail',
@@ -332,6 +413,347 @@ function buildExamples() {
     host.appendChild(b);
   });
 }
+
+async function refreshPlatform() {
+  const [runtimeResponse, matrixResponse, missionsResponse, methodsResponse] = await Promise.all([
+    fetch('/api/v1/platform/runtime'),
+    fetch('/api/v1/platform/earth/capabilities'),
+    fetch('/api/v1/platform/missions'),
+    fetch('/api/v1/platform/scientific-methods')
+  ]);
+  const [runtime, matrix, missions, scientificMethods] = await Promise.all([
+    runtimeResponse.json(), matrixResponse.json(), missionsResponse.json(), methodsResponse.json()
+  ]);
+  $('platformState').textContent = runtime.state + ' · ' + runtime.connector_count + ' sensing implementations';
+  $('platformSummary').textContent = JSON.stringify({
+    capability_matrix_revision: matrix.revision,
+    modalities: matrix.modalities,
+    declared_datasets: matrix.entries.filter((entry) => entry.scope === 'dataset').length,
+    scientific_methods: scientificMethods,
+    runtime: runtime,
+    note: 'Declared capability metadata does not guarantee upstream availability.'
+  }, null, 2);
+  const missionSelect = $('missionExplorer');
+  const priorMissionId = state.missionId;
+  missionSelect.replaceChildren(new Option('Select a mission', ''));
+  missions.forEach((mission) => missionSelect.add(new Option(
+    mission.name + ' · ' + mission.status, mission.mission_id
+  )));
+  if (missions.some((mission) => mission.mission_id === priorMissionId)) {
+    missionSelect.value = priorMissionId;
+  } else if (missions.length) {
+    missionSelect.value = missions[missions.length - 1].mission_id;
+    state.missionId = missionSelect.value;
+  }
+  await refreshInvestigationHistory();
+  await refreshEarthObjects();
+}
+
+async function refreshInvestigationHistory() {
+  const investigationSelect = $('investigationExplorer');
+  investigationSelect.replaceChildren(new Option('Select an investigation', ''));
+  if (!state.missionId) {
+    $('missionHistory').textContent = 'No persisted mission history is available.';
+    return;
+  }
+  const response = await fetch('/api/v1/platform/missions/' + encodeURIComponent(state.missionId) + '/investigations');
+  const investigations = await response.json();
+  if (!response.ok) throw new Error(investigations.detail || 'Could not load investigation history.');
+  investigations.forEach((item) => investigationSelect.add(new Option(
+    item.status + ' · ' + item.investigation_id.slice(0, 8), item.investigation_id
+  )));
+  const compareSelect = $('investigationCompareSelect');
+  const priorComparisonIds = new Set(Array.from(compareSelect.selectedOptions, (option) => option.value));
+  compareSelect.replaceChildren();
+  investigations.forEach((item) => {
+    const option = new Option(item.status + ' · ' + item.investigation_id.slice(0, 8), item.investigation_id);
+    option.selected = priorComparisonIds.has(item.investigation_id);
+    compareSelect.add(option);
+  });
+  if (investigations.some((item) => item.investigation_id === state.investigationId)) {
+    investigationSelect.value = state.investigationId;
+  } else if (investigations.length) {
+    investigationSelect.value = investigations[investigations.length - 1].investigation_id;
+    state.investigationId = investigationSelect.value;
+  }
+  await loadInvestigationHistory();
+}
+
+async function loadInvestigationHistory() {
+  const investigationId = $('investigationExplorer').value;
+  if (!investigationId) {
+    $('missionHistory').textContent = 'No investigation is recorded for this mission yet.';
+    $('executionGraph').textContent = 'No execution has been recorded.';
+    return;
+  }
+  state.investigationId = investigationId;
+  const base = '/api/v1/platform/investigations/' + encodeURIComponent(investigationId);
+  const [investigationResponse, observationsResponse, provenanceResponse, reasoningResponse, reproductionResponse, reportResponse, observationStacksResponse, temporalDifferencesResponse] = await Promise.all([
+    fetch(base), fetch(base + '/observations'), fetch(base + '/provenance'),
+    fetch(base + '/reasoning'), fetch(base + '/reproducibility'), fetch(base + '/report'),
+    fetch(base + '/observation-stacks'), fetch(base + '/temporal-differences')
+  ]);
+  const [investigation, observations, provenance, reasoning, reproducibility, report, observationStacks, temporalDifferences] = await Promise.all([
+    investigationResponse.json(), observationsResponse.json(), provenanceResponse.json(),
+    reasoningResponse.json(), reproductionResponse.json(), reportResponse.json(),
+    observationStacksResponse.json(), temporalDifferencesResponse.json()
+  ]);
+  const executions = await Promise.all((investigation.result_ids || []).map(async (executionId) => {
+    const response = await fetch('/api/v1/platform/executions/' + encodeURIComponent(executionId));
+    if (!response.ok) return { execution_id: executionId, unavailable: true };
+    return response.json();
+  }));
+  const eventStreams = await Promise.all(executions.map(async (execution) => {
+    if (!execution.plan_id) return null;
+    const response = await fetch('/api/v1/platform/executions/' + encodeURIComponent(execution.plan_id) + '/events');
+    return response.ok ? response.json() : null;
+  }));
+  $('executionGraph').textContent = JSON.stringify(executions.map((execution) => ({
+    execution_id: execution.plan_id,
+    trace_id: execution.trace_id,
+    workflow: execution.metadata,
+    status: execution.status,
+    tasks: (execution.tasks || []).map((task) => ({
+      task_id: task.task_id,
+      handler: task.handler,
+      description: task.description,
+      status: task.status,
+      depends_on: task.depends_on,
+      duration_seconds: task.duration_seconds,
+      error: task.error
+    }))
+  })), null, 2);
+  $('executionEvents').textContent = JSON.stringify(eventStreams.filter(Boolean), null, 2);
+  $('investigationReport').textContent = report.markdown || JSON.stringify(report, null, 2);
+  $('observationStacks').textContent = JSON.stringify(observationStacks, null, 2);
+  $('temporalDifferences').textContent = JSON.stringify(temporalDifferences, null, 2);
+  $('missionHistory').textContent = JSON.stringify({ investigation, observations, provenance, reasoning, reproducibility }, null, 2);
+  $('executeInvestigation').disabled = investigation.status !== 'pending';
+  $('resumeInvestigation').disabled = !['running', 'partial', 'failed', 'cancelled'].includes(investigation.status);
+  $('cancelInvestigation').disabled = investigation.status !== 'running';
+  renderScientificReasoning(reasoning.reasoning || reasoning);
+}
+
+async function compareInvestigations() {
+  const investigationIds = Array.from(
+    $('investigationCompareSelect').selectedOptions,
+    (option) => option.value
+  );
+  if (investigationIds.length < 2) {
+    $('investigationComparison').textContent = 'Select at least two investigations from the selected mission.';
+    return;
+  }
+  $('compareInvestigations').disabled = true;
+  try {
+    const response = await fetch('/api/v1/platform/investigation-comparisons', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ investigation_ids: investigationIds })
+    });
+    const comparison = await response.json();
+    if (!response.ok) throw new Error(comparison.detail || 'Comparison failed.');
+    $('investigationComparison').textContent = comparison.markdown;
+  } catch (error) {
+    $('investigationComparison').textContent = 'Could not compare investigations: ' + error.message;
+  } finally { $('compareInvestigations').disabled = false; }
+}
+
+async function refreshEarthObjects() {
+  if (!state.investigationId) return;
+  const base = '/api/v1/platform/earth-objects';
+  const query = '?investigation_id=' + encodeURIComponent(state.investigationId);
+  const [objectsResponse, graphResponse, observationsResponse] = await Promise.all([
+    fetch(base + query), fetch(base + '/graph' + query),
+    fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/observations')
+  ]);
+  const [objects, graph, observations] = await Promise.all([
+    objectsResponse.json(), graphResponse.json(), observationsResponse.json()
+  ]);
+  $('earthObjects').textContent = JSON.stringify(objects, null, 2);
+  $('earthObjectGraph').textContent = JSON.stringify(graph, null, 2);
+  $('materializeEarthObject').disabled = !Array.isArray(observations) || observations.length === 0;
+  $('reevaluateWithEarthObjects').disabled = objects.length === 0;
+}
+
+async function searchEarthMemory() {
+  try {
+    const payload = {
+      text: $('memoryTerms').value || null,
+      canonical_variable: $('memoryVariable').value.trim() || null,
+      limit: 100
+    };
+    const bboxText = $('memoryBbox').value.trim();
+    if (bboxText) {
+      const bbox = bboxText.split(',').map((part) => Number(part.trim()));
+      if (bbox.length !== 4 || bbox.some((value) => !Number.isFinite(value))) {
+        throw new Error('Spatial bounds require four finite comma-separated numbers.');
+      }
+      payload.spatial_bbox = bbox;
+      payload.spatial_crs = $('memoryCrs').value.trim();
+    }
+    const start = $('memoryStart').value.trim();
+    const end = $('memoryEnd').value.trim();
+    if (start || end) { payload.temporal_start = start; payload.temporal_end = end; }
+    const response = await fetch('/api/v1/platform/earth-memory/search', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || result.error || response.statusText);
+    $('earthMemoryResults').textContent = JSON.stringify(result, null, 2);
+  } catch (error) {
+    $('earthMemoryResults').textContent = 'Earth Memory search failed: ' + error.message;
+  }
+}
+
+async function materializeEarthObject() {
+  if (!state.investigationId) return;
+  try {
+    const declaration = JSON.parse($('earthObjectDeclaration').value);
+    const response = await fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/earth-objects', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ declaration, evidence: [] })
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.detail || body.error || response.statusText);
+    $('earthObjects').textContent = JSON.stringify(body, null, 2);
+    await refreshEarthObjects();
+  } catch (error) {
+    $('earthObjects').textContent = 'Earth Object materialization failed: ' + error.message;
+  }
+}
+
+async function reevaluateWithEarthObjects() {
+  if (!state.investigationId) return;
+  const response = await fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/reasoning/evaluate', { method: 'POST' });
+  const body = await response.json();
+  if (!response.ok) { $('earthObjects').textContent = JSON.stringify(body, null, 2); return; }
+  renderScientificReasoning(body);
+}
+
+function renderScientificReasoning(report) {
+  const workspace = $('reasoningWorkspace');
+  if (!report) { workspace.style.display = 'none'; return; }
+  workspace.style.display = 'block';
+  const show = (id, value) => { $(id).textContent = JSON.stringify(value, null, 2); };
+  show('reasoningConclusion', report.conclusion);
+  show('reasoningHypotheses', { graph: report.hypothesis_graph, evaluations: report.hypothesis_evaluations, alternatives: report.alternative_explanations, sufficiency: report.sufficiency, rule_applicability: report.rule_applicability, rule_evaluations: report.rule_evaluations });
+  fetch('/api/v1/platform/investigations/' + encodeURIComponent(report.investigation_id) + '/hypotheses')
+    .then((response) => response.json())
+    .then((lifecycle) => show('reasoningHypotheses', { graph: lifecycle.graph || report.hypothesis_graph, lifecycle_events: lifecycle.events || [], evaluations: report.hypothesis_evaluations, alternatives: report.alternative_explanations, sufficiency: report.sufficiency, rule_applicability: report.rule_applicability, rule_evaluations: report.rule_evaluations }))
+    .catch(() => {});
+  show('reasoningSupport', report.conclusion.supporting_evidence);
+  show('reasoningContradictions', report.conclusion.contradicting_evidence);
+  show('reasoningEvidence', report.evidence_evaluation);
+  show('reasoningUncertainty', report.uncertainty_budget);
+  show('reasoningGaps', { unresolved: report.conclusion.unresolved_evidence, missing: report.conclusion.missing_evidence_details, recommendations: report.refinement_recommendations });
+  show('reasoningTrace', { steps: report.reasoning_trace, reproducibility: report.reproducibility, limitations: report.limitations });
+}
+
+async function startInvestigation() {
+  const question = $('earthQuestion').value.trim();
+  if (!question) { $('platformResult').textContent = 'Enter an investigation objective.'; return; }
+  let earthQuery = null;
+  const rawQuery = $('earthQuery').value.trim();
+  if (rawQuery) {
+    try { earthQuery = JSON.parse(rawQuery); }
+    catch (error) { $('platformResult').textContent = 'EarthQuery JSON is invalid: ' + error.message; return; }
+  }
+  $('startInvestigation').disabled = true;
+  try {
+    const response = await fetch('/api/v1/platform/investigate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, earth_query: earthQuery, mission_id: state.missionId })
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.detail || body.error || response.statusText);
+    state.investigationId = body.investigation.investigation_id;
+    state.missionId = body.mission.mission_id;
+    $('executeInvestigation').disabled = body.state !== 'ready';
+    $('platformResult').textContent = JSON.stringify(body, null, 2);
+    await refreshPlatform();
+  } catch (error) {
+    $('platformResult').textContent = 'Could not create investigation: ' + error.message;
+  } finally { $('startInvestigation').disabled = false; }
+}
+
+async function executeInvestigation() {
+  if (!state.investigationId) return;
+  $('executeInvestigation').disabled = true;
+  $('cancelInvestigation').disabled = false;
+  try {
+    const response = await fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/execute', { method: 'POST' });
+    const execution = await response.json();
+    if (!response.ok) throw new Error(execution.detail || execution.error || response.statusText);
+    const [observationsResponse, provenanceResponse, intelligenceResponse, observationStacksResponse, temporalDifferencesResponse] = await Promise.all([
+      fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/observations'),
+      fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/provenance'),
+      fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/intelligence'),
+      fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/observation-stacks'),
+      fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/temporal-differences')
+    ]);
+    const [observations, provenance, intelligence, observationStacks, temporalDifferences] = await Promise.all([observationsResponse.json(), provenanceResponse.json(), intelligenceResponse.json(), observationStacksResponse.json(), temporalDifferencesResponse.json()]);
+    $('observationStacks').textContent = JSON.stringify(observationStacks, null, 2);
+    $('temporalDifferences').textContent = JSON.stringify(temporalDifferences, null, 2);
+    $('platformResult').textContent = JSON.stringify({ execution, observations, provenance, intelligence, observation_stacks: observationStacks, temporal_differences: temporalDifferences }, null, 2);
+    renderScientificReasoning(intelligence.reasoning);
+    await refreshPlatform();
+  } catch (error) {
+    $('platformResult').textContent = 'Observation execution failed: ' + error.message;
+    $('executeInvestigation').disabled = false;
+  } finally {
+    $('cancelInvestigation').disabled = true;
+  }
+}
+
+async function resumeInvestigation() {
+  if (!state.investigationId) return;
+  $('resumeInvestigation').disabled = true;
+  $('cancelInvestigation').disabled = false;
+  try {
+    const response = await fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/resume', { method: 'POST' });
+    const execution = await response.json();
+    if (!response.ok) throw new Error(execution.detail || execution.error || response.statusText);
+    const events = await fetch('/api/v1/platform/executions/' + encodeURIComponent(execution.plan_id) + '/events').then((item) => item.json());
+    $('executionEvents').textContent = JSON.stringify(events, null, 2);
+    $('platformResult').textContent = JSON.stringify({ execution, events }, null, 2);
+    await refreshPlatform();
+  } catch (error) {
+    $('platformResult').textContent = 'Could not resume investigation: ' + error.message;
+    $('resumeInvestigation').disabled = false;
+  } finally {
+    $('cancelInvestigation').disabled = true;
+  }
+}
+
+async function cancelInvestigation() {
+  if (!state.investigationId) return;
+  $('cancelInvestigation').disabled = true;
+  try {
+    const response = await fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/cancel', { method: 'POST' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || result.error || response.statusText);
+    $('platformResult').textContent = JSON.stringify({ cancellation: result }, null, 2);
+  } catch (error) {
+    $('platformResult').textContent = 'Could not cancel investigation: ' + error.message;
+    $('cancelInvestigation').disabled = false;
+  }
+}
+
+$('refreshPlatform').addEventListener('click', refreshPlatform);
+$('missionExplorer').addEventListener('change', async (event) => {
+  state.missionId = event.target.value || null;
+  state.investigationId = null;
+  try { await refreshInvestigationHistory(); } catch (error) { $('missionHistory').textContent = error.message; }
+});
+$('investigationExplorer').addEventListener('change', loadInvestigationHistory);
+$('compareInvestigations').addEventListener('click', compareInvestigations);
+$('startInvestigation').addEventListener('click', startInvestigation);
+$('executeInvestigation').addEventListener('click', executeInvestigation);
+$('resumeInvestigation').addEventListener('click', resumeInvestigation);
+$('cancelInvestigation').addEventListener('click', cancelInvestigation);
+$('materializeEarthObject').addEventListener('click', materializeEarthObject);
+$('reevaluateWithEarthObjects').addEventListener('click', reevaluateWithEarthObjects);
+$('searchEarthMemory').addEventListener('click', searchEarthMemory);
 
 async function loadStatus() {
   const line = $('statusline');
@@ -746,6 +1168,10 @@ $('query').addEventListener('keydown', (e) => {
 buildExamples();
 renderFiles();
 loadStatus();
+refreshPlatform().catch((error) => {
+  $('platformState').textContent = 'unavailable';
+  $('platformSummary').textContent = 'Platform inspection failed: ' + error.message;
+});
 </script>
 </body>
 </html>

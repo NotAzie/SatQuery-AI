@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "satquery-ai"
 version = "1.0.0"
-description = "An interactive vision-language assistant for multimodal remote sensing image analysis through text queries."
+description = "A provider-neutral Earth Intelligence platform for evidence-based observation and investigation across sensing modalities."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Az" }]
-keywords = ["remote-sensing", "vision-language", "satellite", "sar", "vqa", "grounding"]
+keywords = ["earth-intelligence", "earth-observation", "remote-sensing", "satellite", "environmental-data", "geospatial"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Topic :: Scientific/Engineering :: Image Processing",
@@ -32,16 +32,18 @@ dependencies = [
 vision = ["torch>=2.1", "transformers>=4.38"]
 large = ["accelerate", "sentencepiece"]
 dev = ["pytest>=8.0"]
+geospatial = ["pyproj>=3.6", "shapely>=2.0"]
+raster = ["rasterio>=1.3", "pyproj>=3.6"]
 
 [project.scripts]
 satquery = "satquery.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["satquery*", "plugins*"]
+include = ["satquery*", "connectors*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = [".", "tests"]
+testpaths = ["../tests"]
+pythonpath = [".", "../tests"]
 addopts = "-q --tb=short"
 markers = [
   "real_acceptance: loads the configured Hugging Face models and runs real-image smoke checks",

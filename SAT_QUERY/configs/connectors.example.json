@@ -1,0 +1,58 @@
+{
+  "connectors": [
+    {
+      "implementation": "open_meteo",
+      "endpoint": "weather",
+      "configuration": {}
+    },
+    {
+      "implementation": "open_meteo",
+      "endpoint": "historical_weather",
+      "configuration": {}
+    },
+    {
+      "implementation": "open_meteo",
+      "endpoint": "climate",
+      "configuration": {}
+    },
+    {
+      "implementation": "open_meteo",
+      "endpoint": "hydrology",
+      "configuration": {}
+    },
+    {
+      "implementation": "openstreetmap",
+      "configuration": {}
+    },
+    {
+      "implementation": "usgs_3dep",
+      "configuration": {}
+    },
+    {
+      "implementation": "usgs_water",
+      "configuration": {}
+    },
+    {
+      "implementation": "stac",
+      "configuration": {
+        "catalog_url": "https://earth-search.aws.element84.com/v1/",
+        "connector_id": "earth-search",
+        "collection_ids": [
+          "sentinel-2-l2a",
+          "sentinel-1-grd",
+          "landsat-c2-l2",
+          "cop-dem-glo-30"
+        ],
+        "authentication_required": false
+      }
+    },
+    {
+      "implementation": "nasa_earthdata",
+      "configuration": {}
+    },
+    {
+      "implementation": "noaa_coops",
+      "configuration": {}
+    }
+  ]
+}

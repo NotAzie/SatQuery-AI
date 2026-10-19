@@ -1,0 +1,30 @@
+name: Platform regressions
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  deterministic-platform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: satquery-ai/pyproject.toml
+      - name: Install platform test dependencies
+        working-directory: satquery-ai
+        run: python -m pip install -e ".[dev,geospatial]"
+      - name: Run deterministic platform and perception tests
+        working-directory: satquery-ai
+        run: >-
+          python -m pytest -c pyproject.toml -m "not real_acceptance"
+          ../tests/test_platform_*.py
+          ../tests/test_perception*.py
+          ../tests/test_scientific_memory_and_readiness.py
+          ../tests/test_stac_connector.py
+          ../tests/test_open_meteo.py
+          ../tests/test_earth_sources.py
+          ../tests/test_usgs_3dep.py

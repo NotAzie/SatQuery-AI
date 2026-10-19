@@ -1,0 +1,1 @@
+This directory contains legacy implementations from the early development of SatQuery. These modules are preserved for historical reference, algorithm comparison, and possible reuse. They are not imported by the active application.

@@ -14,6 +14,7 @@ focused on vision and never have to think about response shape.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 import uuid
@@ -32,6 +33,10 @@ from .errors import (
 )
 from .imaging import LoadedImage, apply_modality, load_image_from_bytes, load_image_from_path
 from .registry import ModelRegistry
+from .platform.registry import PlatformRegistries
+from .platform.runtime import PlatformRuntime
+from .platform.tools import register_legacy_tools
+from .platform.contracts import ExecutionPlan, ExecutionStatus, Mission, Task
 from .schemas import (
     BackendKind,
     CapabilityInfo,
@@ -105,8 +110,139 @@ class SatQueryEngine:
         self.router = QueryRouter(self.settings)
         self.tools = build_tools()
         self.cache = ResultCache(self.settings.cache_size)
+        self.platform_registries = PlatformRegistries()
+        register_legacy_tools(self.platform_registries.tools, self.tools)
+        self.platform_runtime = PlatformRuntime(
+            registries=self.platform_registries,
+        )
+        self.connector_manager = self.platform_runtime.connector_manager
         self._practical = PracticalVisionFactory(self.registry, self.settings)
         self._rsvlm: Optional[RSVLMVision] = None
+
+    async def close(self) -> None:
+        """Release platform connector resources owned by this application engine."""
+        await self.platform_runtime.close()
+
+    async def answer_on_platform(
+        self,
+        query: str,
+        *,
+        uploads: Optional[Sequence[Tuple[str, bytes]]] = None,
+        image_paths: Optional[Sequence[str]] = None,
+        modality_hint: Optional[Modality] = None,
+        force_tool: Optional[ToolName] = None,
+        include_trace: bool = True,
+    ) -> QueryResponse:
+        """Run legacy image analysis as a capability in the platform workflow.
+
+        Image bytes are passed as ephemeral task resources rather than persisted
+        in mission/task parameters. The investigation records execution state,
+        while the original query response remains unchanged.
+        """
+        runtime = self.platform_runtime
+        mission = runtime.mission_service.create(
+            Mission(
+                name="Interactive Earth imagery request",
+                objective="Analyze supplied Earth imagery using registered capabilities.",
+                metadata={"entrypoint": "interactive-image-query"},
+            )
+        )
+        handler_name = f"satquery.image_query.{uuid.uuid4().hex}"
+        resource_key = "image_query_request"
+        investigation_id: Optional[str] = None
+
+        def run_image_capability(context):
+            request_state = context.resources[resource_key]
+            try:
+                return self.answer(**request_state["request"])
+            except BaseException as exc:
+                request_state["error"] = exc
+                raise
+
+        runtime.register_task_handler(handler_name, run_image_capability)
+        request = {
+            "query": query,
+            "uploads": uploads,
+            "image_paths": image_paths,
+            "modality_hint": modality_hint,
+            "force_tool": force_tool,
+            "include_trace": include_trace,
+        }
+        try:
+            task = Task(
+                handler=handler_name,
+                description="Execute the existing image-analysis capability.",
+                parameters={"capability": "image-analysis"},
+            )
+            investigation = runtime.mission_service.create_investigation(
+                mission.mission_id, (task,)
+            )
+            investigation_id = investigation.investigation_id
+            runtime.investigation_service.start(investigation_id)
+            plan = ExecutionPlan(
+                mission_id=mission.mission_id,
+                investigation_id=investigation_id,
+                tasks=(task,),
+                metadata={"capability": "image-analysis"},
+            )
+            request_state = {"request": request, "error": None}
+            result = await runtime.execution_engine.execute(
+                plan, resources={resource_key: request_state}
+            )
+            runtime.record_execution_result(result)
+            runtime.investigation_service.add_result(
+                investigation_id, result.plan_id
+            )
+            task_result = result.tasks[0]
+            if result.status == ExecutionStatus.SUCCEEDED:
+                runtime.investigation_service.complete(
+                    investigation_id,
+                    "Image-analysis capability execution completed. The returned "
+                    "interpretation is not stored as source observation evidence.",
+                )
+                runtime.mission_service.complete(mission.mission_id)
+                if isinstance(task_result.output, QueryResponse):
+                    return task_result.output.model_copy(
+                        update={
+                            "platform_mission_id": mission.mission_id,
+                            "platform_investigation_id": investigation_id,
+                            "platform_execution_id": result.plan_id,
+                        }
+                    )
+                raise QueryError(
+                    "The image-analysis capability returned an unexpected result type."
+                )
+            if result.status == ExecutionStatus.CANCELLED:
+                runtime.investigation_service.cancel(investigation_id)
+                runtime.mission_service.cancel(mission.mission_id)
+                raise asyncio.CancelledError
+            message = task_result.error or "The image-analysis capability failed."
+            runtime.investigation_service.fail(
+                investigation_id,
+                "Image-analysis capability execution failed.",
+            )
+            runtime.mission_service.complete(mission.mission_id)
+            original_error = request_state["error"]
+            if isinstance(original_error, SatQueryError):
+                raise original_error
+            raise QueryError(
+                "Image-analysis capability execution failed.",
+                remediation=[message],
+            )
+        except BaseException:
+            if investigation_id is not None:
+                current = runtime.investigation_service.get(investigation_id)
+                if current.status.value == "running":
+                    runtime.investigation_service.fail(
+                        investigation_id,
+                        "Image-analysis capability execution ended before completion.",
+                    )
+            mission_status = runtime.mission_service.get(mission.mission_id).status.value
+            if mission_status == "active":
+                runtime.mission_service.cancel(mission.mission_id)
+            raise
+        finally:
+            runtime.task_handlers.unregister(handler_name)
 
     # -- Vision assembly ---------------------------------------------------
 
