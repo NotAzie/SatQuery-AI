@@ -143,6 +143,15 @@ def _build_nasa_firms(value: Mapping[str, Any], policy: ConnectorPolicy) -> Conn
     return NasaFirmsConnector(configuration=configuration, policy=policy)
 
 
+def _build_nasa_power(value: Mapping[str, Any], policy: ConnectorPolicy) -> Connector:
+    from connectors.nasa_power import NasaPowerDailyConnector
+
+    configuration = value.get("configuration", {})
+    if not isinstance(configuration, Mapping):
+        raise ConfigurationError("NASA POWER connector configuration must be an object.")
+    return NasaPowerDailyConnector(configuration=configuration, policy=policy)
+
+
 DEFAULT_CONNECTOR_FACTORIES = ConnectorFactoryRegistry()
 for _name, _factory in (
     ("open_meteo", _build_open_meteo),
@@ -152,6 +161,7 @@ for _name, _factory in (
     ("usgs_water", _build_usgs_water),
     ("nasa_earthdata", _build_nasa_earthdata),
     ("nasa_firms", _build_nasa_firms),
+    ("nasa_power", _build_nasa_power),
     ("noaa_coops", _build_noaa_coops),
 ):
     DEFAULT_CONNECTOR_FACTORIES.register(_name, _factory)

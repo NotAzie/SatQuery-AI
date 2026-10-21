@@ -7,6 +7,10 @@ from connectors.noaa_coops import NoaaCoopsConnector
 from satquery.errors import ValidationError
 from satquery.platform.connectors import ConnectorManager
 from satquery.platform.contracts import EarthQuery
+from satquery.platform.earth_objects import (
+    EarthObjectExtractionPipeline,
+    EarthObjectMaterializer,
+)
 from satquery.platform.perception import PerceptionEngine
 
 
@@ -97,11 +101,34 @@ def test_noaa_coops_returns_station_level_ocean_observations_with_source_flags()
     }
     assert observed.observed_at == datetime(2025, 3, 1, tzinfo=timezone.utc)
     assert observed.quality["provider_qa_qc_level"] == "v"
+    assert observed.earth_object_candidate is not None
+    assert observed.earth_object_candidate.object_type == "earth:CoastalWaterLevelStation"
+    assert observed.earth_object_candidate.identity_value == "9414290"
+    assert observed.observation_id.startswith("noaa-coops:9414290:")
+    assert observed.earth_object_candidate.provenance["source_attributes"]["name"] == "San Francisco"
     assert observed.confidence is None
     assert observed.uncertainty == {}
     assert missing.measured_variables["coastal_water_level"]["value"] is None
     assert missing.quality["provider_data_flags"] == "R"
     assert missing.quality_assessment.completeness == 0
+    assert missing.earth_object_candidate is not None
+    assert missing.earth_object_candidate.identity_value == observed.earth_object_candidate.identity_value
+    assert missing.observation_id != observed.observation_id
+    batch = EarthObjectExtractionPipeline().extract(result.observations)
+    assert len(batch.declarations) == 1
+    declaration = batch.declarations[0]
+    station_object = EarthObjectMaterializer().materialize(
+        declaration, result.observations
+    )
+    assert station_object.object_type == "earth:CoastalWaterLevelStation"
+    assert station_object.source_observation_ids == tuple(
+        sorted(item.observation_id for item in result.observations)
+    )
+    assert len(station_object.measurements) == 2
+    assert station_object.measurements[1].value is None or any(
+        item.value is None for item in station_object.measurements
+    )
+    assert station_object.temporal_validity is None
     data_request = next(
         request for request in requests if request.url.path.endswith("/datagetter")
     )

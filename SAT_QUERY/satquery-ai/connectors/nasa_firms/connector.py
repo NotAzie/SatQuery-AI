@@ -24,6 +24,7 @@ from satquery.platform.connectors import ConnectorPolicy, PerceptionConnector
 from satquery.platform.contracts import (
     ConnectorMetadata,
     DatasetReference,
+    EarthObjectCandidate,
     EarthQuery,
     Observation,
     ObservationSearchResult,
@@ -378,13 +379,14 @@ class NasaFirmsConnector(PerceptionConnector):
         }
         source_digest = hashlib.sha256(
             json.dumps(dict(row), sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()[:24]
+        ).hexdigest()
         reference = DatasetReference(
             connector_id=self.connector_id,
             dataset_id=_DATASET_ID,
             metadata={"sensor_source": self.source},
         )
         return Observation(
+            observation_id=f"nasa-firms:{self.source}:{source_digest}",
             source_id=f"{self.source}:{source_digest}",
             dataset=reference,
             observed_at=observed_at,
@@ -392,6 +394,21 @@ class NasaFirmsConnector(PerceptionConnector):
             geometry={"type": "Point", "coordinates": [longitude, latitude]},
             crs="OGC:CRS84",
             observation_type="satellite_thermal_anomaly",
+            earth_object_candidate=EarthObjectCandidate(
+                identity_namespace=f"firms.earthdata.nasa.gov/{self.source}",
+                identity_value=source_digest,
+                object_type="earth:ThermalAnomalyDetection",
+                declared_by=self.connector_id,
+                mapping_id="nasa-firms-thermal-anomaly-record@1.0.0",
+                provenance={
+                    "classification_basis": "provider-returned FIRMS detection record",
+                    "source_attributes": dict(row),
+                    "limitations": (
+                        "A thermal anomaly record is not proof of wildfire cause, extent, or impact.",
+                        "Provider confidence labels remain source metadata and are not SatQuery confidence.",
+                    ),
+                },
+            ),
             measured_variables=measurements,
             modalities=("disaster",),
             provenance={

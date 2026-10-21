@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
@@ -18,6 +20,7 @@ from satquery.platform.connectors import ConnectorPolicy, PerceptionConnector
 from satquery.platform.contracts import (
     ConnectorMetadata,
     DatasetReference,
+    EarthObjectCandidate,
     EarthQuery,
     Observation,
     ObservationSearchResult,
@@ -390,6 +393,20 @@ class NoaaCoopsConnector(PerceptionConnector):
         if value is None:
             quality["missing_values"] = [_VARIABLE]
         source_document = dict(row)
+        station_identity = str(request["station_id"])
+        observation_digest = hashlib.sha256(
+            json.dumps(
+                {
+                    "row": source_document,
+                    "station": dict(station),
+                    "datum": self.datum,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                default=str,
+            ).encode("utf-8")
+        ).hexdigest()
         dataset_reference = DatasetReference(
             connector_id=self.connector_id,
             dataset_id=_DATASET_ID,
@@ -397,6 +414,7 @@ class NoaaCoopsConnector(PerceptionConnector):
             metadata={"station_id": request["station_id"], "datum": self.datum},
         )
         return Observation(
+            observation_id=f"noaa-coops:{station_identity}:{observation_digest}",
             source_id=(
                 f"{request['station_id']}:{_DATASET_ID}:{raw_time}:{self.datum}"
             ),
@@ -406,6 +424,21 @@ class NoaaCoopsConnector(PerceptionConnector):
             geometry={"type": "Point", "coordinates": [longitude, latitude]},
             crs="OGC:CRS84",
             observation_type="in_situ_water_level",
+            earth_object_candidate=EarthObjectCandidate(
+                identity_namespace="tidesandcurrents.noaa.gov",
+                identity_value=station_identity,
+                object_type="earth:CoastalWaterLevelStation",
+                declared_by=self.connector_id,
+                mapping_id="noaa-coops-explicit-station-record@1.0.0",
+                provenance={
+                    "classification_basis": "explicit NOAA CO-OPS station metadata",
+                    "source_attributes": dict(station),
+                    "limitations": (
+                        "The object represents a provider-identified monitoring station, not a hydrological conclusion.",
+                        "Station status and lifecycle are not inferred from water-level samples.",
+                    ),
+                },
+            ),
             measured_variables={
                 _VARIABLE: {
                     "value": value,

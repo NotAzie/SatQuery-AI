@@ -7,9 +7,8 @@ from pathlib import Path
 
 import httpx
 import pytest
-from pydantic import ValidationError as PydanticValidationError
-
 from connectors.stac import StacCatalogConnector, StacSearchRequest
+from pydantic import ValidationError as PydanticValidationError
 from satquery.errors import AuthenticationError, ConnectorError, ValidationError
 from satquery.platform.cache import MemoryCache
 from satquery.platform.connectors import ConnectorManager, ConnectorPolicy
@@ -151,10 +150,12 @@ def test_stac_discovery_search_and_pagination_preserve_geojson():
         assert not {
             "raster_point_sampling",
             "raster_zonal_analysis",
+            "raster_categorical_polygonization",
             "raster_geodesic_area_weighting",
         }.intersection(connector.metadata.capabilities)
         if importlib.util.find_spec("rasterio") is not None:
             assert "raster_point_sampling" in datasets[0].metadata["capabilities"]
+            assert "raster_categorical_polygonization" not in datasets[0].metadata["capabilities"]
 
         result = await manager.acquire(
             "stac-catalog",
@@ -193,6 +194,28 @@ def test_stac_discovery_search_and_pagination_preserve_geojson():
         await manager.stop_all()
 
     asyncio.run(run())
+
+
+def test_stac_declares_categorical_polygonization_only_for_explicit_class_bands():
+    collection_metadata = StacCatalogConnector._collection_metadata({
+        "id": "thematic-raster",
+        "summaries": {
+            "raster:bands": [{
+                "name": "land_cover_class",
+                "data_type": "uint8",
+                "measurement_kind": "categorical",
+            }]
+        },
+    })
+    if (
+        importlib.util.find_spec("rasterio") is not None
+        and importlib.util.find_spec("shapely") is not None
+    ):
+        assert "raster_categorical_polygonization" in collection_metadata["capabilities"]
+    else:
+        assert "raster_categorical_polygonization" not in collection_metadata.get(
+            "capabilities", ()
+        )
 
 
 def test_earth_query_dataset_selection_maps_to_stac_collection_filter():

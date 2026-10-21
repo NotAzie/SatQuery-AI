@@ -14,7 +14,6 @@ from urllib.parse import SplitResult, quote, urljoin, urlsplit, urlunsplit
 
 import httpx
 from pydantic import ValidationError as PydanticValidationError
-
 from satquery.errors import (
     AuthenticationError,
     ConnectorError,
@@ -874,6 +873,7 @@ class StacCatalogConnector(PerceptionConnector):
             measurement_terms.update(declared_terms)
         summaries = collection.get("summaries")
         raster_band_declaration = False
+        categorical_raster_declaration = False
         if isinstance(summaries, Mapping):
             for key in ("eo:bands", "raster:bands", "variables"):
                 values = summaries.get(key)
@@ -890,6 +890,10 @@ class StacCatalogConnector(PerceptionConnector):
                                 for name in ("name", "common_name", "description")
                             ):
                                 raster_band_declaration = True
+                            if key == "raster:bands" and value.get(
+                                "measurement_kind"
+                            ) == "categorical":
+                                categorical_raster_declaration = True
                             for name in ("name", "common_name", "description"):
                                 candidate = value.get(name)
                                 if isinstance(candidate, str):
@@ -923,6 +927,19 @@ class StacCatalogConnector(PerceptionConnector):
                 "raster_point_sampling": "band metadata declared; verified per item at acquisition",
                 "raster_zonal_analysis": "band metadata declared; verified per item at acquisition",
             }
+            if (
+                categorical_raster_declaration
+                and importlib.util.find_spec("shapely") is not None
+            ):
+                metadata["capabilities"].append(
+                    "raster_categorical_polygonization"
+                )
+                metadata["asset_processing"][
+                    "raster_categorical_polygonization"
+                ] = (
+                    "raster band declaration present; class semantics and values "
+                    "must be supplied by the investigation"
+                )
         resolved_variables = [
             (source_name, EARTH_VARIABLE_ONTOLOGY.resolve_variable(source_name))
             for source_name in source_variables

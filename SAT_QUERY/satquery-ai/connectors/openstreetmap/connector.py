@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -381,7 +382,31 @@ class OverpassConnector(PerceptionConnector):
         tags = element.get("tags", {})
         if not isinstance(tags, Mapping):
             raise ConnectorError("Overpass element tags must be an object.")
-        observation_id = f"{element_type}/{osm_id}"
+        element_version = element.get("version")
+        version_identity = (
+            f"@v{element_version}"
+            if type(element_version) is int and element_version > 0
+            else ""
+        )
+        snapshot_identity = (
+            f"@snapshot-{snapshot_time.isoformat()}" if snapshot_time else ""
+        )
+        content_identity = ""
+        if not version_identity and not snapshot_identity:
+            element_digest = hashlib.sha256(
+                json.dumps(
+                    dict(element),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                    default=str,
+                    allow_nan=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            content_identity = f"@sha256-{element_digest}"
+        observation_id = (
+            f"{element_type}/{osm_id}{version_identity}{snapshot_identity}{content_identity}"
+        )
         asset = ObservationAsset(
             uri=f"https://www.openstreetmap.org/{element_type}/{osm_id}",
             media_type="text/html",
@@ -395,7 +420,8 @@ class OverpassConnector(PerceptionConnector):
             else None
         )
         return Observation(
-            source_id=observation_id,
+            observation_id=observation_id,
+            source_id=f"{element_type}/{osm_id}",
             dataset=DatasetReference(
                 connector_id=self.metadata.connector_id,
                 dataset_id="osm-map-features",
@@ -476,7 +502,11 @@ def _earth_object_candidate(
                 object_type=object_type,
                 declared_by=connector_id,
                 mapping_id="osm-explicit-tag-classification@1.0.0",
-                provenance={"source_tag": {key: value}, "classification_basis": "explicit OpenStreetMap tag"},
+                provenance={
+                    "source_tag": {key: value},
+                    "classification_basis": "explicit OpenStreetMap tag",
+                    "source_attributes": dict(tags),
+                },
             )
     return None
 

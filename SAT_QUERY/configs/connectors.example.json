@@ -51,6 +51,12 @@
       "configuration": {}
     },
     {
+      "implementation": "nasa_power",
+      "configuration": {
+        "community": "AG"
+      }
+    },
+    {
       "implementation": "noaa_coops",
       "configuration": {}
     }

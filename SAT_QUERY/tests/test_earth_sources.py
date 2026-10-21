@@ -468,6 +468,10 @@ def test_overpass_generates_provider_query_and_canonical_vector_observations():
     assert '["highway"="primary"]' in requests[0]
     assert result.observations[0].geometry["type"] == "Point"
     assert result.observations[1].geometry["type"] == "LineString"
+    assert "@v7" in result.observations[0].observation_id
+    assert "@v3" in result.observations[1].observation_id
+    assert result.observations[0].earth_object_candidate.object_type == "earth:TransportFeature"
+    assert result.observations[1].earth_object_candidate.object_type == "earth:TransportFeature"
     assert result.observations[1].properties["tags"]["name"] == "Main Street"
     assert result.observations[0].assets["metadata"].uri.endswith("/node/123")
     assert result.observations[0].quality_assessment.confidence is None

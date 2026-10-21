@@ -8,6 +8,10 @@ from satquery.connector_bootstrap import DEFAULT_CONNECTOR_FACTORIES
 from satquery.errors import AuthenticationError, ConnectorError, ValidationError
 from satquery.platform.connectors import ConnectorManager, ConnectorPolicy
 from satquery.platform.contracts import EarthQuery
+from satquery.platform.earth_objects import (
+    EarthObjectExtractionPipeline,
+    EarthObjectMaterializer,
+)
 from satquery.platform.perception import PerceptionEngine
 
 
@@ -60,6 +64,10 @@ def test_firms_bbox_detection_observations_preserve_source_without_claims():
     first = result.observations[0]
     assert first.modalities == ("disaster",)
     assert first.observation_type == "satellite_thermal_anomaly"
+    assert first.observation_id.startswith("nasa-firms:VIIRS_NOAA21_NRT:")
+    assert first.earth_object_candidate is not None
+    assert first.earth_object_candidate.object_type == "earth:ThermalAnomalyDetection"
+    assert first.earth_object_candidate.provenance["source_attributes"] == first.source_document
     assert first.measured_variables["active_fire"]["value"] == "detected"
     assert first.measured_variables["fire_radiative_power"] == {
         "value": 4.5,
@@ -75,6 +83,29 @@ def test_firms_bbox_detection_observations_preserve_source_without_claims():
     assert result.observations[1].observed_at == datetime(
         2025, 1, 2, 0, 1, tzinfo=timezone.utc
     )
+    batch = EarthObjectExtractionPipeline().extract(result.observations)
+    assert len(batch.declarations) == 2
+    extracted = EarthObjectMaterializer().materialize(
+        batch.declarations[0],
+        tuple(
+            observation
+            for observation in result.observations
+            if observation.observation_id in batch.declarations[0].observation_ids
+        ),
+    )
+    source_observation = next(
+        observation
+        for observation in result.observations
+        if observation.observation_id in batch.declarations[0].observation_ids
+    )
+    assert extracted.object_type == "earth:ThermalAnomalyDetection"
+    assert extracted.geometry == source_observation.geometry
+    assert extracted.source_attributes
+    assert all(item.uncertainty == {} for item in extracted.source_attributes)
+    assert extracted.provenance["declared_provenance"]["extraction_pipeline"][
+        "validation_status"
+    ] == "not_independently_validated"
+    assert extracted.lifecycle == "unknown"
 
 
 def test_firms_requires_credentials_bounded_geographic_query_and_known_sensor():
