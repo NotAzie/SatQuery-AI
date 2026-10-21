@@ -19,7 +19,7 @@ _PROFILE_DEFAULTS = {
     "testing": {"logging": {"level": "WARNING"}},
     "production": {"logging": {"level": "INFO"}},
 }
-_SECTIONS = {"execution", "connector", "cache", "logging", "storage"}
+_SECTIONS = {"execution", "connector", "cache", "logging", "storage", "monitoring"}
 
 
 @dataclass(frozen=True)
@@ -53,6 +53,18 @@ class StorageConfig:
     earth_memory_path: str | None = None
     lifecycle_path: str | None = None
     execution_path: str | None = None
+    audit_path: str | None = None
+    monitoring_path: str | None = None
+
+
+@dataclass(frozen=True)
+class MonitoringConfig:
+    enabled: bool = False
+    poll_interval_seconds: float = 15.0
+    max_runs_per_tick: int = 10
+    max_triggered_investigations_per_tick: int = 5
+    max_concurrency: int = 2
+    lease_seconds: float = 120.0
 
 
 @dataclass(frozen=True)
@@ -65,6 +77,7 @@ class PlatformConfig:
     cache: CacheConfig
     logging: LoggingConfig
     storage: StorageConfig
+    monitoring: MonitoringConfig
 
     @classmethod
     def load(
@@ -118,6 +131,7 @@ class PlatformConfig:
             "cache": {},
             "logging": {},
             "storage": {},
+            "monitoring": {},
         }
         effective["cache"]["max_entries"] = 128
         _merge(effective, _PROFILE_DEFAULTS[selected_profile])
@@ -147,30 +161,78 @@ class PlatformConfig:
             return None
         return MemoryCache(max_entries=self.cache.max_entries)
 
+    def effective_storage_paths(self) -> dict[str, str | None]:
+        """Return the database path each platform store will actually use.
+
+        Unspecified stores intentionally share a configured database so local
+        users can enable durable operation with one path. Keeping the fallback
+        order here gives constructors and runtime diagnostics one source of
+        truth.
+        """
+        storage = self.storage
+        return {
+            "earth_memory": storage.earth_memory_path or storage.monitoring_path,
+            "lifecycle": (
+                storage.lifecycle_path
+                or storage.earth_memory_path
+                or storage.monitoring_path
+            ),
+            "execution": (
+                storage.execution_path
+                or storage.earth_memory_path
+                or storage.lifecycle_path
+                or storage.monitoring_path
+            ),
+            "audit": (
+                storage.audit_path
+                or storage.earth_memory_path
+                or storage.lifecycle_path
+                or storage.execution_path
+                or storage.monitoring_path
+            ),
+            "monitoring": (
+                storage.monitoring_path
+                or storage.earth_memory_path
+                or storage.lifecycle_path
+                or storage.execution_path
+            ),
+        }
+
     def create_earth_memory(self):
         from .earth_memory import InMemoryEarthMemory, SQLiteEarthMemory
 
-        if self.storage.earth_memory_path is None:
+        path = self.effective_storage_paths()["earth_memory"]
+        if path is None:
             return InMemoryEarthMemory()
-        return SQLiteEarthMemory(self.storage.earth_memory_path)
+        return SQLiteEarthMemory(path)
 
     def create_lifecycle_repository(self):
         """Use the configured lifecycle path, or share durable Earth Memory storage."""
         from .investigations import SQLiteLifecycleRepository
 
-        path = self.storage.lifecycle_path or self.storage.earth_memory_path
+        path = self.effective_storage_paths()["lifecycle"]
         return SQLiteLifecycleRepository(path) if path is not None else None
 
     def create_execution_journal(self):
         """Use durable local execution records when a platform storage path exists."""
         from .execution_journal import InMemoryExecutionJournal, SQLiteExecutionJournal
 
-        path = (
-            self.storage.execution_path
-            or self.storage.earth_memory_path
-            or self.storage.lifecycle_path
-        )
+        path = self.effective_storage_paths()["execution"]
         return SQLiteExecutionJournal(path) if path is not None else InMemoryExecutionJournal()
+
+    def create_audit_trail(self):
+        """Use durable local audit storage when any platform store is configured."""
+        from .scientific_governance import InMemoryAuditTrail, SQLiteAuditTrail
+
+        path = self.effective_storage_paths()["audit"]
+        return SQLiteAuditTrail(path) if path is not None else InMemoryAuditTrail()
+
+    def create_monitoring_repository(self):
+        """Use a durable schedule journal when any shared platform store is configured."""
+        from .monitoring import InMemoryMonitoringRepository, SQLiteMonitoringRepository
+
+        path = self.effective_storage_paths()["monitoring"]
+        return SQLiteMonitoringRepository(path) if path is not None else InMemoryMonitoringRepository()
 
 
 def _environment_overrides(
@@ -239,7 +301,14 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
         },
         "cache": {"enabled", "max_entries", "ttl_seconds"},
         "logging": {"level"},
-        "storage": {"earth_memory_path", "lifecycle_path", "execution_path"},
+        "storage": {
+            "earth_memory_path", "lifecycle_path", "execution_path", "audit_path",
+            "monitoring_path",
+        },
+        "monitoring": {
+            "enabled", "poll_interval_seconds", "max_runs_per_tick",
+            "max_triggered_investigations_per_tick", "max_concurrency", "lease_seconds",
+        },
     }
     for section, fields in allowed_fields.items():
         section_values = values.get(section, {})
@@ -257,6 +326,7 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
     cache = values["cache"]
     logging_values = values["logging"]
     storage = values["storage"]
+    monitoring = values["monitoring"]
 
     concurrency = execution.get("max_concurrency")
     if type(concurrency) is not int or concurrency < 1:
@@ -291,10 +361,14 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
     earth_memory_path = storage.get("earth_memory_path")
     lifecycle_path = storage.get("lifecycle_path")
     execution_path = storage.get("execution_path")
+    audit_path = storage.get("audit_path")
+    monitoring_path = storage.get("monitoring_path")
     for name, value in (
         ("storage.earth_memory_path", earth_memory_path),
         ("storage.lifecycle_path", lifecycle_path),
         ("storage.execution_path", execution_path),
+        ("storage.audit_path", audit_path),
+        ("storage.monitoring_path", monitoring_path),
     ):
         if value is not None and (
             not isinstance(value, str) or not value.strip() or value.strip() == ":memory:"
@@ -302,6 +376,37 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
             raise ConfigurationError(
                 f"{name} must be a non-empty durable file path or null."
             )
+    monitoring_enabled = monitoring.get("enabled", False)
+    if type(monitoring_enabled) is not bool:
+        raise ConfigurationError("monitoring.enabled must be a boolean.")
+    poll_interval = _optional_positive(
+        monitoring.get("poll_interval_seconds", 15.0),
+        "monitoring.poll_interval_seconds",
+    )
+    max_runs_per_tick = monitoring.get("max_runs_per_tick", 10)
+    if type(max_runs_per_tick) is not int or max_runs_per_tick < 1:
+        raise ConfigurationError("monitoring.max_runs_per_tick must be a positive integer.")
+    max_triggered_investigations = monitoring.get(
+        "max_triggered_investigations_per_tick", 5
+    )
+    if type(max_triggered_investigations) is not int or max_triggered_investigations < 1:
+        raise ConfigurationError(
+            "monitoring.max_triggered_investigations_per_tick must be a positive integer."
+        )
+    monitoring_concurrency = monitoring.get("max_concurrency", 2)
+    if type(monitoring_concurrency) is not int or monitoring_concurrency < 1:
+        raise ConfigurationError("monitoring.max_concurrency must be a positive integer.")
+    monitoring_lease_seconds = _optional_positive(
+        monitoring.get("lease_seconds", 120.0), "monitoring.lease_seconds"
+    )
+    if (
+        monitoring_enabled
+        and values["profile"] == "production"
+        and not any((monitoring_path, earth_memory_path, lifecycle_path, execution_path))
+    ):
+        raise ConfigurationError(
+            "Production monitoring requires a durable storage path for schedules and runs."
+        )
     return PlatformConfig(
         profile=values["profile"],
         execution=ExecutionConfig(max_concurrency=concurrency),
@@ -322,6 +427,16 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
             earth_memory_path=earth_memory_path,
             lifecycle_path=lifecycle_path,
             execution_path=execution_path,
+            audit_path=audit_path,
+            monitoring_path=monitoring_path,
+        ),
+        monitoring=MonitoringConfig(
+            enabled=monitoring_enabled,
+            poll_interval_seconds=poll_interval,
+            max_runs_per_tick=max_runs_per_tick,
+            max_triggered_investigations_per_tick=max_triggered_investigations,
+            max_concurrency=monitoring_concurrency,
+            lease_seconds=monitoring_lease_seconds,
         ),
     )
 

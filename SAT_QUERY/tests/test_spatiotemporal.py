@@ -70,7 +70,7 @@ def test_builder_creates_deterministic_exact_support_time_series():
     assert [member.value for member in stack.members] == [301.0, 302.0]
     assert all(member.uncertainty == {} for member in stack.members)
     assert stack.reproducibility["spatial_policy"] == (
-        "exact_geometry_and_crs_no_resampling"
+        "exact_geometry_and_crs_no_resampling_or_reprojection"
     )
     assert not first.issues
 

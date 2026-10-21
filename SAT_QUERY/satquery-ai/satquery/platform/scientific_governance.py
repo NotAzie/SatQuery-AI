@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 import threading
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Iterable, Literal, Protocol
+from pathlib import Path
+from typing import Any, Iterable, Iterator, Literal, Protocol
 
 from pydantic import Field, model_validator
 
@@ -248,6 +251,7 @@ class MethodCertificationEvent(Contract):
     rationale: str = Field(min_length=1)
     benchmark_report_ids: tuple[str, ...] = ()
     peer_review: PeerReviewArtifact | None = None
+    implementation_sha256: str | None = Field(default=None, pattern=r"^[a-fA-F0-9]{64}$")
     occurred_at: datetime = Field(default_factory=utc_now)
 
 
@@ -266,6 +270,8 @@ class ScientificMethodCertificationLedger:
     def __init__(self) -> None:
         self._events: dict[tuple[str, str], list[MethodCertificationEvent]] = {}
         self._reports: dict[str, ReproducibilityReport] = {}
+        self._implementation_sha256: dict[tuple[str, str], str | None] = {}
+        self._unrestorable: dict[tuple[str, str], str] = {}
         self._lock = threading.RLock()
 
     def _store_report(self, report: ReproducibilityReport) -> None:
@@ -275,6 +281,13 @@ class ScientificMethodCertificationLedger:
             expected_digest = reproducibility_report_digest(report)
             if report.report_sha256 != expected_digest:
                 raise ValueError("reproducibility report digest is invalid")
+            key = (report.method_id, report.method_version)
+            if key not in self._events:
+                raise ValueError("benchmark report references an unregistered method version")
+            bound_digest = self._implementation_sha256.get(key)
+            if bound_digest is not None and report.implementation_sha256 != bound_digest:
+                raise ValueError("benchmark report implementation differs from the registered method")
+            self._implementation_sha256[key] = report.implementation_sha256
             self._reports[report.report_id] = report
 
     def execute_benchmark(
@@ -290,9 +303,22 @@ class ScientificMethodCertificationLedger:
         self._store_report(report)
         return report
 
-    def register(self, method_id: str, method_version: str, *, actor: str = "satquery.registry", rationale: str = "Method version entered the experimental catalog.") -> MethodCertificationEvent:
+    def register(
+        self,
+        method_id: str,
+        method_version: str,
+        *,
+        actor: str = "satquery.registry",
+        rationale: str = "Method version entered the experimental catalog.",
+        implementation_sha256: str | None = None,
+    ) -> MethodCertificationEvent:
         with self._lock:
             key = (method_id, method_version)
+            if key in self._unrestorable:
+                raise ValueError(
+                    "method certification history is not safely restorable: "
+                    f"{self._unrestorable[key]}"
+                )
             if key in self._events:
                 raise ValueError("method certification lifecycle already initialized")
             if not actor.strip() or not rationale.strip():
@@ -301,9 +327,106 @@ class ScientificMethodCertificationLedger:
                 event_id=uuid.uuid4().hex, method_id=method_id,
                 method_version=method_version, version=1, prior_state=None,
                 state="experimental", actor=actor, rationale=rationale,
+                implementation_sha256=implementation_sha256,
             )
             self._events[key] = [event]
+            self._implementation_sha256[key] = implementation_sha256
             return event
+
+    def bind_implementation(
+        self, method_id: str, method_version: str, implementation_sha256: str | None
+    ) -> None:
+        """Require a reloaded method version to match its certification history."""
+        key = (method_id, method_version)
+        with self._lock:
+            if key in self._unrestorable:
+                raise ValueError(
+                    "method certification history is not safely restorable: "
+                    f"{self._unrestorable[key]}"
+                )
+            history = self._events.get(key)
+            if not history:
+                raise ValueError("cannot bind an implementation before method registration")
+            bound = self._implementation_sha256.get(key)
+            if bound is not None and implementation_sha256 != bound:
+                raise ValueError(
+                    "method implementation digest differs from its certification history"
+                )
+            if any(
+                report.implementation_sha256 != implementation_sha256
+                for report in self._reports.values()
+                if (report.method_id, report.method_version) == key
+            ):
+                raise ValueError(
+                    "method implementation digest differs from its benchmark reports"
+                )
+            self._implementation_sha256[key] = implementation_sha256
+
+    def restore_report(self, report: ReproducibilityReport) -> None:
+        """Restore a report only after its content digest and method identity validate."""
+        self._store_report(report)
+
+    def mark_unrestorable(self, method_id: str, method_version: str, reason: str) -> None:
+        """Fail closed for one method version while keeping the rest of the runtime usable."""
+        if not reason.strip():
+            raise ValueError("an unrestorable certification requires a reason")
+        with self._lock:
+            self._unrestorable[(method_id, method_version)] = reason
+
+    def restoration_error(self, method_id: str, method_version: str) -> str | None:
+        with self._lock:
+            return self._unrestorable.get((method_id, method_version))
+
+    def restore_event(self, event: MethodCertificationEvent) -> None:
+        """Replay one certification event while rechecking lifecycle invariants."""
+        key = (event.method_id, event.method_version)
+        with self._lock:
+            history = self._events.setdefault(key, [])
+            if not history:
+                if (
+                    event.version != 1
+                    or event.prior_state is not None
+                    or event.state != "experimental"
+                ):
+                    raise ValueError("certification history does not begin at experimental state")
+                self._events[key] = [event]
+                self._implementation_sha256[key] = event.implementation_sha256
+                return
+
+            previous = history[-1]
+            if (
+                event.version != previous.version + 1
+                or event.prior_state != previous.state
+                or event.state not in self._TRANSITIONS[previous.state]
+            ):
+                raise ValueError("certification audit events do not form a valid lifecycle")
+            bound = self._implementation_sha256.get(key)
+            if event.implementation_sha256 is not None:
+                if bound is not None and bound != event.implementation_sha256:
+                    raise ValueError("certification event changes the implementation digest")
+                bound = event.implementation_sha256
+                self._implementation_sha256[key] = bound
+            reports = [self._reports.get(report_id) for report_id in event.benchmark_report_ids]
+            if event.state in {"internal", "peer_reviewed", "reference_implementation"}:
+                if not reports or any(report is None for report in reports):
+                    raise ValueError("certification event references unavailable benchmark reports")
+                if any(
+                    report.status != "passed"
+                    or (report.method_id, report.method_version) != key
+                    or report.implementation_sha256 != bound
+                    for report in reports
+                    if report is not None
+                ):
+                    raise ValueError("certification event is not supported by matching reports")
+            if event.state == "peer_reviewed" and (
+                event.peer_review is None or event.peer_review.decision != "accepted"
+            ):
+                raise ValueError("peer-reviewed history has no accepted review artifact")
+            if event.state == "reference_implementation" and previous.state not in {
+                "internal", "peer_reviewed"
+            }:
+                raise ValueError("reference implementation lifecycle transition is invalid")
+            history.append(event)
 
     def state(self, method_id: str, method_version: str) -> CertificationState:
         with self._lock:
@@ -318,6 +441,11 @@ class ScientificMethodCertificationLedger:
     ) -> MethodCertificationEvent:
         with self._lock:
             key = (method_id, method_version)
+            if key in self._unrestorable:
+                raise ValueError(
+                    "method certification history is not safely restorable; "
+                    "register and validate a new method version"
+                )
             history = self._events.setdefault(key, [])
             prior = history[-1].state if history else None
             current = prior or "experimental"
@@ -346,6 +474,7 @@ class ScientificMethodCertificationLedger:
                 method_version=method_version, version=version + 1,
                 prior_state=prior, state=state, actor=actor, rationale=rationale,
                 benchmark_report_ids=benchmark_report_ids, peer_review=peer_review,
+                implementation_sha256=self._implementation_sha256.get(key),
             )
             history.append(event)
             return event
@@ -353,6 +482,11 @@ class ScientificMethodCertificationLedger:
     def history(self, method_id: str, method_version: str) -> tuple[MethodCertificationEvent, ...]:
         with self._lock:
             return tuple(self._events.get((method_id, method_version), ()))
+
+    def known_method_versions(self) -> tuple[tuple[str, str], ...]:
+        with self._lock:
+            keys = set(self._events) | set(self._unrestorable)
+            return tuple(sorted(keys))
 
     def reports(self, method_id: str, method_version: str) -> tuple[ReproducibilityReport, ...]:
         with self._lock:
@@ -362,6 +496,10 @@ class ScientificMethodCertificationLedger:
             )
 
     def can_emit_findings(self, method_id: str, method_version: str) -> bool:
+        key = (method_id, method_version)
+        with self._lock:
+            if key in self._unrestorable:
+                return False
         return self.state(method_id, method_version) in {"peer_reviewed", "reference_implementation"}
 
 
@@ -492,7 +630,7 @@ class AuditEvent(Contract):
     tenant_id: str = "local"
     aggregate_id: str = Field(min_length=1)
     sequence: int = Field(ge=1)
-    event_type: Literal["planning", "execution", "reasoning", "hypothesis_transition", "rule_execution", "evidence_change", "workflow_change", "assessment", "method_certification", "plugin_registration", "earth_object_materialized", "earth_object_relationship_asserted", "earth_object_candidate_rejected", "earth_object_restore_rejected"]
+    event_type: Literal["planning", "execution", "reasoning", "hypothesis_transition", "rule_execution", "evidence_change", "workflow_change", "assessment", "method_certification", "plugin_registration", "earth_object_materialized", "earth_object_transition", "earth_object_relationship_asserted", "earth_object_candidate_rejected", "earth_object_restore_rejected", "investigation_comparison"]
     actor: str = Field(min_length=1)
     occurred_at: datetime = Field(default_factory=utc_now)
     payload: dict[str, Any]
@@ -504,6 +642,8 @@ class AuditEvent(Contract):
 class AuditTrail(Protocol):
     def append(self, *, aggregate_id: str, event_type: str, actor: str, payload: dict[str, Any], tenant_id: str = "local") -> AuditEvent: ...
     def events(self, aggregate_id: str, *, tenant_id: str = "local") -> tuple[AuditEvent, ...]: ...
+    def aggregate_ids(self, *, tenant_id: str = "local") -> tuple[str, ...]: ...
+    def verify(self, aggregate_id: str, *, tenant_id: str = "local") -> bool: ...
 
 
 class InMemoryAuditTrail:
@@ -537,24 +677,284 @@ class InMemoryAuditTrail:
         with self._lock:
             return tuple(self._events.get((tenant_id, aggregate_id), ()))
 
+    def aggregate_ids(self, *, tenant_id: str = "local") -> tuple[str, ...]:
+        with self._lock:
+            return tuple(sorted(
+                aggregate_id
+                for event_tenant, aggregate_id in self._events
+                if event_tenant == tenant_id
+            ))
+
     def verify(self, aggregate_id: str, *, tenant_id: str = "local") -> bool:
-        events = self.events(aggregate_id, tenant_id=tenant_id)
-        previous = None
-        for sequence, event in enumerate(events, 1):
-            data = event.model_dump(mode="json", exclude={"event_sha256"})
-            if event.sequence != sequence or event.previous_event_sha256 != previous:
-                return False
-            if event.payload_sha256 != canonical_digest(event.payload):
-                return False
-            if event.event_sha256 != canonical_digest(data):
-                # Event hash is calculated from canonical event fields with timestamp.
-                return False
-            previous = event.event_sha256
+        return _verify_audit_events(self.events(aggregate_id, tenant_id=tenant_id))
+
+
+class AuditIntegrityError(ValueError):
+    """A stored audit sequence failed payload or hash-chain validation."""
+
+
+class SQLiteAuditTrail:
+    """Durable, append-only local audit trail with per-aggregate hash chains."""
+
+    SCHEMA_VERSION = 1
+
+    def __init__(self, path: str | Path, *, busy_timeout_seconds: float = 5.0) -> None:
+        if busy_timeout_seconds <= 0:
+            raise ValueError("audit SQLite busy timeout must be positive")
+        self.path = Path(path).expanduser()
+        if str(self.path) == ":memory:":
+            raise ValueError("SQLiteAuditTrail requires a durable file path")
+        self.busy_timeout_seconds = busy_timeout_seconds
+        self._initialize()
+
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(
+            str(self.path),
+            timeout=self.busy_timeout_seconds,
+            isolation_level=None,
+        )
+        connection.row_factory = sqlite3.Row
+        connection.execute(
+            f"PRAGMA busy_timeout = {int(self.busy_timeout_seconds * 1000)}"
+        )
+        return connection
+
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        connection = self._connect()
+        try:
+            yield connection
+        finally:
+            connection.close()
+
+    def _initialize(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connection() as connection:
+            connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS satquery_audit_schema ("
+                    "singleton INTEGER PRIMARY KEY CHECK (singleton = 1), "
+                    "version INTEGER NOT NULL)"
+                )
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS satquery_audit_events ("
+                    "tenant_id TEXT NOT NULL, aggregate_id TEXT NOT NULL, "
+                    "sequence INTEGER NOT NULL, event_id TEXT NOT NULL UNIQUE, "
+                    "event_sha256 TEXT NOT NULL, event_json TEXT NOT NULL, "
+                    "PRIMARY KEY (tenant_id, aggregate_id, sequence))"
+                )
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS satquery_audit_heads ("
+                    "tenant_id TEXT NOT NULL, aggregate_id TEXT NOT NULL, "
+                    "sequence INTEGER NOT NULL, event_sha256 TEXT NOT NULL, "
+                    "PRIMARY KEY (tenant_id, aggregate_id))"
+                )
+                connection.execute(
+                    "CREATE TRIGGER IF NOT EXISTS satquery_audit_no_update "
+                    "BEFORE UPDATE ON satquery_audit_events BEGIN "
+                    "SELECT RAISE(ABORT, 'audit events are append-only'); END"
+                )
+                connection.execute(
+                    "CREATE TRIGGER IF NOT EXISTS satquery_audit_no_delete "
+                    "BEFORE DELETE ON satquery_audit_events BEGIN "
+                    "SELECT RAISE(ABORT, 'audit events are append-only'); END"
+                )
+                row = connection.execute(
+                    "SELECT version FROM satquery_audit_schema WHERE singleton = 1"
+                ).fetchone()
+                if row is None:
+                    connection.execute(
+                        "INSERT INTO satquery_audit_schema(singleton, version) VALUES (1, ?)",
+                        (self.SCHEMA_VERSION,),
+                    )
+                elif row["version"] != self.SCHEMA_VERSION:
+                    raise ValueError(
+                        f"Unsupported audit schema version {row['version']}"
+                    )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
+    def append(
+        self,
+        *,
+        aggregate_id: str,
+        event_type: str,
+        actor: str,
+        payload: dict[str, Any],
+        tenant_id: str = "local",
+    ) -> AuditEvent:
+        if not aggregate_id.strip() or not tenant_id.strip() or not actor.strip():
+            raise ValueError("audit events require tenant, aggregate, and actor identifiers")
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                head = connection.execute(
+                    "SELECT sequence, event_sha256 FROM satquery_audit_heads "
+                    "WHERE tenant_id = ? AND aggregate_id = ?",
+                    (tenant_id, aggregate_id),
+                ).fetchone()
+                if head is None:
+                    existing = connection.execute(
+                        "SELECT 1 FROM satquery_audit_events "
+                        "WHERE tenant_id = ? AND aggregate_id = ? LIMIT 1",
+                        (tenant_id, aggregate_id),
+                    ).fetchone()
+                    if existing is not None:
+                        raise AuditIntegrityError("audit head is missing for a non-empty chain")
+                    sequence, previous = 1, None
+                else:
+                    latest = connection.execute(
+                        "SELECT event_json, event_sha256 FROM satquery_audit_events "
+                        "WHERE tenant_id = ? AND aggregate_id = ? AND sequence = ?",
+                        (tenant_id, aggregate_id, head["sequence"]),
+                    ).fetchone()
+                    if latest is None or latest["event_sha256"] != head["event_sha256"]:
+                        raise AuditIntegrityError("audit head does not match its latest event")
+                    previous_event = AuditEvent.model_validate_json(latest["event_json"])
+                    if not _verify_audit_event(previous_event):
+                        raise AuditIntegrityError("latest audit event digest is invalid")
+                    if previous_event.sequence != head["sequence"]:
+                        raise AuditIntegrityError("audit head sequence does not match its event")
+                    sequence, previous = head["sequence"] + 1, head["event_sha256"]
+                event = AuditEvent(
+                    event_id=uuid.uuid4().hex,
+                    tenant_id=tenant_id,
+                    aggregate_id=aggregate_id,
+                    sequence=sequence,
+                    event_type=event_type,
+                    actor=actor,
+                    occurred_at=utc_now(),
+                    payload=payload,
+                    payload_sha256=canonical_digest(payload),
+                    previous_event_sha256=previous,
+                    event_sha256="0" * 64,
+                )
+                event = event.model_copy(update={
+                    "event_sha256": canonical_digest(
+                        event.model_dump(mode="json", exclude={"event_sha256"})
+                    )
+                })
+                event_json = json.dumps(
+                    event.model_dump(mode="json"),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                    allow_nan=False,
+                )
+                connection.execute(
+                    "INSERT INTO satquery_audit_events "
+                    "(tenant_id, aggregate_id, sequence, event_id, event_sha256, event_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (tenant_id, aggregate_id, sequence, event.event_id,
+                     event.event_sha256, event_json),
+                )
+                connection.execute(
+                    "INSERT INTO satquery_audit_heads(tenant_id, aggregate_id, sequence, event_sha256) "
+                    "VALUES (?, ?, ?, ?) ON CONFLICT(tenant_id, aggregate_id) DO UPDATE SET "
+                    "sequence = excluded.sequence, event_sha256 = excluded.event_sha256",
+                    (tenant_id, aggregate_id, sequence, event.event_sha256),
+                )
+                connection.execute("COMMIT")
+                return event
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
+    def events(self, aggregate_id: str, *, tenant_id: str = "local") -> tuple[AuditEvent, ...]:
+        with self._connection() as connection:
+            connection.execute("BEGIN")
+            try:
+                rows = connection.execute(
+                    "SELECT tenant_id, aggregate_id, sequence, event_id, event_sha256, event_json "
+                    "FROM satquery_audit_events "
+                    "WHERE tenant_id = ? AND aggregate_id = ? ORDER BY sequence",
+                    (tenant_id, aggregate_id),
+                ).fetchall()
+                head = connection.execute(
+                    "SELECT sequence, event_sha256 FROM satquery_audit_heads "
+                    "WHERE tenant_id = ? AND aggregate_id = ?",
+                    (tenant_id, aggregate_id),
+                ).fetchone()
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        try:
+            events = tuple(
+                AuditEvent.model_validate_json(row["event_json"]) for row in rows
+            )
+        except (TypeError, ValueError) as exc:
+            raise AuditIntegrityError(
+                f"audit event data is invalid for {tenant_id}:{aggregate_id}"
+            ) from exc
+        columns_match_events = all(
+            row["tenant_id"] == event.tenant_id
+            and row["aggregate_id"] == event.aggregate_id
+            and row["sequence"] == event.sequence
+            and row["event_id"] == event.event_id
+            and row["event_sha256"] == event.event_sha256
+            for row, event in zip(rows, events, strict=True)
+        )
+        if not columns_match_events or not _verify_audit_events(events):
+            raise AuditIntegrityError(
+                f"audit hash chain is invalid for {tenant_id}:{aggregate_id}"
+            )
+        if events and (
+            head is None
+            or head["sequence"] != len(events)
+            or head["event_sha256"] != events[-1].event_sha256
+        ):
+            raise AuditIntegrityError(
+                f"audit head is inconsistent for {tenant_id}:{aggregate_id}"
+            )
+        if not events and head is not None:
+            raise AuditIntegrityError(
+                f"audit head has no events for {tenant_id}:{aggregate_id}"
+            )
+        return events
+
+    def aggregate_ids(self, *, tenant_id: str = "local") -> tuple[str, ...]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT DISTINCT aggregate_id FROM satquery_audit_events "
+                "WHERE tenant_id = ? ORDER BY aggregate_id",
+                (tenant_id,),
+            ).fetchall()
+        return tuple(row["aggregate_id"] for row in rows)
+
+    def verify(self, aggregate_id: str, *, tenant_id: str = "local") -> bool:
+        try:
+            self.events(aggregate_id, tenant_id=tenant_id)
+        except ValueError:
+            return False
         return True
 
 
+def _verify_audit_events(events: tuple[AuditEvent, ...]) -> bool:
+    previous = None
+    for sequence, event in enumerate(events, 1):
+        if event.sequence != sequence or event.previous_event_sha256 != previous:
+            return False
+        if not _verify_audit_event(event):
+            return False
+        previous = event.event_sha256
+    return True
+
+
+def _verify_audit_event(event: AuditEvent) -> bool:
+    data = event.model_dump(mode="json", exclude={"event_sha256"})
+    return (
+        event.payload_sha256 == canonical_digest(event.payload)
+        and event.event_sha256 == canonical_digest(data)
+    )
+
+
 class InvestigationReproducibilityBundle(Contract):
-    schema_version: str = "1.0.0"
+    schema_version: str = "1.3.0"
     bundle_id: str
     investigation_id: str
     capability_matrix_revision: str | None = None
@@ -562,6 +962,10 @@ class InvestigationReproducibilityBundle(Contract):
     plans: tuple[dict[str, Any], ...] = ()
     datasets: tuple[dict[str, Any], ...] = ()
     observations: tuple[dict[str, Any], ...] = ()
+    earth_objects: tuple[dict[str, Any], ...] = ()
+    earth_object_graph: dict[str, Any] | None = None
+    earth_object_extractions: tuple[dict[str, Any], ...] = ()
+    earth_object_transitions: tuple[dict[str, Any], ...] = ()
     provenance: tuple[dict[str, Any], ...] = ()
     scientific_methods: tuple[dict[str, Any], ...] = ()
     evidence_graph: dict[str, Any] | None = None
@@ -569,6 +973,12 @@ class InvestigationReproducibilityBundle(Contract):
     uncertainty_inventory: dict[str, Any] | None = None
     execution_trace: tuple[dict[str, Any], ...] = ()
     audit_events: tuple[dict[str, Any], ...] = ()
+    monitoring_schedules: tuple[dict[str, Any], ...] = ()
+    monitoring_runs: tuple[dict[str, Any], ...] = ()
+    monitoring_events: tuple[dict[str, Any], ...] = ()
+    monitoring_notifications: tuple[dict[str, Any], ...] = ()
+    monitoring_comparisons: tuple[dict[str, Any], ...] = ()
+    investigation_comparisons: tuple[dict[str, Any], ...] = ()
     missing_artifacts: tuple[str, ...] = ()
     artifact_hashes: dict[str, str] = Field(default_factory=dict)
     bundle_sha256: str
@@ -583,22 +993,64 @@ def build_reproducibility_bundle(
     evidence_graph: dict[str, Any] | None, reasoning_report: dict[str, Any] | None,
     uncertainty_inventory: dict[str, Any] | None, execution_trace: Iterable[dict[str, Any]],
     audit_events: Iterable[dict[str, Any]],
+    earth_objects: Iterable[dict[str, Any]] = (),
+    earth_object_graph: dict[str, Any] | None = None,
+    earth_object_extractions: Iterable[dict[str, Any]] = (),
+    earth_object_transitions: Iterable[dict[str, Any]] = (),
+    monitoring_schedules: Iterable[dict[str, Any]] = (),
+    monitoring_runs: Iterable[dict[str, Any]] = (),
+    monitoring_events: Iterable[dict[str, Any]] = (),
+    monitoring_notifications: Iterable[dict[str, Any]] = (),
+    monitoring_comparisons: Iterable[dict[str, Any]] = (),
+    investigation_comparisons: Iterable[dict[str, Any]] = (),
 ) -> InvestigationReproducibilityBundle:
     artifacts: dict[str, Any] = {
         "hypotheses": tuple(hypotheses), "plans": tuple(plans), "datasets": tuple(datasets),
         "observations": tuple(observations), "provenance": tuple(provenance),
+        "earth_objects": tuple(earth_objects),
+        "earth_object_graph": earth_object_graph,
+        "earth_object_extractions": tuple(earth_object_extractions),
+        "earth_object_transitions": tuple(earth_object_transitions),
+        "monitoring_schedules": tuple(monitoring_schedules),
+        "monitoring_runs": tuple(monitoring_runs),
+        "monitoring_events": tuple(monitoring_events),
+        "monitoring_notifications": tuple(monitoring_notifications),
+        "monitoring_comparisons": tuple(monitoring_comparisons),
+        "investigation_comparisons": tuple(investigation_comparisons),
         "scientific_methods": tuple(scientific_methods), "evidence_graph": evidence_graph,
         "reasoning_report": reasoning_report, "uncertainty_inventory": uncertainty_inventory,
         "execution_trace": tuple(execution_trace), "audit_events": tuple(audit_events),
     }
-    missing = tuple(key for key, value in artifacts.items() if value is None or value == ())
+    optional_empty_artifacts = {
+        "earth_objects", "earth_object_transitions", "monitoring_schedules",
+        "monitoring_runs", "monitoring_events", "monitoring_notifications",
+        "monitoring_comparisons",
+        "investigation_comparisons",
+    }
+    missing = tuple(
+        key
+        for key, value in artifacts.items()
+        if value is None
+        or (value == () and key not in optional_empty_artifacts)
+    )
     hashes = {key: canonical_digest(value) for key, value in artifacts.items() if value is not None}
     identity = canonical_digest({"investigation_id": investigation_id, "capability_matrix_revision": capability_matrix_revision, "artifact_hashes": hashes})
     bundle = InvestigationReproducibilityBundle(
         bundle_id=f"repro-{identity[:24]}", investigation_id=investigation_id,
         capability_matrix_revision=capability_matrix_revision,
         hypotheses=artifacts["hypotheses"], plans=artifacts["plans"], datasets=artifacts["datasets"],
-        observations=artifacts["observations"], provenance=artifacts["provenance"],
+        observations=artifacts["observations"],
+        earth_objects=artifacts["earth_objects"],
+        earth_object_graph=earth_object_graph,
+        earth_object_extractions=artifacts["earth_object_extractions"],
+        earth_object_transitions=artifacts["earth_object_transitions"],
+        monitoring_schedules=artifacts["monitoring_schedules"],
+        monitoring_runs=artifacts["monitoring_runs"],
+        monitoring_events=artifacts["monitoring_events"],
+        monitoring_notifications=artifacts["monitoring_notifications"],
+        monitoring_comparisons=artifacts["monitoring_comparisons"],
+        investigation_comparisons=artifacts["investigation_comparisons"],
+        provenance=artifacts["provenance"],
         scientific_methods=artifacts["scientific_methods"], evidence_graph=evidence_graph,
         reasoning_report=reasoning_report, uncertainty_inventory=uncertainty_inventory,
         execution_trace=artifacts["execution_trace"], audit_events=artifacts["audit_events"],

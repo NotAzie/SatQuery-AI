@@ -434,7 +434,7 @@ class QualityRecord(Contract):
 
 
 class EarthObjectCandidate(Contract):
-    """A source-adapter declaration of an entity candidate, not a conclusion."""
+    """A versioned extractor's declared entity candidate, not a conclusion."""
 
     identity_namespace: str = Field(min_length=1)
     identity_value: str = Field(min_length=1)
@@ -500,6 +500,48 @@ class CanonicalMeasurement(Contract):
     observation_id: Optional[str] = None
 
 
+class RasterComponentClassMapping(Contract):
+    """Caller-declared meaning of one exact class code in a categorical raster."""
+
+    class_value: int | float
+    object_type: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_class_value(self) -> "RasterComponentClassMapping":
+        if isinstance(self.class_value, bool) or not math.isfinite(self.class_value):
+            raise ValueError("raster class values must be finite numeric codes")
+        if not self.object_type.strip():
+            raise ValueError("raster class object type must not be empty")
+        return self
+
+
+class RasterComponentExtractionSpec(Contract):
+    """Explicit rules for polygonizing declared categorical raster values.
+
+    This contract carries caller-provided class semantics. Polygonization only
+    converts matching raster cells to geometry; it does not classify imagery.
+    """
+
+    asset_key: str = Field(min_length=1)
+    band_index: int = Field(ge=1)
+    source_variable: str = Field(min_length=1)
+    class_mappings: Tuple[RasterComponentClassMapping, ...] = Field(min_length=1)
+    connectivity: Literal[4, 8]
+    pixel_selection: Literal["pixel_center", "all_touched"]
+    minimum_component_pixels: int = Field(default=1, ge=1)
+    maximum_components: int = Field(default=10_000, ge=1, le=100_000)
+
+    @model_validator(mode="after")
+    def validate_mapping(self) -> "RasterComponentExtractionSpec":
+        if not self.asset_key.strip() or not self.source_variable.strip():
+            raise ValueError("raster asset and source variable names must not be empty")
+        if len({item.class_value for item in self.class_mappings}) != len(
+            self.class_mappings
+        ):
+            raise ValueError("raster class values must be unique per extraction spec")
+        return self
+
+
 class EarthQuery(Contract):
     bbox: Optional[Tuple[float, ...]] = Field(default=None, min_length=4, max_length=6)
     point: Optional[Tuple[float, float]] = None
@@ -523,6 +565,7 @@ class EarthQuery(Contract):
     raster_semantics: Dict[str, Literal["numeric", "categorical"]] = Field(
         default_factory=dict
     )
+    raster_component_extraction: Tuple[RasterComponentExtractionSpec, ...] = ()
 
     @model_validator(mode="after")
     def validate_query(self) -> "EarthQuery":
@@ -669,6 +712,22 @@ class EarthQuery(Contract):
             set(self.requested_variables)
         ):
             raise ValueError("raster_semantics keys must be requested variables")
+        if self.raster_component_extraction:
+            has_area_of_interest = self.bbox is not None or (
+                self.geometry is not None
+                and self.geometry.get("type") in {"Polygon", "MultiPolygon"}
+            )
+            if not has_area_of_interest:
+                raise ValueError(
+                    "raster component extraction requires a bbox or polygon AOI"
+                )
+            extraction_keys = tuple(
+                (item.asset_key, item.band_index) for item in self.raster_component_extraction
+            )
+            if len(set(extraction_keys)) != len(extraction_keys):
+                raise ValueError(
+                    "raster component extraction must declare each asset band once"
+                )
         if not self.crs.strip():
             raise ValueError("crs must not be empty")
         return self
@@ -772,7 +831,7 @@ class ObservationStack(Contract):
     unit: str = Field(min_length=1)
     spatial_support_geometry: Dict[str, Any]
     spatial_support_crs: str = Field(min_length=1)
-    spatial_alignment: Literal["exact_pixel_support"]
+    spatial_alignment: Literal["exact_pixel_support", "exact_point_support"]
     temporal_alignment: Literal["source_acquisition_time"]
     members: Tuple[ObservationStackMember, ...] = Field(min_length=2)
     reproducibility: Dict[str, Any] = Field(default_factory=dict)
@@ -788,6 +847,20 @@ class ObservationStack(Contract):
             raise ValueError("observation stack member units must match exactly")
         if len({member.observation_id for member in self.members}) != len(self.members):
             raise ValueError("observation stack member IDs must be unique")
+        geometry_key, crs_key = (
+            ("pixel_support_geometry", "pixel_support_crs")
+            if self.spatial_alignment == "exact_pixel_support"
+            else ("observation_support_geometry", "observation_support_crs")
+        )
+        for member in self.members:
+            metadata = member.source_measurement_metadata
+            if (
+                metadata.get(geometry_key) != self.spatial_support_geometry
+                or metadata.get(crs_key) != self.spatial_support_crs
+            ):
+                raise ValueError(
+                    "observation stack support must match every source measurement exactly"
+                )
         return self
 
 
@@ -834,6 +907,7 @@ class TemporalDifferenceDiagnostic(Contract):
     unit: str = Field(min_length=1)
     spatial_support_geometry: Dict[str, Any]
     spatial_support_crs: str = Field(min_length=1)
+    spatial_alignment: Literal["exact_pixel_support", "exact_point_support"] = "exact_pixel_support"
     earlier: ObservationStackMember
     later: ObservationStackMember
     elapsed_seconds: float = Field(gt=0)
@@ -860,9 +934,14 @@ class TemporalDifferenceDiagnostic(Contract):
             raise ValueError("difference_value must be finite")
         for member in (self.earlier, self.later):
             metadata = member.source_measurement_metadata
+            geometry_key, crs_key = (
+                ("pixel_support_geometry", "pixel_support_crs")
+                if self.spatial_alignment == "exact_pixel_support"
+                else ("observation_support_geometry", "observation_support_crs")
+            )
             if (
-                metadata.get("pixel_support_geometry") != self.spatial_support_geometry
-                or metadata.get("pixel_support_crs") != self.spatial_support_crs
+                metadata.get(geometry_key) != self.spatial_support_geometry
+                or metadata.get(crs_key) != self.spatial_support_crs
             ):
                 raise ValueError("difference support must match both source measurements exactly")
         return self
@@ -930,6 +1009,19 @@ class EarthObjectPropertyAssertion(Contract):
     provenance: Dict[str, Any] = Field(default_factory=dict)
 
 
+class EarthObjectSourceAttribute(Contract):
+    """An unmapped source attribute retained without canonical interpretation."""
+
+    attribute_id: str = Field(min_length=1)
+    source_observation_id: str = Field(min_length=1)
+    source_dataset: Optional[DatasetReference] = None
+    source_key: str = Field(min_length=1)
+    value: Any = None
+    extraction_method_id: Optional[str] = None
+    uncertainty: Dict[str, Any] = Field(default_factory=dict)
+    provenance: Dict[str, Any] = Field(default_factory=dict)
+
+
 class EarthObjectRelationship(Contract):
     """A typed relationship whose meaning is supported by explicit evidence."""
 
@@ -986,6 +1078,7 @@ class EarthObject(Contract):
     temporal_validity: Optional[TemporalExtent] = None
     properties: Dict[str, Any] = Field(default_factory=dict)
     property_assertions: Tuple[EarthObjectPropertyAssertion, ...] = ()
+    source_attributes: Tuple[EarthObjectSourceAttribute, ...] = ()
     measurements: Tuple["CanonicalMeasurement", ...] = ()
     uncertainty: Dict[str, Any] = Field(default_factory=dict)
     source_observation_ids: Tuple[str, ...] = ()
@@ -1020,6 +1113,15 @@ class EarthObject(Contract):
         for assertion in self.property_assertions:
             if not set(assertion.observation_ids).issubset(known_observations):
                 raise ValueError("Earth Object property assertion references an unlisted observation")
+        if any(
+            item.source_observation_id not in known_observations
+            for item in self.source_attributes
+        ):
+            raise ValueError("Earth Object source attribute references an unlisted observation")
+        if len({item.attribute_id for item in self.source_attributes}) != len(
+            self.source_attributes
+        ):
+            raise ValueError("Earth Object source attribute IDs must be unique")
         return self
 
 

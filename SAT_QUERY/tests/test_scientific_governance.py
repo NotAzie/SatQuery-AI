@@ -1,17 +1,20 @@
 import hashlib
+import sqlite3
 
 import pytest
 
 from satquery.platform.scientific_governance import (
+    AuditIntegrityError,
     BenchmarkCase,
     InMemoryAuditTrail,
     PeerReviewArtifact,
+    ReferenceInvestigation,
     ScientificBenchmarkSuite,
     ScientificMethodCertificationLedger,
     ScientificPluginManifest,
     ScientificPluginRegistry,
     ScientificValidationExecutor,
-    ReferenceInvestigation,
+    SQLiteAuditTrail,
     ValidationDatasetManifest,
     build_reproducibility_bundle,
     canonical_digest,
@@ -108,7 +111,10 @@ def test_validation_rejects_changed_reference_dataset_bytes():
 def test_certification_requires_passed_reports_and_accepted_peer_review():
     suite = _suite()
     ledger = ScientificMethodCertificationLedger()
-    ledger.register("fixture.method", "1.0", actor="registry", rationale="Registered for validation.")
+    registered = ledger.register(
+        "fixture.method", "1.0", actor="registry",
+        rationale="Registered for validation.", implementation_sha256="b" * 64,
+    )
     with pytest.raises(ValueError, match="requires recorded benchmark reports"):
         ledger.transition(
             "fixture.method", "1.0", expected_version=1, state="internal",
@@ -135,6 +141,15 @@ def test_certification_requires_passed_reports_and_accepted_peer_review():
         benchmark_report_ids=(report.report_id,), peer_review=peer_review,
     )
     assert peer.version == 3 and ledger.can_emit_findings("fixture.method", "1.0")
+    restored = ScientificMethodCertificationLedger()
+    restored.restore_event(registered)
+    restored.restore_report(report)
+    restored.restore_event(internal)
+    restored.restore_event(peer)
+    assert restored.can_emit_findings("fixture.method", "1.0")
+    assert restored.reports("fixture.method", "1.0") == (report,)
+    with pytest.raises(ValueError, match="differs from its certification history"):
+        restored.bind_implementation("fixture.method", "1.0", "c" * 64)
     with pytest.raises(ValueError, match="stale"):
         ledger.transition(
             "fixture.method", "1.0", expected_version=2, state="deprecated",
@@ -155,6 +170,47 @@ def test_audit_trail_is_ordered_per_tenant_and_hash_chain_verifiable():
     assert other_tenant.tenant_id == "org-b"
     with pytest.raises(ValueError):
         canonical_digest({"measurement": float("nan")})
+
+
+def test_sqlite_audit_trail_persists_and_rejects_event_mutation(tmp_path):
+    path = tmp_path / "audit.sqlite"
+    audit = SQLiteAuditTrail(path)
+    first = audit.append(
+        aggregate_id="investigation-1", event_type="planning", actor="planner",
+        payload={"plan": "p1"},
+    )
+    second = audit.append(
+        aggregate_id="investigation-1", event_type="execution", actor="runtime",
+        payload={"status": "complete"},
+    )
+
+    reopened = SQLiteAuditTrail(path)
+    assert reopened.events("investigation-1") == (first, second)
+    assert reopened.verify("investigation-1")
+    assert second.previous_event_sha256 == first.event_sha256
+    with sqlite3.connect(path) as connection, pytest.raises(sqlite3.IntegrityError):
+        connection.execute(
+            "UPDATE satquery_audit_events SET event_json = '{}' "
+            "WHERE aggregate_id = 'investigation-1'"
+        )
+
+
+def test_sqlite_audit_trail_detects_tampered_history_and_head(tmp_path):
+    path = tmp_path / "audit.sqlite"
+    audit = SQLiteAuditTrail(path)
+    audit.append(
+        aggregate_id="investigation-1", event_type="planning", actor="planner",
+        payload={"plan": "p1"},
+    )
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "UPDATE satquery_audit_heads SET event_sha256 = ? "
+            "WHERE aggregate_id = ?",
+            ("0" * 64, "investigation-1"),
+        )
+    assert audit.verify("investigation-1") is False
+    with pytest.raises(AuditIntegrityError, match="head is inconsistent"):
+        audit.events("investigation-1")
 
 
 class _Verifier:

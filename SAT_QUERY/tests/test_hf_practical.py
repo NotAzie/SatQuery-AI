@@ -1,8 +1,18 @@
 from __future__ import annotations
 
-import torch
+import pytest
 from PIL import Image
-from transformers.modeling_outputs import BaseModelOutputWithPooling
+
+pytestmark = pytest.mark.vision
+
+torch = pytest.importorskip(
+    "torch", reason="the optional vision extra is required for this test"
+)
+modeling_outputs = pytest.importorskip(
+    "transformers.modeling_outputs",
+    reason="the optional vision extra is required for this test",
+)
+BaseModelOutputWithPooling = modeling_outputs.BaseModelOutputWithPooling
 
 from satquery.backends.hf_practical import ClipEmbedder
 from satquery.registry import LoadedModel

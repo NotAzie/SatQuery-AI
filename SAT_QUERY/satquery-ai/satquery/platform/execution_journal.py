@@ -139,9 +139,10 @@ class TaskOutputCodecRegistry:
         return codec.decode(payload)
 
     @classmethod
-    def platform_defaults(cls) -> "TaskOutputCodecRegistry":
+    def platform_defaults(cls) -> TaskOutputCodecRegistry:
         from ..schemas import QueryResponse
         from .contracts import ObservationSearchResult, PerceptionResult
+        from .earth_objects import EarthObjectExtractionBatch
         from .intelligence import EvidenceAssessment
         from .reasoning import ScientificReasoningReport
 
@@ -151,6 +152,7 @@ class TaskOutputCodecRegistry:
             ("satquery.perception-result", "2.0.0", PerceptionResult),
             ("satquery.evidence-assessment", "1.0.0", EvidenceAssessment),
             ("satquery.scientific-reasoning-report", "1.0.0", ScientificReasoningReport),
+            ("satquery.earth-object-extraction-batch", "1.0.0", EarthObjectExtractionBatch),
             ("satquery.query-response", "1.0.0", QueryResponse),
         ):
             registry.register(PydanticTaskOutputCodec(codec_id, version, model))

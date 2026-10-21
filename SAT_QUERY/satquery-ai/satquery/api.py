@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import List, Literal, Optional
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
@@ -15,19 +16,30 @@ from .config import Settings, get_settings
 from .connector_bootstrap import load_configured_connectors
 from .errors import QueryError, SatQueryError
 from .orchestrator import SatQueryEngine
-from .platform.comparisons import (
-    InvestigationComparisonRequest,
-    compare_investigations,
-)
+from .platform.comparisons import InvestigationComparisonRequest
 from .platform.contracts import (
     EarthObjectRelationship,
     EarthQuery,
     Evidence,
     Mission,
+    Observation,
     Task,
 )
-from .platform.earth_memory import EarthMemoryQuery
-from .platform.earth_objects import EarthObjectDeclaration
+from .platform.earth_memory import (
+    EarthMemoryCursorError,
+    EarthMemoryQuery,
+    StaleEarthMemoryCursorError,
+)
+from .platform.earth_objects import (
+    EarthObjectDeclaration,
+    EarthObjectRevisionTransition,
+)
+from .platform.monitoring import (
+    MonitoringRevisionConflict,
+    MonitoringSchedule,
+    MonitoringScheduleUpdate,
+    monitoring_schedule_revision_identity,
+)
 from .platform.reasoning import ReasoningContext
 from .platform.reports import build_investigation_report
 from .platform.scientific_governance import build_reproducibility_bundle
@@ -160,9 +172,36 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         engine = get_engine()
         load_configured_connectors(engine.platform_runtime)
         await engine.platform_runtime.start()
+        stop_monitoring = asyncio.Event()
+        monitoring_task = None
+        runtime = engine.platform_runtime
+        if runtime.config.monitoring.enabled:
+            async def monitoring_loop() -> None:
+                while not stop_monitoring.is_set():
+                    try:
+                        await asyncio.wait_for(
+                            stop_monitoring.wait(),
+                            timeout=runtime.config.monitoring.poll_interval_seconds,
+                        )
+                    except TimeoutError:
+                        try:
+                            await runtime.run_due_monitoring(
+                                limit=runtime.config.monitoring.max_runs_per_tick
+                            )
+                        except Exception:
+                            logger.exception("Background Earth monitoring tick failed")
+
+            monitoring_task = asyncio.create_task(
+                monitoring_loop(), name="satquery-monitoring-scheduler"
+            )
         try:
             yield
         finally:
+            stop_monitoring.set()
+            if monitoring_task is not None:
+                monitoring_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await monitoring_task
             await engine.close()
 
     app = FastAPI(
@@ -352,13 +391,21 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                     "methods": runtime.scientific_methods.all(),
                     "certification": [
                         {
-                            "method_id": item.method_id,
-                            "version": item.version,
-                            "state": runtime.method_certifications.state(item.method_id, item.version),
-                            "history": runtime.method_certifications.history(item.method_id, item.version),
-                            "benchmark_reports": runtime.method_certifications.reports(item.method_id, item.version),
+                            "method_id": method_id,
+                            "version": version,
+                            "method_loaded": runtime.scientific_methods.get(method_id, version) is not None,
+                            "state": runtime.method_certifications.state(method_id, version),
+                            "history": runtime.method_certifications.history(method_id, version),
+                            "benchmark_reports": runtime.method_certifications.reports(method_id, version),
+                            "certification_usable": (
+                                runtime.scientific_methods.get(method_id, version) is not None
+                                and runtime.method_certifications.can_emit_findings(method_id, version)
+                            ),
+                            "restoration_error": runtime.method_certifications.restoration_error(
+                                method_id, version
+                            ),
                         }
-                        for item in runtime.scientific_methods.all()
+                        for method_id, version in runtime.method_certifications.known_method_versions()
                     ],
                     "operator_manifests": runtime.scientific_operator_manifests.all(),
                     "operator_catalog": runtime.scientific_operator_manifests.catalog(),
@@ -378,14 +425,35 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     )
     async def scientific_method_governance(method_id: str, version: str) -> JSONResponse:
         runtime = get_engine().platform_runtime
-        if runtime.scientific_methods.get(method_id, version) is None:
+        method_loaded = runtime.scientific_methods.get(method_id, version) is not None
+        history = runtime.method_certifications.history(method_id, version)
+        restoration_error = runtime.method_certifications.restoration_error(
+            method_id, version
+        )
+        if not method_loaded and not history and restoration_error is None:
             return JSONResponse({"error": "scientific method not found"}, status_code=404)
+        if restoration_error is not None:
+            return JSONResponse({
+                "method_id": method_id,
+                "version": version,
+                "state": None,
+                "last_verified_state": runtime.method_certifications.state(
+                    method_id, version
+                ),
+                "method_loaded": method_loaded,
+                "certification_usable": False,
+                "restoration_error": restoration_error,
+            }, status_code=409)
         return JSONResponse(jsonable_encoder({
             "method_id": method_id,
             "version": version,
+            "method_loaded": method_loaded,
             "state": runtime.method_certifications.state(method_id, version),
-            "history": runtime.method_certifications.history(method_id, version),
+            "history": history,
             "benchmark_reports": runtime.method_certifications.reports(method_id, version),
+            "certification_usable": method_loaded
+            and runtime.method_certifications.can_emit_findings(method_id, version),
+            "restoration_error": None,
         }))
 
     @app.post(
@@ -464,13 +532,22 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         aggregate_ids = [investigation_id]
         if investigation.investigation_plan_id:
             aggregate_ids.append(investigation.investigation_plan_id)
-        chains = {
-            aggregate_id: {
-                "events": runtime.audit_trail.events(aggregate_id),
-                "valid": runtime.audit_trail.verify(aggregate_id),
-            }
-            for aggregate_id in aggregate_ids
-        }
+        chains = {}
+        for aggregate_id in aggregate_ids:
+            valid = runtime.audit_trail.verify(aggregate_id)
+            chain = {"events": (), "valid": valid}
+            if valid:
+                try:
+                    chain["events"] = runtime.audit_trail.events(aggregate_id)
+                except ValueError:
+                    # A persisted chain can change between verification and read.
+                    valid = False
+                    chain["valid"] = False
+            if not valid:
+                chain["integrity_error"] = (
+                    "Audit hash-chain verification failed; event payloads are withheld."
+                )
+            chains[aggregate_id] = chain
         return JSONResponse(jsonable_encoder({
             "investigation_id": investigation_id,
             "chains": chains,
@@ -503,6 +580,54 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             for task in execution.tasks
             for observation in getattr(task.output, "observations", ())
         )
+        observation_ids = {item.observation_id for item in observations}
+        earth_objects = tuple(
+            sorted(
+                (
+                    item
+                    for item in runtime.earth_objects.all()
+                    if item.investigation_id == investigation_id
+                    or investigation_id in item.investigation_ids
+                    or observation_ids.intersection(item.source_observation_ids)
+                ),
+                key=lambda item: (
+                    item.stable_identity or "",
+                    item.revision,
+                    item.object_id,
+                ),
+            )
+        )
+        earth_object_ids = tuple(item.object_id for item in earth_objects)
+        earth_object_graph = runtime.earth_objects.graph(
+            earth_object_ids
+        ).model_dump(mode="json")
+
+        def investigation_memory_records(artifact_type: str) -> tuple[dict, ...]:
+            records = []
+            query = EarthMemoryQuery(
+                artifact_types=(artifact_type,),
+                investigation_id=investigation_id,
+                limit=1000,
+            )
+            while True:
+                result = runtime.search_earth_memory(query)
+                records.extend(item.model_dump(mode="json") for item in result.artifacts)
+                if result.next_cursor is None:
+                    return tuple(records)
+                query = query.model_copy(update={"cursor": result.next_cursor})
+
+        try:
+            earth_object_extractions = investigation_memory_records(
+                "earth_object_extraction"
+            )
+            earth_object_transitions = investigation_memory_records(
+                "earth_object_transition"
+            )
+        except StaleEarthMemoryCursorError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail="Earth Memory changed during reproducibility export; retry the export.",
+            ) from exc
         capability_revision = plan.capability_matrix_revision if plan else next(
             (
                 task.output.plan.capability_matrix_revision
@@ -540,6 +665,103 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         event_records = runtime.audit_trail.events(investigation_id)
         if plan is not None:
             event_records = (*event_records, *runtime.audit_trail.events(plan.plan_id))
+        for object_id in earth_object_ids:
+            event_records = (*event_records, *runtime.audit_trail.events(object_id))
+        unique_events = {item.event_id: item for item in event_records}
+        event_records = tuple(
+            sorted(
+                unique_events.values(), key=lambda item: (item.aggregate_id, item.sequence)
+            )
+        )
+        monitoring_runs = runtime.monitoring_service.runs_for_investigation(
+            investigation_id
+        )
+        monitoring_schedules = []
+        missing_monitoring_schedule = False
+        monitoring_events = {}
+        monitoring_notifications = {}
+        for run in monitoring_runs:
+            schedule_artifact = runtime.earth_memory.get(
+                monitoring_schedule_revision_identity(
+                    run.schedule_id, run.schedule_revision
+                )
+            )
+            if schedule_artifact is None:
+                missing_monitoring_schedule = True
+            else:
+                monitoring_schedules.append(schedule_artifact.payload)
+            for event in runtime.monitoring_service.events(
+                run.schedule_id, limit=1000
+            ):
+                monitoring_events[event.event_id] = event.model_dump(mode="json")
+            for notification in runtime.monitoring_service.notifications(
+                run.schedule_id, limit=1000
+            ):
+                if notification.run_id == run.run_id:
+                    monitoring_notifications[notification.notification_id] = (
+                        notification.model_dump(mode="json")
+                    )
+        trigger_contexts = tuple(
+            task.parameters.get("monitoring_trigger")
+            for task in investigation.tasks
+            if isinstance(task.parameters.get("monitoring_trigger"), dict)
+        )
+        trigger_by_schedule: dict[str, set[str]] = {}
+        for trigger in trigger_contexts:
+            schedule_id = trigger.get("schedule_id")
+            evaluation_id = trigger.get("evaluation_id")
+            if isinstance(schedule_id, str) and isinstance(evaluation_id, str):
+                trigger_by_schedule.setdefault(schedule_id, set()).add(evaluation_id)
+        for schedule_id, evaluation_ids in trigger_by_schedule.items():
+            schedule = runtime.monitoring_service.get(schedule_id)
+            revision = next(
+                (int(item.get("schedule_revision", 1)) for item in trigger_contexts
+                 if item.get("schedule_id") == schedule_id),
+                schedule.revision,
+            )
+            schedule_artifact = runtime.earth_memory.get(
+                monitoring_schedule_revision_identity(schedule_id, revision)
+            )
+            if schedule_artifact is None:
+                missing_monitoring_schedule = True
+            else:
+                monitoring_schedules.append(schedule_artifact.payload)
+            for event in runtime.monitoring_service.iter_events(schedule_id):
+                if event.payload.get("evaluation_id") in evaluation_ids:
+                    monitoring_events[event.event_id] = event.model_dump(mode="json")
+                    try:
+                        notification = runtime.monitoring_service.get_notification(
+                            f"monitor-notification:{event.event_id}"
+                        )
+                    except KeyError:
+                        continue
+                    monitoring_notifications[notification.notification_id] = (
+                        notification.model_dump(mode="json")
+                    )
+        monitoring_schedule_records = (
+            None if missing_monitoring_schedule else tuple(monitoring_schedules)
+        )
+        monitoring_comparisons = []
+        investigation_comparisons = []
+        for artifact_type, target in (
+            ("monitoring_comparison", monitoring_comparisons),
+            ("investigation_comparison", investigation_comparisons),
+        ):
+            comparison_query = EarthMemoryQuery(
+                artifact_types=(artifact_type,),
+                source_artifact_id=f"investigation:{investigation_id}",
+                limit=1000,
+            )
+            while True:
+                comparison_page = runtime.search_earth_memory(comparison_query)
+                target.extend(
+                    item.model_dump(mode="json") for item in comparison_page.artifacts
+                )
+                if comparison_page.next_cursor is None:
+                    break
+                comparison_query = comparison_query.model_copy(
+                    update={"cursor": comparison_page.next_cursor}
+                )
         bundle = build_reproducibility_bundle(
             investigation_id=investigation_id,
             capability_matrix_revision=capability_revision,
@@ -549,6 +771,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             plans=plans,
             datasets=tuple(dataset_records[key] for key in sorted(dataset_records)),
             observations=tuple(item.model_dump(mode="json") for item in observations),
+            earth_objects=tuple(item.model_dump(mode="json") for item in earth_objects),
+            earth_object_graph=earth_object_graph,
+            earth_object_extractions=earth_object_extractions,
+            earth_object_transitions=earth_object_transitions,
             provenance=provenance,
             scientific_methods=methods,
             evidence_graph=design.evidence_graph.model_dump(mode="json") if design else None,
@@ -556,6 +782,23 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             uncertainty_inventory=reasoning.uncertainty_budget.model_dump(mode="json") if reasoning else None,
             execution_trace=tuple(item.model_dump(mode="json") for result in executions for item in result.tasks),
             audit_events=tuple(item.model_dump(mode="json") for item in event_records),
+            monitoring_schedules=monitoring_schedule_records,
+            monitoring_runs=tuple(item.model_dump(mode="json") for item in monitoring_runs),
+            monitoring_events=tuple(
+                monitoring_events[key] for key in sorted(monitoring_events)
+            ),
+            monitoring_notifications=tuple(
+                monitoring_notifications[key]
+                for key in sorted(monitoring_notifications)
+            ),
+            monitoring_comparisons=tuple(sorted(
+                monitoring_comparisons,
+                key=lambda item: item["artifact_id"],
+            )),
+            investigation_comparisons=tuple(sorted(
+                investigation_comparisons,
+                key=lambda item: item["artifact_id"],
+            )),
         )
         runtime.index_reproducibility_bundle(bundle)
         return JSONResponse(jsonable_encoder(bundle))
@@ -582,7 +825,13 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         summary="Search indexed investigation and scientific artifacts deterministically",
     )
     async def earth_memory_search(query: EarthMemoryQuery) -> JSONResponse:
-        result = get_engine().platform_runtime.search_earth_memory(query)
+        try:
+            result = get_engine().platform_runtime.search_earth_memory(query)
+        except StaleEarthMemoryCursorError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except EarthMemoryCursorError as exc:
+            status_code = 422
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
         # The canonical search index text duplicates the full payload and is an
         # internal implementation detail; return the artifact payload once.
         public_result = result.model_dump(
@@ -635,6 +884,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     async def platform_runtime_health() -> JSONResponse:
         runtime = get_engine().platform_runtime
         diagnostics = await runtime.connector_manager.health_snapshot(active=False)
+        storage_paths = runtime.config.effective_storage_paths()
         return JSONResponse(
             {
                 "state": "closed" if runtime.is_closed else "open",
@@ -643,19 +893,11 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 "mission_count": len(runtime.mission_service.list()),
                 "execution_count": len(runtime.execution_results()),
                 "storage": {
-                    "earth_memory": {
-                        "backend": "sqlite" if runtime.config.storage.earth_memory_path else "in_memory",
-                        "durable": runtime.config.storage.earth_memory_path is not None,
-                    },
-                    "lifecycle": {
-                        "backend": "sqlite"
-                        if runtime.config.storage.lifecycle_path or runtime.config.storage.earth_memory_path
-                        else "in_memory",
-                        "durable": (
-                            runtime.config.storage.lifecycle_path is not None
-                            or runtime.config.storage.earth_memory_path is not None
-                        ),
-                    },
+                    name: {
+                        "backend": "sqlite" if path is not None else "in_memory",
+                        "durable": path is not None,
+                    }
+                    for name, path in storage_paths.items()
                 },
                 "connectors": [_connector_health_summary(item) for item in diagnostics],
             }
@@ -844,7 +1086,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         "/api/v1/platform/missions", summary="Create an Earth intelligence mission"
     )
     async def create_mission(mission: Mission) -> JSONResponse:
-        created = get_engine().platform_runtime.mission_service.create(mission)
+        runtime = get_engine().platform_runtime
+        created = runtime.mission_service.create(mission)
+        runtime.index_mission(created)
         return JSONResponse(jsonable_encoder(created), status_code=201)
 
     @app.get("/api/v1/platform/missions", summary="List local missions")
@@ -889,6 +1133,229 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         investigations = runtime.investigation_service.list_for_mission(mission_id)
         return JSONResponse(jsonable_encoder(investigations))
 
+    @app.post(
+        "/api/v1/platform/monitoring/schedules",
+        summary="Create a recurring, mission-linked Earth investigation schedule",
+    )
+    async def create_monitoring_schedule(schedule: MonitoringSchedule) -> JSONResponse:
+        runtime = get_engine().platform_runtime
+        try:
+            created = runtime.create_monitoring_schedule(schedule)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return JSONResponse(jsonable_encoder(created), status_code=201)
+
+    @app.get(
+        "/api/v1/platform/monitoring/schedules",
+        summary="List recurring investigation schedules",
+    )
+    async def list_monitoring_schedules(mission_id: str | None = None) -> JSONResponse:
+        schedules = get_engine().platform_runtime.monitoring_service.list(mission_id)
+        return JSONResponse(jsonable_encoder(schedules))
+
+    @app.patch(
+        "/api/v1/platform/monitoring/schedules/{schedule_id}",
+        summary="Create a new optimistic, auditable schedule definition revision",
+    )
+    async def revise_monitoring_schedule(
+        schedule_id: str, update: MonitoringScheduleUpdate
+    ) -> JSONResponse:
+        try:
+            revised = get_engine().platform_runtime.revise_monitoring_schedule(
+                schedule_id, update
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except MonitoringRevisionConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return JSONResponse(jsonable_encoder(revised))
+
+    @app.post(
+        "/api/v1/platform/monitoring/schedules/{schedule_id}/enable",
+        summary="Enable a monitoring schedule",
+    )
+    async def enable_monitoring_schedule(schedule_id: str) -> JSONResponse:
+        try:
+            schedule = get_engine().platform_runtime.set_monitoring_schedule_enabled(
+                schedule_id, True
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return JSONResponse(jsonable_encoder(schedule))
+
+    @app.post(
+        "/api/v1/platform/monitoring/schedules/{schedule_id}/disable",
+        summary="Disable a monitoring schedule",
+    )
+    async def disable_monitoring_schedule(schedule_id: str) -> JSONResponse:
+        try:
+            schedule = get_engine().platform_runtime.set_monitoring_schedule_enabled(
+                schedule_id, False
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return JSONResponse(jsonable_encoder(schedule))
+
+    @app.get(
+        "/api/v1/platform/monitoring/schedules/{schedule_id}/runs",
+        summary="Inspect durable monitoring run history",
+    )
+    async def list_monitoring_runs(schedule_id: str) -> JSONResponse:
+        try:
+            runs = get_engine().platform_runtime.monitoring_service.runs(schedule_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return JSONResponse(jsonable_encoder(runs))
+
+    @app.get(
+        "/api/v1/platform/monitoring/schedules/{schedule_id}/comparison",
+        summary="Align canonical measurements from recent monitoring investigations",
+    )
+    async def compare_monitoring_schedule(
+        schedule_id: str, limit: int = 10
+    ) -> JSONResponse:
+        if not 2 <= limit <= 20:
+            raise HTTPException(
+                status_code=422, detail="limit must be between 2 and 20"
+            )
+        try:
+            comparison = get_engine().platform_runtime.compare_monitoring_schedule(
+                schedule_id, limit=limit
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return JSONResponse(jsonable_encoder(comparison))
+
+    @app.get(
+        "/api/v1/platform/monitoring/schedules/{schedule_id}/triggers",
+        summary="Inspect configured trigger policies and their durable lifecycle",
+    )
+    async def inspect_monitoring_triggers(
+        schedule_id: str, limit: int = 100, cursor: str | None = None
+    ) -> JSONResponse:
+        if not 1 <= limit <= 1000:
+            raise HTTPException(status_code=422, detail="limit must be between 1 and 1000")
+        runtime = get_engine().platform_runtime
+        try:
+            schedule = runtime.monitoring_service.get(schedule_id)
+            page = runtime.monitoring_service.event_page(
+                schedule_id, limit=limit, cursor=cursor
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        trigger_types = {
+            "trigger_evaluated", "trigger_matched", "trigger_suppressed_cooldown",
+            "trigger_investigation_created", "trigger_investigation_completed",
+            "trigger_investigation_failed",
+        }
+        return JSONResponse(jsonable_encoder({
+            "schedule_id": schedule_id,
+            "schedule_revision": schedule.revision,
+            "policies": schedule.trigger_policies,
+            "events": tuple(event for event in page.events if event.event_type in trigger_types),
+            "next_cursor": page.next_cursor,
+            "has_more": page.has_more,
+        }))
+
+    @app.get(
+        "/api/v1/platform/monitoring/health",
+        summary="Inspect scheduler capacity, due work, and lease recovery state",
+    )
+    async def get_monitoring_health() -> JSONResponse:
+        health = get_engine().platform_runtime.monitoring_service.health()
+        return JSONResponse(jsonable_encoder(health))
+
+    @app.get(
+        "/api/v1/platform/monitoring/events",
+        summary="Inspect append-only monitoring schedule and run events",
+    )
+    async def list_monitoring_events(
+        schedule_id: str | None = None,
+        run_id: str | None = None,
+        limit: int = 100,
+    ) -> JSONResponse:
+        if not 1 <= limit <= 1000:
+            raise HTTPException(status_code=422, detail="limit must be between 1 and 1000")
+        try:
+            events = get_engine().platform_runtime.monitoring_service.events(
+                schedule_id, run_id=run_id, limit=limit
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return JSONResponse(jsonable_encoder(events))
+
+    @app.get(
+        "/api/v1/platform/monitoring/events/page",
+        summary="Read a stable keyset page from monitoring event history",
+    )
+    async def page_monitoring_events(
+        schedule_id: str | None = None,
+        run_id: str | None = None,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> JSONResponse:
+        if not 1 <= limit <= 1000:
+            raise HTTPException(status_code=422, detail="limit must be between 1 and 1000")
+        try:
+            page = get_engine().platform_runtime.monitoring_service.event_page(
+                schedule_id, run_id=run_id, limit=limit, cursor=cursor
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return JSONResponse(jsonable_encoder(page))
+
+    @app.get(
+        "/api/v1/platform/monitoring/notifications",
+        summary="List operational notifications for partial and failed runs",
+    )
+    async def list_monitoring_notifications(
+        schedule_id: str | None = None,
+        unread_only: bool = False,
+        limit: int = 100,
+    ) -> JSONResponse:
+        if not 1 <= limit <= 1000:
+            raise HTTPException(status_code=422, detail="limit must be between 1 and 1000")
+        try:
+            notifications = get_engine().platform_runtime.monitoring_service.notifications(
+                schedule_id, unread_only=unread_only, limit=limit
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return JSONResponse(jsonable_encoder(notifications))
+
+    @app.post(
+        "/api/v1/platform/monitoring/notifications/{notification_id}/acknowledge",
+        summary="Acknowledge an operational monitoring notification",
+    )
+    async def acknowledge_monitoring_notification(notification_id: str) -> JSONResponse:
+        try:
+            notification = get_engine().platform_runtime.acknowledge_monitoring_notification(
+                notification_id
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return JSONResponse(jsonable_encoder(notification))
+
+    @app.post(
+        "/api/v1/platform/monitoring/run-due",
+        summary="Execute due monitoring schedules through the investigation DAG",
+    )
+    async def run_due_monitoring(limit: int = 100) -> JSONResponse:
+        if not 1 <= limit <= 1000:
+            raise HTTPException(status_code=422, detail="limit must be between 1 and 1000")
+        runs = await get_engine().platform_runtime.run_due_monitoring(limit=limit)
+        return JSONResponse(jsonable_encoder(runs))
+
     @app.get(
         "/api/v1/platform/investigations/{investigation_id}",
         summary="Inspect an investigation",
@@ -916,9 +1383,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     async def create_investigation_comparison(
         request: InvestigationComparisonRequest,
     ) -> JSONResponse:
-        comparison = compare_investigations(
-            get_engine().platform_runtime, request
-        )
+        comparison = get_engine().platform_runtime.compare_investigations(request)
         return JSONResponse(jsonable_encoder(comparison))
 
     @app.get(
@@ -971,12 +1436,20 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             result = runtime.get_execution_result(result_id)
             for task_result in result.tasks:
                 observations.extend(getattr(task_result.output, "observations", ()))
-        ledger = runtime.get_hypothesis_ledger(investigation_id)
+        try:
+            ledger = runtime.ensure_hypothesis_ledger(
+                investigation_id, (item.hypothesis for item in design.hypotheses)
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                {"error": "hypothesis_lifecycle_unavailable", "detail": str(exc)},
+                status_code=409,
+            )
         report = runtime.scientific_reasoning.evaluate(ReasoningContext(
             investigation_id=investigation_id,
             observations=tuple(observations),
             earth_objects=tuple(
-                item for item in runtime.earth_objects.all()
+                item for item in runtime.earth_objects.current()
                 if investigation_id in item.investigation_ids or item.investigation_id == investigation_id
             ),
             design=design,
@@ -993,9 +1466,36 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     )
     async def get_investigation_hypotheses(investigation_id: str) -> JSONResponse:
         runtime = get_engine().platform_runtime
-        runtime.investigation_service.get(investigation_id)
+        investigation = runtime.investigation_service.get(investigation_id)
         ledger = runtime.get_hypothesis_ledger(investigation_id)
+        if ledger is not None and investigation.investigation_design_id:
+            design = runtime.get_investigation_design(investigation.investigation_design_id)
+            try:
+                ledger = runtime.ensure_hypothesis_ledger(
+                    investigation_id, (item.hypothesis for item in design.hypotheses)
+                )
+            except ValueError as exc:
+                return JSONResponse(
+                    {
+                        "status": "unavailable",
+                        "graph": None,
+                        "events": [],
+                        "restoration_error": str(exc),
+                    },
+                    status_code=409,
+                )
         if ledger is None:
+            restoration_error = runtime.hypothesis_restore_error(investigation_id)
+            if restoration_error is not None:
+                return JSONResponse(
+                    {
+                        "status": "unavailable",
+                        "graph": None,
+                        "events": [],
+                        "restoration_error": restoration_error,
+                    },
+                    status_code=409,
+                )
             return JSONResponse({"status": "not_initialized", "graph": None, "events": []})
         return JSONResponse(
             jsonable_encoder({"status": "available", "graph": ledger.graph(), "events": ledger.events()})
@@ -1014,9 +1514,15 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         if investigation.investigation_design_id is None:
             return JSONResponse({"error": "investigation_design_not_found"}, status_code=409)
         design = runtime.get_investigation_design(investigation.investigation_design_id)
-        ledger = runtime.ensure_hypothesis_ledger(
-            investigation_id, (item.hypothesis for item in design.hypotheses)
-        )
+        try:
+            ledger = runtime.ensure_hypothesis_ledger(
+                investigation_id, (item.hypothesis for item in design.hypotheses)
+            )
+        except ValueError as exc:
+            return JSONResponse(
+                {"error": "hypothesis_lifecycle_unavailable", "detail": str(exc)},
+                status_code=409,
+            )
         record = HypothesisRecord(
             hypothesis_id=request.hypothesis_id,
             proposition=request.proposition,
@@ -1034,16 +1540,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 {"error": "hypothesis_registration_rejected", "detail": str(exc)},
                 status_code=409,
             )
-        runtime.audit_trail.append(
-            aggregate_id=investigation_id, event_type="hypothesis_transition",
-            actor=request.actor, payload={
-                "hypothesis_id": record.hypothesis_id, "version": record.version,
-                "state": record.lifecycle, "rationale": request.rationale,
-                "event_ids": [item.event_id for item in ledger.events(record.hypothesis_id)],
-            },
-        )
-        runtime.index_hypothesis(
-            investigation_id, record, mission_id=investigation.mission_id
+        runtime.record_hypothesis_lifecycle_event(
+            investigation_id, ledger, ledger.events(record.hypothesis_id)[-1],
+            mission_id=investigation.mission_id,
         )
         return JSONResponse(
             jsonable_encoder({"hypothesis": record, "events": ledger.events(record.hypothesis_id)}),
@@ -1060,9 +1559,26 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         request: HypothesisTransitionRequest,
     ) -> JSONResponse:
         runtime = get_engine().platform_runtime
-        runtime.investigation_service.get(investigation_id)
+        investigation = runtime.investigation_service.get(investigation_id)
         ledger = runtime.get_hypothesis_ledger(investigation_id)
+        if ledger is not None and investigation.investigation_design_id:
+            design = runtime.get_investigation_design(investigation.investigation_design_id)
+            try:
+                ledger = runtime.ensure_hypothesis_ledger(
+                    investigation_id, (item.hypothesis for item in design.hypotheses)
+                )
+            except ValueError as exc:
+                return JSONResponse(
+                    {"error": "hypothesis_lifecycle_unavailable", "detail": str(exc)},
+                    status_code=409,
+                )
         if ledger is None:
+            restoration_error = runtime.hypothesis_restore_error(investigation_id)
+            if restoration_error is not None:
+                return JSONResponse(
+                    {"error": "hypothesis_lifecycle_unavailable", "detail": restoration_error},
+                    status_code=409,
+                )
             return JSONResponse(
                 {"error": "hypothesis_lifecycle_not_initialized"}, status_code=409
             )
@@ -1081,16 +1597,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 {"error": "invalid_hypothesis_transition", "detail": str(exc)},
                 status_code=409,
             )
-        runtime.audit_trail.append(
-            aggregate_id=investigation_id, event_type="hypothesis_transition",
-            actor=request.actor, payload={
-                "hypothesis_id": hypothesis_id, "version": record.version,
-                "state": record.lifecycle, "rationale": request.rationale,
-                "event_ids": [item.event_id for item in ledger.events(hypothesis_id)],
-            },
-        )
-        runtime.index_hypothesis(
-            investigation_id, record,
+        runtime.record_hypothesis_lifecycle_event(
+            investigation_id, ledger, ledger.events(hypothesis_id)[-1],
             mission_id=runtime.investigation_service.get(investigation_id).mission_id,
         )
         return JSONResponse(jsonable_encoder({"hypothesis": record, "events": ledger.events(hypothesis_id)}))
@@ -1181,6 +1689,62 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         if item is None:
             return JSONResponse({"error": "Earth Object not found"}, status_code=404)
         return JSONResponse(jsonable_encoder(item))
+
+    @app.post(
+        "/api/v1/platform/earth-objects/id/{object_id}/transitions",
+        summary="Create an explicitly supported Earth Object reclassification or lifecycle revision",
+    )
+    async def transition_earth_object(
+        object_id: str, transition: EarthObjectRevisionTransition
+    ) -> JSONResponse:
+        runtime = get_engine().platform_runtime
+        previous = runtime.earth_objects.get(object_id)
+        if previous is None:
+            return JSONResponse({"error": "Earth Object not found"}, status_code=404)
+        if not set(transition.observation_ids).issubset(
+            set(previous.source_observation_ids)
+        ) or not set(transition.evidence_ids).issubset(set(previous.evidence_ids)):
+            raise QueryError("Transition support must already be linked to the selected Earth Object.")
+        declaration_payload = previous.provenance.get("declaration")
+        if not isinstance(declaration_payload, dict):
+            raise QueryError("Earth Object lacks a replayable source declaration.")
+        try:
+            original = EarthObjectDeclaration.model_validate(declaration_payload)
+            observations = tuple(
+                Observation.model_validate(record)
+                for record in previous.provenance.get("source_records", ())
+            )
+            evidence = tuple(
+                Evidence.model_validate(record)
+                for record in previous.provenance.get("evidence_records", ())
+            )
+            if transition.transition_type == "reclassification":
+                object_type = transition.new_object_type
+                lifecycle = previous.lifecycle
+            else:
+                object_type = previous.object_type
+                lifecycle = transition.new_lifecycle
+            declaration = EarthObjectDeclaration.model_validate(
+                {
+                    **original.model_dump(mode="json"),
+                    "object_type": object_type,
+                    "declared_by": transition.actor,
+                    "investigation_id": previous.investigation_id,
+                    "observation_ids": previous.source_observation_ids,
+                    "evidence_ids": previous.evidence_ids,
+                    "supporting_evidence_ids": previous.supporting_evidence_ids,
+                    "conflicting_evidence_ids": previous.conflicting_evidence_ids,
+                    "unresolved_evidence_ids": previous.unresolved_evidence_ids,
+                    "lifecycle": lifecycle,
+                    "revision_transition": transition.model_dump(mode="json"),
+                }
+            )
+            revised = runtime.materialize_earth_object(
+                declaration, observations, evidence=evidence
+            )
+        except ValueError as exc:
+            raise QueryError(str(exc)) from exc
+        return JSONResponse(jsonable_encoder(revised))
 
     @app.get(
         "/api/v1/platform/earth-objects/graph",

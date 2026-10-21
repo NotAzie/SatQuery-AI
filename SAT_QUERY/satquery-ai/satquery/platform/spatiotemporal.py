@@ -20,30 +20,37 @@ from .contracts import (
 
 
 class ExactSupportObservationStackBuilder:
-    """Build time series only where measured pixel support is exactly known.
+    """Build time series where the spatial support is explicitly identical.
 
-    The first supported profile is point-sampled raster measurements. The
-    builder does not reproject geometries, convert units, interpolate time, or
-    calculate trends. Unresolved variables can only be grouped within the same
-    declared dataset and source-variable name.
+    Supported profiles are point-sampled raster pixels and direct point
+    observations. The builder does not reproject geometries, convert units,
+    interpolate time, or calculate trends. Unresolved variables can only be
+    grouped within the same declared dataset and source-variable name.
     """
 
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
 
     def build(self, observations: tuple[Observation, ...]) -> ObservationStackBuild:
         records: dict[str, list[dict[str, Any]]] = defaultdict(list)
         issues: list[ObservationAlignmentIssue] = []
-        sampled_observations = tuple(
+        eligible_observations = tuple(
             item
             for item in observations
             if item.provenance.get("satquery:asset_sampling") is not None
+            or _has_point_support(item)
         )
-        for observation in sampled_observations:
+        for observation in eligible_observations:
+            has_raster_sampling_request = (
+                observation.provenance.get("satquery:asset_sampling") is not None
+            )
             measurements = tuple(
                 measurement
                 for measurement in observation.canonical_measurements
-                if measurement.source_metadata.get("sampling")
-                == "pixel_containing_point"
+                if (
+                    measurement.source_metadata.get("sampling") == "pixel_containing_point"
+                    if has_raster_sampling_request
+                    else True
+                )
             )
             if not measurements:
                 request = observation.provenance.get("satquery:asset_sampling", {})
@@ -63,6 +70,10 @@ class ExactSupportObservationStackBuilder:
                     )
                 continue
             for measurement in measurements:
+                is_raster_sample = (
+                    measurement.source_metadata.get("sampling")
+                    == "pixel_containing_point"
+                )
                 issue = None
                 if (
                     observation.observed_at is None
@@ -87,6 +98,13 @@ class ExactSupportObservationStackBuilder:
                     )
 
                 value = measurement.value
+                if issue is None and value is None:
+                    issue = self._issue(
+                        observation,
+                        measurement,
+                        "missing_measurement",
+                        "The source reported no numeric value for this measurement.",
+                    )
                 if issue is None and (
                     isinstance(value, bool)
                     or not isinstance(value, (int, float))
@@ -106,8 +124,17 @@ class ExactSupportObservationStackBuilder:
                         "A declared unit is required for a comparable measurement stack.",
                     )
                 support = measurement.source_metadata
-                geometry = support.get("pixel_support_geometry")
-                crs = support.get("pixel_support_crs")
+                alignment = "exact_pixel_support" if is_raster_sample else "exact_point_support"
+                geometry_key, crs_key = (
+                    ("pixel_support_geometry", "pixel_support_crs")
+                    if is_raster_sample
+                    else ("observation_support_geometry", "observation_support_crs")
+                )
+                geometry = support.get(geometry_key)
+                crs = support.get(crs_key)
+                if not is_raster_sample:
+                    geometry = observation.geometry
+                    crs = observation.crs
                 if issue is None and (
                     not isinstance(geometry, dict)
                     or not isinstance(crs, str)
@@ -117,13 +144,15 @@ class ExactSupportObservationStackBuilder:
                         observation,
                         measurement,
                         "unknown_spatial_support",
-                        "The measurement does not declare a pixel support geometry and CRS.",
+                        "The measurement does not declare its exact spatial support geometry and CRS.",
                     )
                 if issue is not None:
                     issues.append(issue)
                     continue
 
-                support_key = _fingerprint({"geometry": geometry, "crs": crs})
+                support_key = _fingerprint(
+                    {"alignment": alignment, "geometry": geometry, "crs": crs}
+                )
                 records[variable_key].append(
                     {
                         "observation": observation,
@@ -138,13 +167,14 @@ class ExactSupportObservationStackBuilder:
                         "support_key": support_key,
                         "support_geometry": geometry,
                         "support_crs": crs,
+                        "spatial_alignment": alignment,
                     }
                 )
 
         stacks: list[ObservationStack] = []
         for variable_key, values in sorted(records.items()):
             if len(values) < 2:
-                if len(sampled_observations) > 1:
+                if len(eligible_observations) > 1:
                     value = values[0]
                     issues.append(
                         self._issue(
@@ -179,7 +209,7 @@ class ExactSupportObservationStackBuilder:
                             value["observation"],
                             value["measurement"],
                             "support_not_shared",
-                            "No second observation has this exact pixel geometry and CRS.",
+                            "No second observation has this exact spatial geometry and CRS.",
                         )
                     )
                     continue
@@ -213,9 +243,19 @@ class ExactSupportObservationStackBuilder:
                         unit=value["measurement"].unit,
                         source_variable=value["measurement"].source_variable,
                         uncertainty=dict(value["observation"].uncertainty),
-                        source_measurement_metadata=dict(
-                            value["measurement"].source_metadata
-                        ),
+                        source_measurement_metadata={
+                            **dict(value["measurement"].source_metadata),
+                            (
+                                "pixel_support_geometry"
+                                if value["spatial_alignment"] == "exact_pixel_support"
+                                else "observation_support_geometry"
+                            ): value["support_geometry"],
+                            (
+                                "pixel_support_crs"
+                                if value["spatial_alignment"] == "exact_pixel_support"
+                                else "observation_support_crs"
+                            ): value["support_crs"],
+                        },
                         provenance=dict(value["observation"].provenance),
                     )
                     for value in ordered
@@ -227,6 +267,7 @@ class ExactSupportObservationStackBuilder:
                     "unit": next(iter(units)),
                     "support_geometry": support_geometry,
                     "support_crs": support_crs,
+                    "spatial_alignment": ordered[0]["spatial_alignment"],
                     "members": [
                         {
                             "observation_id": member.observation_id,
@@ -246,7 +287,7 @@ class ExactSupportObservationStackBuilder:
                         unit=next(iter(units)),
                         spatial_support_geometry=support_geometry,
                         spatial_support_crs=support_crs,
-                        spatial_alignment="exact_pixel_support",
+                        spatial_alignment=ordered[0]["spatial_alignment"],
                         temporal_alignment="source_acquisition_time",
                         members=members,
                         reproducibility={
@@ -256,7 +297,9 @@ class ExactSupportObservationStackBuilder:
                                 member.observation_id for member in members
                             ),
                             "unit_policy": "exact_match_no_conversion",
-                            "spatial_policy": "exact_geometry_and_crs_no_resampling",
+                            "spatial_policy": (
+                                "exact_geometry_and_crs_no_resampling_or_reprojection"
+                            ),
                             "temporal_policy": "source_acquisition_time_no_interpolation",
                             "uncertainty_policy": "source_uncertainty_copied_per_member_no_aggregation",
                         },
@@ -301,7 +344,7 @@ class ConsecutiveTemporalDifferenceEngine:
     """Describe adjacent sample differences without performing inference.
 
     Inputs must already be grouped by :class:`ExactSupportObservationStackBuilder`,
-    which guarantees exact pixel support and exact declared-unit equality.
+    which guarantees exact spatial support and exact declared-unit equality.
     The engine does not calculate rates, trends, significance, uncertainty, or
     physical interpretation. Every output retains both complete source members.
     """
@@ -375,6 +418,7 @@ class ConsecutiveTemporalDifferenceEngine:
                     "later_observation_id": later.observation_id,
                     "earlier_value": earlier.value,
                     "later_value": later.value,
+                    "spatial_alignment": stack.spatial_alignment,
                 }
                 diagnostics.append(
                     TemporalDifferenceDiagnostic(
@@ -385,6 +429,7 @@ class ConsecutiveTemporalDifferenceEngine:
                         unit=stack.unit,
                         spatial_support_geometry=stack.spatial_support_geometry,
                         spatial_support_crs=stack.spatial_support_crs,
+                        spatial_alignment=stack.spatial_alignment,
                         earlier=earlier,
                         later=later,
                         elapsed_seconds=(later.observed_at - earlier.observed_at).total_seconds(),
@@ -398,7 +443,9 @@ class ConsecutiveTemporalDifferenceEngine:
                                 earlier.observation_id,
                                 later.observation_id,
                             ),
-                            "spatial_support_policy": "inherited_exact_pixel_support_stack",
+                            "spatial_support_policy": (
+                                f"inherited_{stack.spatial_alignment}_stack"
+                            ),
                             "unit_policy": "exact_declared_unit_match_no_conversion",
                             "temporal_policy": "consecutive_source_acquisition_times_no_interpolation",
                             "uncertainty_policy": "source_uncertainty_preserved_per_member_not_propagated",
@@ -424,3 +471,15 @@ def _fingerprint(value: dict[str, Any]) -> str:
         value, sort_keys=True, separators=(",", ":"), default=str
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _has_point_support(observation: Observation) -> bool:
+    geometry = observation.geometry
+    return (
+        isinstance(geometry, dict)
+        and geometry.get("type") == "Point"
+        and isinstance(geometry.get("coordinates"), (tuple, list))
+        and len(geometry["coordinates"]) == 2
+        and isinstance(observation.crs, str)
+        and bool(observation.crs.strip())
+    )

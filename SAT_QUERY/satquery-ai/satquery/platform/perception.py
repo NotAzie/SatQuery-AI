@@ -51,6 +51,7 @@ _PLATFORM_RASTER_CAPABILITIES = frozenset(
         "raster_point_sampling",
         "raster_zonal_analysis",
         "raster_geodesic_area_weighting",
+        "raster_categorical_polygonization",
     }
 )
 _PLATFORM_RASTER_QUERY_FIELDS = frozenset(
@@ -60,6 +61,7 @@ _PLATFORM_RASTER_QUERY_FIELDS = frozenset(
         "raster_pixel_selection",
         "raster_weighting",
         "raster_semantics",
+        "raster_component_extraction",
     }
 )
 
@@ -147,6 +149,8 @@ class CapabilityConnectorSelector:
             required.add("raster_point_sampling")
         if query.raster_analysis == "zonal_descriptive":
             required.add("raster_zonal_analysis")
+        if query.raster_component_extraction:
+            required.add("raster_categorical_polygonization")
         # Raster execution is supplied by the platform processing runtime. The
         # selected implementation must expose compatible dataset assets, but
         # the acquisition connector itself need not implement raster analysis.
@@ -311,6 +315,8 @@ class CapabilityConnectorSelector:
                     requested_fields.add("raster_weighting")
             if query.raster_semantics:
                 requested_fields.add("raster_semantics")
+            if query.raster_component_extraction:
+                requested_fields.add("raster_component_extraction")
             connector_fields = requested_fields - _PLATFORM_RASTER_QUERY_FIELDS
             if not connector_fields.issubset(capability.supported_query_fields):
                 continue
@@ -722,6 +728,7 @@ class PerceptionEngine:
                 self.raster_asset_sampler.VERSION,
                 self.raster_analysis_service.VERSION,
                 self.observation_stack_builder.VERSION,
+                self.temporal_difference_engine.VERSION,
             ),
         )
         if self.cache is not None:

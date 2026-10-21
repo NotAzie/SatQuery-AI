@@ -1,29 +1,10 @@
-"""SatQuery AI - an interactive vision-language assistant for remote sensing.
+"""SatQuery's Earth Intelligence platform and retained image capability.
 
-Built by Az for Smart India Hackathon problem statement SIH26167.
-
-Ask a satellite or aerial image a question in natural language. SatQuery
-understands the query, picks a specialist vision capability, runs it against
-the actual pixels, and returns the answer with an execution trace showing
-which capability produced it.
-
-Quick start::
-
-    from satquery import SatQueryEngine
-
-    engine = SatQueryEngine()
-    response = engine.answer(
-        "where are the buildings",
-        image_paths=["/data/scenes/tile_01.png"],
-    )
-    print(response.answer)
-    print(response.tools_used)
-
-Or serve the API and demo console::
-
-    python -m satquery
+Use :class:`SatQueryClient` to connect to the running platform API, or
+:class:`SatQueryEngine` for the local image-analysis compatibility workflow.
 """
 
+from .client import CLIENT_API_VERSION, PlatformAPIError, SatQueryClient
 from .config import Settings, get_settings, load_dotenv, set_settings
 from .errors import (
     ConfigurationError,
@@ -56,37 +37,40 @@ from .schemas import (
 __version__ = "1.0.0"
 __author__ = "Az"
 __all__ = [
-    "__version__",
-    "__author__",
-    "SatQueryEngine",
-    "Settings",
-    "get_settings",
-    "set_settings",
-    "load_dotenv",
-    "ModelRegistry",
-    "probe_dependencies",
-    "QueryRouter",
-    "extract_target",
+    "CLIENT_API_VERSION",
     "BackendKind",
-    "Intent",
-    "Modality",
-    "QueryPlan",
-    "QueryRequest",
-    "QueryResponse",
-    "Region",
-    "ToolName",
-    "ToolResult",
-    "TraceStep",
-    "SatQueryError",
     "ConfigurationError",
     "DependencyMissingError",
     "ImageError",
     "ImageNotFoundError",
+    "Intent",
+    "Modality",
     "ModelLoadError",
+    "ModelRegistry",
+    "PlatformAPIError",
     "QueryError",
+    "QueryPlan",
+    "QueryRequest",
+    "QueryResponse",
+    "QueryRouter",
+    "Region",
     "ResourceNotConfiguredError",
     "RoutingError",
+    "SatQueryClient",
+    "SatQueryEngine",
+    "SatQueryError",
+    "Settings",
     "ToolExecutionError",
+    "ToolName",
+    "ToolResult",
+    "TraceStep",
+    "__author__",
+    "__version__",
+    "extract_target",
+    "get_settings",
+    "load_dotenv",
+    "probe_dependencies",
+    "set_settings",
 ]
 
 

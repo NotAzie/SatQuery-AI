@@ -378,6 +378,7 @@ class InvestigationService:
         *,
         investigation_plan_id: Optional[str] = None,
         investigation_design_id: Optional[str] = None,
+        investigation_id: Optional[str] = None,
     ) -> Investigation:
         if mission.status != MissionStatus.ACTIVE:
             raise ValidationError(
@@ -387,6 +388,7 @@ class InvestigationService:
         if tasks:
             ExecutionPlan(mission_id=mission.mission_id, tasks=tasks)
         investigation = Investigation(
+            **({"investigation_id": investigation_id} if investigation_id else {}),
             mission_id=mission.mission_id,
             investigation_plan_id=investigation_plan_id,
             investigation_design_id=investigation_design_id,
@@ -618,6 +620,7 @@ class MissionService:
         *,
         investigation_plan_id: Optional[str] = None,
         investigation_design_id: Optional[str] = None,
+        investigation_id: Optional[str] = None,
     ) -> Investigation:
         mission = self.repository.get(mission_id)
         return self.investigations.create(
@@ -625,6 +628,7 @@ class MissionService:
             tasks,
             investigation_plan_id=investigation_plan_id,
             investigation_design_id=investigation_design_id,
+            investigation_id=investigation_id,
         )
 
     def complete(self, mission_id: str) -> Mission:

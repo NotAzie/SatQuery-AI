@@ -30,6 +30,52 @@ def test_defaults_are_usable_without_any_env():
     assert settings.llm_available is False
 
 
+def test_platform_audit_storage_follows_durable_platform_configuration(tmp_path):
+    from satquery.platform.config import PlatformConfig
+    from satquery.platform.scientific_governance import SQLiteAuditTrail
+
+    database = tmp_path / "platform.sqlite"
+    config = PlatformConfig.load(
+        environ={}, overrides={"storage": {"earth_memory_path": str(database)}}
+    )
+    audit = config.create_audit_trail()
+    assert isinstance(audit, SQLiteAuditTrail)
+    audit.append(
+        aggregate_id="investigation-1", event_type="planning", actor="planner",
+        payload={"plan": "p1"},
+    )
+    assert SQLiteAuditTrail(database).verify("investigation-1")
+
+    dedicated_path = tmp_path / "audit-only.sqlite"
+    dedicated = PlatformConfig.load(
+        environ={}, overrides={"storage": {"audit_path": str(dedicated_path)}}
+    )
+    assert isinstance(dedicated.create_audit_trail(), SQLiteAuditTrail)
+    assert dedicated.create_audit_trail().path == dedicated_path
+
+
+def test_effective_storage_paths_are_the_same_paths_used_by_store_factories():
+    from satquery.platform.config import PlatformConfig
+
+    shared_path = ".satquery-shared.sqlite"
+    shared = PlatformConfig.load(
+        environ={}, overrides={"storage": {"monitoring_path": str(shared_path)}}
+    )
+    assert set(shared.effective_storage_paths().values()) == {str(shared_path)}
+
+    execution_path = ".satquery-execution.sqlite"
+    dedicated = PlatformConfig.load(
+        environ={}, overrides={"storage": {"execution_path": str(execution_path)}}
+    )
+    assert dedicated.effective_storage_paths() == {
+        "earth_memory": None,
+        "lifecycle": None,
+        "execution": execution_path,
+        "audit": execution_path,
+        "monitoring": execution_path,
+    }
+
+
 def test_env_overrides_are_typed(monkeypatch):
     monkeypatch.setenv("SATQUERY_DEVICE", "cpu")
     monkeypatch.setenv("SATQUERY_BATCH_SIZE", "4")

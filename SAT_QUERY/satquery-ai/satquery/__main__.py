@@ -14,13 +14,16 @@ import logging
 import mimetypes
 import os
 import sys
+import urllib.parse
 from pathlib import Path
-from typing import List, Optional
 
+from .client import SatQueryClient
 from .config import get_settings
 from .errors import SatQueryError
 from .platform.contracts import EarthQuery
 from .schemas import ToolName
+
+_platform_client_instance: SatQueryClient | None = None
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -204,16 +207,24 @@ def command_platform_inspect(_args: argparse.Namespace) -> int:
 
 
 def command_platform_capabilities(_args: argparse.Namespace) -> int:
-    payload = _platform_api_request("GET", "/api/v1/platform/earth/capabilities")
+    payload = _platform_client().capability_matrix()
     print(json.dumps(payload, indent=2))
     return 0
 
 
-def command_platform_discover(args: argparse.Namespace) -> int:
-    references = _platform_api_request(
-        "POST", f"/api/v1/platform/connectors/{args.connector_id}/discover"
-    )
-    print(json.dumps(references, indent=2))
+def command_platform_connectors(args: argparse.Namespace) -> int:
+    action = getattr(args, "connector_action", None)
+    if action == "health":
+        result = _platform_api_request("GET", "/api/v1/platform/connectors/health")
+    elif action in {"probe", "discover"}:
+        connector_id = _api_segment(args.connector_id)
+        suffix = "health-check" if action == "probe" else "discover"
+        result = _platform_api_request(
+            "POST", f"/api/v1/platform/connectors/{connector_id}/{suffix}"
+        )
+    else:
+        result = _platform_api_request("GET", "/api/v1/platform/connectors")
+    print(json.dumps(result, indent=2))
     return 0
 
 
@@ -230,24 +241,6 @@ def _load_earth_query(path: str) -> EarthQuery:
         ) from exc
 
 
-def command_earth_plan(args: argparse.Namespace) -> int:
-    query = _load_earth_query(args.query_file)
-    plan = _platform_api_request(
-        "POST", "/api/v1/platform/earth/plan", payload=query.model_dump(mode="json")
-    )
-    print(json.dumps(plan, indent=2))
-    return 0
-
-
-def command_earth_observe(args: argparse.Namespace) -> int:
-    query = _load_earth_query(args.query_file)
-    result = _platform_api_request(
-        "POST", "/api/v1/platform/earth/observe", payload=query.model_dump(mode="json")
-    )
-    print(json.dumps(result, indent=2))
-    return 0
-
-
 def _platform_api_url() -> str:
     settings = get_settings()
     return os.environ.get(
@@ -256,56 +249,38 @@ def _platform_api_url() -> str:
 
 
 def _platform_api_request(method: str, path: str, *, payload=None, params=None):
-    import httpx
+    return _platform_client().request(method, path, payload=payload, params=params)
 
-    from .errors import QueryError
 
-    try:
-        response = httpx.request(
-            method,
-            f"{_platform_api_url()}{path}",
-            json=payload,
-            params=params,
-            timeout=60,
-        )
-    except httpx.HTTPError as exc:
-        raise QueryError(
-            "The SatQuery platform API could not be reached.",
-            remediation=[
-                "Start the platform with `python -m satquery serve`.",
-                "Set SATQUERY_API_URL if the server is not at the local default.",
-            ],
-        ) from exc
-    try:
-        body = response.json()
-    except ValueError:
-        body = {"detail": response.text}
-    if not response.is_success:
-        detail = body.get("detail") or body.get("error") or response.reason_phrase
-        remediation = body.get("remediation", [])
-        raise QueryError(str(detail), remediation=remediation)
-    return body
+def _api_segment(value: str) -> str:
+    """Encode one caller-controlled identifier as a single URL path segment."""
+    return urllib.parse.quote(value, safe="")
+
+
+def _platform_client() -> SatQueryClient:
+    global _platform_client_instance
+    if _platform_client_instance is None:
+        _platform_client_instance = SatQueryClient(base_url=_platform_api_url())
+    return _platform_client_instance
+
+
+def _close_platform_client() -> None:
+    global _platform_client_instance
+    if _platform_client_instance is not None:
+        _platform_client_instance.close()
+        _platform_client_instance = None
 
 
 def command_platform_plan(args: argparse.Namespace) -> int:
     query = _load_earth_query(args.query_file)
-    endpoint = (
-        "/api/v1/platform/earth/plan/explain"
-        if args.explain
-        else "/api/v1/platform/earth/plan"
-    )
-    payload = _platform_api_request(
-        "POST", endpoint, payload=query.model_dump(mode="json")
-    )
+    payload = _platform_client().plan_earth(query, explain=args.explain)
     print(json.dumps(payload, indent=2))
     return 0
 
 
 def command_platform_observe(args: argparse.Namespace) -> int:
     query = _load_earth_query(args.query_file)
-    payload = _platform_api_request(
-        "POST", "/api/v1/platform/earth/observe", payload=query.model_dump(mode="json")
-    )
+    payload = _platform_client().observe_earth(query)
     print(json.dumps(payload, indent=2))
     return 0
 
@@ -321,8 +296,36 @@ def command_platform_investigate(args: argparse.Namespace) -> int:
     created = _platform_api_request(
         "POST", "/api/v1/platform/investigate", payload=payload
     )
-    print(json.dumps(created, indent=2))
-    return 0
+    if not getattr(args, "execute", False):
+        print(json.dumps(created, indent=2))
+        return 0
+
+    investigation = created.get("investigation")
+    investigation_id = (
+        investigation.get("investigation_id")
+        if isinstance(investigation, dict)
+        else None
+    )
+    tasks = investigation.get("tasks", ()) if isinstance(investigation, dict) else ()
+    if created.get("state") != "ready" or not investigation_id or not tasks:
+        print(json.dumps({
+            **created,
+            "execution": None,
+            "execution_skipped": {
+                "reason": "investigation_not_ready",
+                "next_step": created.get("next_step"),
+            },
+        }, indent=2))
+        return 2
+
+    execution_artifacts = _execute_investigation_and_collect_artifacts(
+        investigation_id
+    )
+    print(json.dumps({
+        "creation": created,
+        **execution_artifacts,
+    }, indent=2))
+    return 0 if execution_artifacts["execution"].get("status") == "succeeded" else 1
 
 
 def command_platform_intelligence_design(args: argparse.Namespace) -> int:
@@ -353,12 +356,13 @@ def command_platform_list(args: argparse.Namespace) -> int:
 
 def command_platform_mission(args: argparse.Namespace) -> int:
     if args.mission_command == "show":
+        mission_id = _api_segment(args.mission_id)
         payload = {
             "mission": _platform_api_request(
-                "GET", f"/api/v1/platform/missions/{args.mission_id}"
+                "GET", f"/api/v1/platform/missions/{mission_id}"
             ),
             "investigations": _platform_api_request(
-                "GET", f"/api/v1/platform/missions/{args.mission_id}/investigations"
+                "GET", f"/api/v1/platform/missions/{mission_id}/investigations"
             ),
         }
     else:
@@ -368,21 +372,22 @@ def command_platform_mission(args: argparse.Namespace) -> int:
 
 
 def command_platform_investigation(args: argparse.Namespace) -> int:
+    investigation_id = _api_segment(args.investigation_id)
     investigation = _platform_api_request(
-        "GET", f"/api/v1/platform/investigations/{args.investigation_id}"
+        "GET", f"/api/v1/platform/investigations/{investigation_id}"
     )
     executions = [
-        _platform_api_request("GET", f"/api/v1/platform/executions/{result_id}")
+        _platform_api_request("GET", f"/api/v1/platform/executions/{_api_segment(result_id)}")
         for result_id in investigation.get("result_ids", [])
     ]
     intelligence = _platform_api_request(
-        "GET", f"/api/v1/platform/investigations/{args.investigation_id}/intelligence"
+        "GET", f"/api/v1/platform/investigations/{investigation_id}/intelligence"
     )
     temporal_differences = _platform_api_request(
-        "GET", f"/api/v1/platform/investigations/{args.investigation_id}/temporal-differences"
+        "GET", f"/api/v1/platform/investigations/{investigation_id}/temporal-differences"
     )
     observation_stacks = _platform_api_request(
-        "GET", f"/api/v1/platform/investigations/{args.investigation_id}/observation-stacks"
+        "GET", f"/api/v1/platform/investigations/{investigation_id}/observation-stacks"
     )
     payload = {
         "investigation": investigation,
@@ -396,44 +401,75 @@ def command_platform_investigation(args: argparse.Namespace) -> int:
 
 
 def command_platform_investigation_execute(args: argparse.Namespace) -> int:
-    investigation_id = args.investigation_id
+    result = _execute_investigation_and_collect_artifacts(args.investigation_id)
+    print(json.dumps(result, indent=2))
+    return 0 if result["execution"].get("status") == "succeeded" else 1
+
+
+def _execute_investigation_and_collect_artifacts(investigation_id: str) -> dict:
+    """Execute through the platform API and collect inspectable run artifacts."""
+    investigation_path_id = _api_segment(investigation_id)
     execution = _platform_api_request(
-        "POST", f"/api/v1/platform/investigations/{investigation_id}/execute"
+        "POST", f"/api/v1/platform/investigations/{investigation_path_id}/execute"
     )
     observations = _platform_api_request(
-        "GET", f"/api/v1/platform/investigations/{investigation_id}/observations"
+        "GET", f"/api/v1/platform/investigations/{investigation_path_id}/observations"
     )
     provenance = _platform_api_request(
-        "GET", f"/api/v1/platform/investigations/{investigation_id}/provenance"
+        "GET", f"/api/v1/platform/investigations/{investigation_path_id}/provenance"
     )
     intelligence = _platform_api_request(
-        "GET", f"/api/v1/platform/investigations/{investigation_id}/intelligence"
+        "GET", f"/api/v1/platform/investigations/{investigation_path_id}/intelligence"
     )
     temporal_differences = _platform_api_request(
-        "GET", f"/api/v1/platform/investigations/{investigation_id}/temporal-differences"
+        "GET", f"/api/v1/platform/investigations/{investigation_path_id}/temporal-differences"
     )
     observation_stacks = _platform_api_request(
-        "GET", f"/api/v1/platform/investigations/{investigation_id}/observation-stacks"
+        "GET", f"/api/v1/platform/investigations/{investigation_path_id}/observation-stacks"
     )
-    print(
-        json.dumps(
-            {
-                "execution": execution,
-                "observations": observations,
-                "provenance": provenance,
-                "intelligence": intelligence,
-                "observation_stacks": observation_stacks,
-                "temporal_differences": temporal_differences,
-            },
-            indent=2,
+    earth_objects = _platform_api_request(
+        "GET",
+        "/api/v1/platform/earth-objects",
+        params={"investigation_id": investigation_id},
+    )
+    reasoning = _platform_api_request(
+        "GET", f"/api/v1/platform/investigations/{investigation_path_id}/reasoning"
+    )
+    report = _platform_api_request(
+        "GET", f"/api/v1/platform/investigations/{investigation_path_id}/report"
+    )
+    audit = _platform_api_request(
+        "GET", f"/api/v1/platform/investigations/{investigation_path_id}/audit"
+    )
+    reproducibility = _platform_api_request(
+        "GET", f"/api/v1/platform/investigations/{investigation_path_id}/reproducibility"
+    )
+    events = (
+        _platform_api_request(
+            "GET", f"/api/v1/platform/executions/{_api_segment(execution['plan_id'])}/events"
         )
+        if execution.get("plan_id")
+        else None
     )
-    return 0 if execution["status"] == "succeeded" else 1
+    return {
+        "execution": execution,
+        "events": events,
+        "observations": observations,
+        "provenance": provenance,
+        "intelligence": intelligence,
+        "observation_stacks": observation_stacks,
+        "earth_objects": earth_objects,
+        "reasoning": reasoning,
+        "temporal_differences": temporal_differences,
+        "report": report,
+        "audit": audit,
+        "reproducibility": reproducibility,
+    }
 
 
 def command_platform_investigation_cancel(args: argparse.Namespace) -> int:
     result = _platform_api_request(
-        "POST", f"/api/v1/platform/investigations/{args.investigation_id}/cancel"
+        "POST", f"/api/v1/platform/investigations/{_api_segment(args.investigation_id)}/cancel"
     )
     print(json.dumps(result, indent=2))
     return 0
@@ -441,10 +477,10 @@ def command_platform_investigation_cancel(args: argparse.Namespace) -> int:
 
 def command_platform_investigation_resume(args: argparse.Namespace) -> int:
     result = _platform_api_request(
-        "POST", f"/api/v1/platform/investigations/{args.investigation_id}/resume"
+        "POST", f"/api/v1/platform/investigations/{_api_segment(args.investigation_id)}/resume"
     )
     events = _platform_api_request(
-        "GET", f"/api/v1/platform/executions/{result['plan_id']}/events"
+        "GET", f"/api/v1/platform/executions/{_api_segment(result['plan_id'])}/events"
     )
     print(json.dumps({"execution": result, "events": events}, indent=2))
     return 0 if result["status"] == "succeeded" else 1
@@ -452,7 +488,7 @@ def command_platform_investigation_resume(args: argparse.Namespace) -> int:
 
 def command_platform_reasoning(args: argparse.Namespace) -> int:
     report = _platform_api_request(
-        "GET", f"/api/v1/platform/investigations/{args.investigation_id}/reasoning"
+        "GET", f"/api/v1/platform/investigations/{_api_segment(args.investigation_id)}/reasoning"
     )
     print(json.dumps(report, indent=2))
     return 0
@@ -461,7 +497,7 @@ def command_platform_reasoning(args: argparse.Namespace) -> int:
 def command_platform_hypotheses(args: argparse.Namespace) -> int:
     payload = _platform_api_request(
         "GET",
-        f"/api/v1/platform/investigations/{args.investigation_id}/hypotheses",
+        f"/api/v1/platform/investigations/{_api_segment(args.investigation_id)}/hypotheses",
     )
     print(json.dumps(payload, indent=2))
     return 0
@@ -470,7 +506,7 @@ def command_platform_hypotheses(args: argparse.Namespace) -> int:
 def command_platform_investigation_artifact(args: argparse.Namespace) -> int:
     payload = _platform_api_request(
         "GET",
-        f"/api/v1/platform/investigations/{args.investigation_id}/{args.artifact}",
+        f"/api/v1/platform/investigations/{_api_segment(args.investigation_id)}/{args.artifact}",
     )
     if args.artifact == "report":
         print(payload["markdown"])
@@ -515,6 +551,11 @@ def command_platform_earth_memory(args: argparse.Namespace) -> int:
         "text": args.query or None,
         "artifact_types": args.artifact_type or (),
         "canonical_variable": args.variable or None,
+        "mission_id": args.mission_id or None,
+        "investigation_id": args.investigation_id or None,
+        "method_id": args.method_id or None,
+        "source_artifact_id": args.source_artifact_id or None,
+        "cursor": args.cursor or None,
         "limit": args.limit,
     }
     if args.bbox is not None:
@@ -532,17 +573,34 @@ def command_platform_earth_memory(args: argparse.Namespace) -> int:
 
 
 def command_platform_earth_objects(args: argparse.Namespace) -> int:
+    if args.object_command == "transition":
+        try:
+            transition = json.loads(Path(args.transition_file).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            from .errors import QueryError
+
+            raise QueryError(
+                f"Could not load Earth Object transition JSON: {exc}",
+                remediation=["Provide a JSON file matching the EarthObjectRevisionTransition contract."],
+            ) from exc
+        payload = _platform_api_request(
+            "POST",
+            f"/api/v1/platform/earth-objects/id/{_api_segment(args.object_id)}/transitions",
+            payload=transition,
+        )
+        print(json.dumps(payload, indent=2))
+        return 0
     if args.object_command == "show":
-        path = f"/api/v1/platform/earth-objects/id/{args.object_id}"
+        path = f"/api/v1/platform/earth-objects/id/{_api_segment(args.object_id)}"
     elif args.object_command == "graph":
         path = "/api/v1/platform/earth-objects/graph"
-        if args.investigation_id:
-            path += f"?investigation_id={args.investigation_id}"
+        params = {"investigation_id": args.investigation_id} if args.investigation_id else None
     else:
         path = "/api/v1/platform/earth-objects"
-        if args.investigation_id:
-            path += f"?investigation_id={args.investigation_id}"
-    print(json.dumps(_platform_api_request("GET", path), indent=2))
+        params = {"investigation_id": args.investigation_id} if args.investigation_id else None
+    if args.object_command == "show":
+        params = None
+    print(json.dumps(_platform_api_request("GET", path, params=params), indent=2))
     return 0
 
 
@@ -550,6 +608,109 @@ def command_platform_runtime(_args: argparse.Namespace) -> int:
     print(
         json.dumps(_platform_api_request("GET", "/api/v1/platform/runtime"), indent=2)
     )
+    return 0
+
+
+def command_platform_monitor(args: argparse.Namespace) -> int:
+    if args.monitor_command == "create":
+        try:
+            query = json.loads(Path(args.query_file).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            from .errors import QueryError
+
+            raise QueryError(
+                f"Could not load monitoring EarthQuery JSON: {exc}",
+                remediation=["Provide a JSON file matching the EarthQuery contract."],
+            ) from exc
+        payload = {
+            "mission_id": args.mission_id,
+            "name": args.name,
+            "earth_query": query,
+            "interval_seconds": args.interval_seconds,
+            "priority": args.priority,
+            "overlap_policy": args.overlap_policy,
+        }
+        if args.schedule_id:
+            payload["schedule_id"] = args.schedule_id
+        if args.start_at:
+            payload["next_run_at"] = args.start_at
+        result = _platform_api_request(
+            "POST", "/api/v1/platform/monitoring/schedules", payload=payload
+        )
+    elif args.monitor_command == "list":
+        result = _platform_api_request(
+            "GET",
+            "/api/v1/platform/monitoring/schedules",
+            params={"mission_id": args.mission_id} if args.mission_id else None,
+        )
+    elif args.monitor_command == "runs":
+        result = _platform_api_request(
+            "GET", f"/api/v1/platform/monitoring/schedules/{_api_segment(args.schedule_id)}/runs"
+        )
+    elif args.monitor_command == "compare":
+        result = _platform_api_request(
+            "GET",
+            f"/api/v1/platform/monitoring/schedules/{_api_segment(args.schedule_id)}/comparison",
+            params={"limit": args.limit},
+        )
+    elif args.monitor_command == "triggers":
+        result = _platform_api_request(
+            "GET", f"/api/v1/platform/monitoring/schedules/{_api_segment(args.schedule_id)}/triggers"
+        )
+    elif args.monitor_command == "run-due":
+        result = _platform_api_request(
+            "POST", "/api/v1/platform/monitoring/run-due", params={"limit": args.limit}
+        )
+    elif args.monitor_command == "health":
+        result = _platform_api_request("GET", "/api/v1/platform/monitoring/health")
+    elif args.monitor_command == "events":
+        filters = {"limit": args.limit}
+        if args.schedule_id:
+            filters["schedule_id"] = args.schedule_id
+        if args.run_id:
+            filters["run_id"] = args.run_id
+        if args.cursor:
+            filters["cursor"] = args.cursor
+        result = _platform_api_request(
+            "GET", "/api/v1/platform/monitoring/events/page", params=filters
+        )
+    elif args.monitor_command == "notifications":
+        filters = {"limit": args.limit}
+        if args.schedule_id:
+            filters["schedule_id"] = args.schedule_id
+        if args.unread_only:
+            filters["unread_only"] = True
+        result = _platform_api_request(
+            "GET", "/api/v1/platform/monitoring/notifications", params=filters
+        )
+    elif args.monitor_command == "acknowledge":
+        result = _platform_api_request(
+            "POST", f"/api/v1/platform/monitoring/notifications/{_api_segment(args.notification_id)}/acknowledge"
+        )
+    elif args.monitor_command == "update":
+        try:
+            update = json.loads(Path(args.update_file).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            from .errors import QueryError
+
+            raise QueryError(
+                f"Could not load monitoring schedule update JSON: {exc}",
+                remediation=["Provide expected_revision and at least one schedule field."],
+            ) from exc
+        result = _platform_api_request(
+            "PATCH",
+            "/api/v1/platform/monitoring/schedules/"
+            + _api_segment(args.schedule_id),
+            payload=update,
+        )
+    else:
+        enabled = args.monitor_command == "enable"
+        action = "enable" if enabled else "disable"
+        result = _platform_api_request(
+            "POST",
+            f"/api/v1/platform/monitoring/schedules/{_api_segment(args.schedule_id)}/{action}",
+        )
+    print(json.dumps(result, indent=2))
     return 0
 
 
@@ -613,18 +774,22 @@ def build_parser() -> argparse.ArgumentParser:
         "discover", help="Discover datasets from one connector."
     )
     discover.add_argument("connector_id")
-    discover.set_defaults(func=command_platform_discover)
+    discover.set_defaults(
+        func=command_platform_connectors, connector_action="discover"
+    )
 
     earth = sub.add_parser("earth", help="Plan or run a canonical EarthQuery.")
     earth_sub = earth.add_subparsers(dest="earth_command", required=True)
     plan = earth_sub.add_parser("plan", help="Show modality and dataset coverage.")
     plan.add_argument("query_file", help="Path to a JSON EarthQuery document.")
-    plan.set_defaults(func=command_earth_plan)
+    # Keep the original `earth plan` spelling as an alias to the same client
+    # operation used by the platform-first `plan` command.
+    plan.set_defaults(func=command_platform_plan, explain=False)
     observe = earth_sub.add_parser(
         "observe", help="Acquire registered Earth observations."
     )
     observe.add_argument("query_file", help="Path to a JSON EarthQuery document.")
-    observe.set_defaults(func=command_earth_observe)
+    observe.set_defaults(func=command_platform_observe)
 
     investigate = sub.add_parser(
         "investigate",
@@ -637,6 +802,11 @@ def build_parser() -> argparse.ArgumentParser:
     investigate.add_argument("--name", help="Mission name; defaults to the objective.")
     investigate.add_argument(
         "--mission-id", help="Add this investigation to an existing mission."
+    )
+    investigate.add_argument(
+        "--execute",
+        action="store_true",
+        help="Explicitly acquire observations when the generated plan is executable, then print its report.",
     )
     investigate.set_defaults(func=command_platform_investigate)
 
@@ -686,7 +856,23 @@ def build_parser() -> argparse.ArgumentParser:
     connectors_cmd = sub.add_parser(
         "connectors", help="List registered sensing implementations."
     )
-    connectors_cmd.set_defaults(func=command_platform_list, kind="connectors")
+    connectors_cmd.set_defaults(func=command_platform_connectors)
+    connectors_sub = connectors_cmd.add_subparsers(
+        dest="connector_action", required=False
+    )
+    connectors_sub.add_parser(
+        "health", help="Read passive connector health and request metrics."
+    ).set_defaults(func=command_platform_connectors)
+    connector_probe = connectors_sub.add_parser(
+        "probe", help="Explicitly contact one connector's health endpoint."
+    )
+    connector_probe.add_argument("connector_id")
+    connector_probe.set_defaults(func=command_platform_connectors)
+    connector_discover = connectors_sub.add_parser(
+        "discover", help="Explicitly discover datasets from one connector."
+    )
+    connector_discover.add_argument("connector_id")
+    connector_discover.set_defaults(func=command_platform_connectors)
 
     mission_cmd = sub.add_parser("mission", help="Inspect local Earth missions.")
     mission_sub = mission_cmd.add_subparsers(dest="mission_command", required=True)
@@ -698,6 +884,83 @@ def build_parser() -> argparse.ArgumentParser:
     )
     mission_show.add_argument("mission_id")
     mission_show.set_defaults(func=command_platform_mission)
+
+    monitor_cmd = sub.add_parser(
+        "monitor", help="Schedule and inspect recurring Earth investigations."
+    )
+    monitor_sub = monitor_cmd.add_subparsers(dest="monitor_command", required=True)
+    monitor_list = monitor_sub.add_parser("list", help="List monitoring schedules.")
+    monitor_list.add_argument("--mission-id")
+    monitor_list.set_defaults(func=command_platform_monitor)
+    monitor_create = monitor_sub.add_parser(
+        "create", help="Create a recurring schedule from an EarthQuery JSON file."
+    )
+    monitor_create.add_argument("mission_id")
+    monitor_create.add_argument("--name", required=True)
+    monitor_create.add_argument("--interval-seconds", required=True, type=int)
+    monitor_create.add_argument("--priority", type=int, default=0)
+    monitor_create.add_argument(
+        "--overlap-policy", choices=("skip_while_running", "allow"),
+        default="skip_while_running",
+    )
+    monitor_create.add_argument("--query-file", required=True)
+    monitor_create.add_argument("--schedule-id")
+    monitor_create.add_argument("--start-at", help="Timezone-aware ISO-8601 first due time.")
+    monitor_create.set_defaults(func=command_platform_monitor)
+    monitor_update = monitor_sub.add_parser(
+        "update", help="Create a schedule revision from a JSON patch contract."
+    )
+    monitor_update.add_argument("schedule_id")
+    monitor_update.add_argument("--update-file", required=True)
+    monitor_update.set_defaults(func=command_platform_monitor)
+    for action in ("enable", "disable"):
+        schedule_action = monitor_sub.add_parser(action)
+        schedule_action.add_argument("schedule_id")
+        schedule_action.set_defaults(func=command_platform_monitor)
+    monitor_runs = monitor_sub.add_parser("runs", help="List run history for a schedule.")
+    monitor_runs.add_argument("schedule_id")
+    monitor_runs.set_defaults(func=command_platform_monitor)
+    monitor_compare = monitor_sub.add_parser(
+        "compare", help="Align measurements from recent runs of one schedule."
+    )
+    monitor_compare.add_argument("schedule_id")
+    monitor_compare.add_argument("--limit", type=int, default=10)
+    monitor_compare.set_defaults(func=command_platform_monitor)
+    monitor_triggers = monitor_sub.add_parser(
+        "triggers", help="Inspect configured rule policies and trigger history."
+    )
+    monitor_triggers.add_argument("schedule_id")
+    monitor_triggers.set_defaults(func=command_platform_monitor)
+    monitor_due = monitor_sub.add_parser(
+        "run-due", help="Execute due schedules now through the investigation DAG."
+    )
+    monitor_due.add_argument("--limit", type=int, default=100)
+    monitor_due.set_defaults(func=command_platform_monitor)
+    monitor_sub.add_parser("health", help="Inspect scheduler and lease health.").set_defaults(
+        func=command_platform_monitor
+    )
+    monitor_events = monitor_sub.add_parser(
+        "events", help="Inspect the monitoring lifecycle event journal."
+    )
+    monitor_events.add_argument("--schedule-id")
+    monitor_events.add_argument("--run-id")
+    monitor_events.add_argument("--limit", type=int, default=100)
+    monitor_events.add_argument(
+        "--cursor", help="Continue from the next_cursor returned by the prior page."
+    )
+    monitor_events.set_defaults(func=command_platform_monitor)
+    monitor_notifications = monitor_sub.add_parser(
+        "notifications", help="List local monitoring notifications."
+    )
+    monitor_notifications.add_argument("--schedule-id")
+    monitor_notifications.add_argument("--unread-only", action="store_true")
+    monitor_notifications.add_argument("--limit", type=int, default=100)
+    monitor_notifications.set_defaults(func=command_platform_monitor)
+    monitor_ack = monitor_sub.add_parser(
+        "acknowledge", help="Acknowledge a monitoring notification."
+    )
+    monitor_ack.add_argument("notification_id")
+    monitor_ack.set_defaults(func=command_platform_monitor)
 
     investigation_cmd = sub.add_parser(
         "investigation", help="Inspect an investigation and executions."
@@ -776,14 +1039,24 @@ def build_parser() -> argparse.ArgumentParser:
     memory_search = memory_sub.add_parser("search", help="Search Earth Memory by text, time, and space.")
     memory_search.add_argument("query", nargs="?", default="")
     memory_search.add_argument("--artifact-type", action="append", choices=(
-        "investigation", "plan", "observation", "evidence", "hypothesis",
+        "investigation", "plan", "observation", "earth_object_extraction",
+        "evidence", "hypothesis",
         "scientific_method", "reproducibility_artifact", "provenance_node",
-        "earth_object", "object_relationship", "observation_stack",
-        "temporal_difference",
+        "earth_object", "object_relationship", "earth_object_transition", "observation_stack",
+        "temporal_difference", "mission", "monitoring_schedule", "monitoring_run",
+        "monitoring_event", "monitoring_notification", "investigation_comparison",
+        "monitoring_comparison",
     ))
     memory_search.add_argument(
         "--variable",
         help="Filter by an exact canonical Earth variable identifier, such as ndvi or precipitation_amount.",
+    )
+    memory_search.add_argument("--mission-id", help="Exact mission identifier.")
+    memory_search.add_argument("--investigation-id", help="Exact investigation identifier.")
+    memory_search.add_argument("--method-id", help="Exact scientific method identifier.")
+    memory_search.add_argument("--source-artifact-id", help="Exact linked source artifact identifier.")
+    memory_search.add_argument(
+        "--cursor", help="Continue a search using its snapshot-bound next_cursor value."
     )
     memory_search.add_argument("--limit", type=int, default=100)
     memory_search.add_argument("--bbox", nargs=4, type=float, metavar=("MIN_X", "MIN_Y", "MAX_X", "MAX_Y"))
@@ -805,6 +1078,13 @@ def build_parser() -> argparse.ArgumentParser:
     objects_graph = objects_sub.add_parser("graph", help="Inspect object relationships.")
     objects_graph.add_argument("--investigation-id")
     objects_graph.set_defaults(func=command_platform_earth_objects)
+    objects_transition = objects_sub.add_parser(
+        "transition",
+        help="Record an explicit, source-supported Earth Object lifecycle or type revision.",
+    )
+    objects_transition.add_argument("object_id")
+    objects_transition.add_argument("--transition-file", required=True)
+    objects_transition.set_defaults(func=command_platform_earth_objects)
 
     hypotheses_cmd = sub.add_parser(
         "hypotheses", help="Inspect hypothesis lifecycle and transition history."
@@ -824,7 +1104,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     _configure_logging(getattr(args, "verbose", False))
@@ -841,6 +1121,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
     except KeyboardInterrupt:
         return 130
+    finally:
+        _close_platform_client()
 
 
 if __name__ == "__main__":

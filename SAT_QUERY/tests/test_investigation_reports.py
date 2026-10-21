@@ -1,5 +1,4 @@
 from fastapi.testclient import TestClient
-
 from satquery.api import create_app, set_engine
 from satquery.config import get_settings
 from satquery.orchestrator import SatQueryEngine

@@ -76,7 +76,7 @@ class ScientificInvestigationWorkflowCompiler:
     """Compile acquisition and evidence evaluation as one dependency graph."""
 
     workflow_id = "satquery.scientific-investigation"
-    version = "1.0.0"
+    version = "1.2.0"
 
     def compile(self, context: WorkflowCompilationContext) -> ExecutionPlan:
         investigation = context.investigation
@@ -85,6 +85,36 @@ class ScientificInvestigationWorkflowCompiler:
             task.task_id for task in investigation.tasks
             if task.handler == "earth.observe"
         )
+        extraction_id = f"{investigation.investigation_id}:earth-object-extraction"
+        if acquisition_ids:
+            acquisition_query = next(
+                (
+                    task.parameters["earth_query"]
+                    for task in investigation.tasks
+                    if task.task_id in acquisition_ids
+                    and isinstance(task.parameters.get("earth_query"), dict)
+                ),
+                None,
+            )
+            tasks.append(
+                Task(
+                    task_id=extraction_id,
+                    handler="earth.objects.extract",
+                    description=(
+                        "Reconcile explicit object candidates, polygonize requested categorical "
+                        "raster components, and materialize evidence-linked canonical revisions."
+                    ),
+                    depends_on=acquisition_ids,
+                    accept_partial_dependencies=True,
+                    parameters={
+                        "pipeline_id": "satquery.earth-object-candidate-extraction",
+                        "pipeline_version": "1.1.0",
+                        "materializer_id": "satquery.earth-object-materializer",
+                        "materializer_version": "1.0.0",
+                        "earth_query": acquisition_query,
+                    },
+                )
+            )
         plan, design = context.plan, context.design
         if acquisition_ids and plan is not None and design is not None:
             candidate = next(
@@ -116,7 +146,7 @@ class ScientificInvestigationWorkflowCompiler:
                         task_id=reasoning_id,
                         handler="earth.reason",
                         description="Evaluate registered scientific operators and methods against the evidence assessment.",
-                        depends_on=(*acquisition_ids, assessment_id),
+                        depends_on=(*acquisition_ids, extraction_id, assessment_id),
                         accept_partial_dependencies=True,
                         parameters={
                             "design_id": design.design_id,

@@ -6,7 +6,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from satquery.platform.capabilities import build_earth_capability_matrix
 from satquery.platform.config import PlatformConfig
 from satquery.platform.contracts import (
@@ -125,6 +124,114 @@ def test_earth_memory_search_is_deterministic_and_artifact_ids_are_immutable():
         memory.upsert(same_payload_different_relationship)
 
 
+def test_earth_memory_filters_exact_canonical_variables_across_artifact_types(
+    sqlite_database_path,
+):
+    indexed_at = datetime(2026, 1, 1, tzinfo=timezone.utc).isoformat()
+    artifacts = (
+        artifact_from_payload(
+            artifact_id="observation:ndvi",
+            artifact_type="observation",
+            payload={
+                "canonical_measurements": [
+                    {
+                        "canonical_variable": "ndvi",
+                        "semantic_status": "resolved",
+                        "source_variable": "NDVI",
+                    }
+                ]
+            },
+            indexed_at=indexed_at,
+        ),
+        artifact_from_payload(
+            artifact_id="stack:ndvi",
+            artifact_type="observation_stack",
+            payload={"variable_key": "canonical:ndvi", "canonical_variable": "ndvi"},
+            indexed_at=indexed_at,
+        ),
+        artifact_from_payload(
+            artifact_id="difference:ndvi",
+            artifact_type="temporal_difference",
+            payload={"canonical_variable": "ndvi"},
+            indexed_at=indexed_at,
+        ),
+        artifact_from_payload(
+            artifact_id="earth-object:ndvi-feature",
+            artifact_type="earth_object",
+            payload={
+                "measurements": [
+                    {
+                        "canonical_variable": "ndvi",
+                        "semantic_status": "resolved",
+                        "source_variable": "NDVI",
+                    }
+                ]
+            },
+            indexed_at=indexed_at,
+        ),
+        artifact_from_payload(
+            artifact_id="observation:unresolved-ndvi",
+            artifact_type="observation",
+            payload={
+                "canonical_measurements": [
+                    {
+                        "canonical_variable": "ndvi",
+                        "semantic_status": "unresolved",
+                        "source_variable": "NDVI",
+                    }
+                ]
+            },
+            indexed_at=indexed_at,
+        ),
+    )
+    memory = InMemoryEarthMemory(artifacts)
+    persistent = SQLiteEarthMemory(sqlite_database_path)
+    for artifact in artifacts:
+        persistent.upsert(artifact)
+
+    query = EarthMemoryQuery(canonical_variable="NDVI")
+    memory_result = memory.search(query)
+    assert memory_result == persistent.search(query)
+    assert {item.artifact_id for item in memory_result.artifacts} == {
+        "observation:ndvi",
+        "stack:ndvi",
+        "difference:ndvi",
+        "earth-object:ndvi-feature",
+    }
+    assert memory.search(EarthMemoryQuery(canonical_variable="normalized_difference_vegetation_index")).total == 0
+    assert persistent.verify_integrity().status == "healthy"
+
+    first_query = EarthMemoryQuery(canonical_variable="ndvi", limit=2)
+    first_memory_page = memory.search(first_query)
+    first_sqlite_page = persistent.search(first_query)
+    assert first_memory_page == first_sqlite_page
+    assert first_memory_page.total == 4
+    assert first_memory_page.next_cursor
+    second_query = first_query.model_copy(update={"cursor": first_memory_page.next_cursor})
+    second_memory_page = memory.search(second_query)
+    second_sqlite_page = persistent.search(second_query)
+    assert second_memory_page == second_sqlite_page
+    assert second_memory_page.total == 2
+    assert second_memory_page.next_cursor is None
+    assert not (
+        {item.artifact_id for item in first_memory_page.artifacts}
+        & {item.artifact_id for item in second_memory_page.artifacts}
+    )
+    with pytest.raises(ValueError, match="does not match"):
+        memory.search(second_query.model_copy(update={"text": "different filters"}))
+    for store in (memory, persistent):
+        store.upsert(artifact_from_payload(
+            artifact_id="observation:ndvi-later",
+            artifact_type="observation",
+            payload={"canonical_variable": "ndvi"},
+            indexed_at=indexed_at,
+        ))
+        with pytest.raises(ValueError, match="stale"):
+            store.search(second_query)
+    with pytest.raises(ValueError, match="malformed"):
+        memory.search(first_query.model_copy(update={"cursor": "not-a-cursor"}))
+
+
 def test_earth_memory_canonicalizes_unordered_values_and_rejects_nonfinite_numbers():
     indexed_at = datetime(2026, 1, 1, tzinfo=timezone.utc).isoformat()
     first = artifact_from_payload(
@@ -141,6 +248,54 @@ def test_earth_memory_canonicalizes_unordered_values_and_rejects_nonfinite_numbe
             artifact_id="fixture:nan", artifact_type="evidence",
             payload={"value": float("nan")}, indexed_at=indexed_at,
         )
+
+
+def test_sqlite_literal_search_preserves_unicode_casefold_semantics(sqlite_database_path):
+    indexed_at = datetime(2026, 1, 1, tzinfo=timezone.utc).isoformat()
+    artifact = artifact_from_payload(
+        artifact_id="evidence:unicode", artifact_type="evidence",
+        payload={"description": "Straße İZMİR"}, indexed_at=indexed_at,
+    )
+    memory = InMemoryEarthMemory((artifact,))
+    persistent = SQLiteEarthMemory(sqlite_database_path)
+    persistent.upsert(artifact)
+    query = EarthMemoryQuery(text="STRASSE İZMİR")
+    assert persistent.search(query) == memory.search(query)
+    assert persistent.search(query).total == 1
+
+
+def test_sqlite_earth_memory_migrates_v5_search_ngram_index(sqlite_database_path):
+    artifact = artifact_from_payload(
+        artifact_id="evidence:migrate-search",
+        artifact_type="evidence",
+        payload={"finding": "monsoon rainfall variability"},
+        indexed_at=datetime(2026, 1, 1, tzinfo=timezone.utc).isoformat(),
+    )
+    store = SQLiteEarthMemory(sqlite_database_path)
+    store.upsert(artifact)
+    connection = sqlite3.connect(sqlite_database_path)
+    try:
+        connection.execute("DROP TABLE earth_memory_ngrams")
+        connection.execute("UPDATE earth_memory_schema SET version = 5 WHERE singleton = 1")
+        connection.commit()
+    finally:
+        connection.close()
+
+    migrated = SQLiteEarthMemory(sqlite_database_path)
+    result = migrated.search(EarthMemoryQuery(text="MONSOON rainfall"))
+    assert tuple(item.artifact_id for item in result.artifacts) == (artifact.artifact_id,)
+    assert migrated.verify_integrity().status == "healthy"
+
+    connection = sqlite3.connect(sqlite_database_path)
+    try:
+        connection.execute(
+            "DELETE FROM earth_memory_ngrams WHERE artifact_id = ? AND ngram = 'rai'",
+            (artifact.artifact_id,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    assert migrated.verify_integrity().status == "corrupt"
 
 
 def test_sqlite_earth_memory_persists_immutable_artifacts_and_matches_memory(sqlite_database_path):
@@ -198,8 +353,11 @@ def test_sqlite_earth_memory_detects_corrupt_search_index(sqlite_database_path):
     assert report.artifacts_checked == 1
     with pytest.raises(ValueError, match="search index"):
         memory.search(EarthMemoryQuery(text="coastal"))
-    with pytest.raises(ValueError, match="search index"):
-        memory.search(EarthMemoryQuery(investigation_id="unrelated"))
+    # Structured filters retrieve and verify only their candidate rows. The
+    # repository-wide audit remains the explicit way to detect unrelated
+    # corruption without forcing every filtered query to deserialize the corpus.
+    assert memory.search(EarthMemoryQuery(investigation_id="unrelated")).total == 0
+    assert memory.verify_integrity().status == "corrupt"
 
 
 def test_earth_memory_filters_are_spatiotemporal_deterministic_and_crs_scoped(sqlite_database_path):
@@ -310,6 +468,50 @@ def test_sqlite_earth_memory_migrates_v1_artifact_extent_index(sqlite_database_p
     ))
     assert tuple(item.artifact_id for item in result.artifacts) == (artifact.artifact_id,)
     assert migrated.verify_integrity().status == "healthy"
+
+
+def test_sqlite_earth_memory_migrates_v3_canonical_variable_index_and_verifies_it(
+    sqlite_database_path,
+):
+    indexed_at = datetime(2026, 2, 1, tzinfo=timezone.utc).isoformat()
+    artifact = artifact_from_payload(
+        artifact_id="observation:canonical-water-level",
+        artifact_type="observation",
+        payload={
+            "canonical_measurements": [
+                {
+                    "canonical_variable": "water_level",
+                    "semantic_status": "resolved",
+                }
+            ]
+        },
+        indexed_at=indexed_at,
+    )
+    store = SQLiteEarthMemory(sqlite_database_path)
+    store.upsert(artifact)
+    connection = sqlite3.connect(sqlite_database_path)
+    try:
+        connection.execute("DELETE FROM earth_memory_variables")
+        connection.execute("UPDATE earth_memory_schema SET version = 3 WHERE singleton = 1")
+        connection.commit()
+    finally:
+        connection.close()
+
+    migrated = SQLiteEarthMemory(sqlite_database_path)
+    assert migrated.search(EarthMemoryQuery(canonical_variable="water_level")).total == 1
+    assert migrated.verify_integrity().status == "healthy"
+    connection = sqlite3.connect(sqlite_database_path)
+    try:
+        connection.execute(
+            "DELETE FROM earth_memory_variables WHERE artifact_id = ?",
+            (artifact.artifact_id,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = migrated.verify_integrity()
+    assert report.status == "corrupt"
+    assert any("canonical variable index" in error for error in report.errors)
 
 
 def test_sqlite_earth_memory_detects_corrupt_spatiotemporal_index(sqlite_database_path):

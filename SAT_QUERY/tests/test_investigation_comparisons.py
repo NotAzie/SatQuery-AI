@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
-
 from satquery.api import create_app, set_engine
 from satquery.config import get_settings
 from satquery.orchestrator import SatQueryEngine
@@ -10,15 +9,14 @@ from satquery.platform.comparisons import (
     InvestigationComparisonRequest,
     compare_investigations,
 )
-from satquery.platform.reports import build_investigation_report
 from satquery.platform.contracts import (
     CanonicalMeasurement,
     DatasetReference,
     ExecutionResult,
     ExecutionStatus,
     Mission,
-    ObservationAlignmentIssue,
     Observation,
+    ObservationAlignmentIssue,
     ObservationStack,
     ObservationStackMember,
     PerceptionResult,
@@ -26,15 +24,22 @@ from satquery.platform.contracts import (
     TaskStatus,
 )
 from satquery.platform.earth_memory import EarthMemoryQuery
+from satquery.platform.reports import build_investigation_report
 
 
-def _record_observation(engine, investigation_id, *, value, observed_at, source_id):
+def _record_observation(
+    engine, investigation_id, *, value, observed_at, source_id, support=None,
+    observation_id=None,
+):
     runtime = engine.platform_runtime
     observation = Observation(
         source_id=source_id,
+        **({"observation_id": observation_id} if observation_id is not None else {}),
         dataset=DatasetReference(connector_id="fixture", dataset_id="surface-water"),
         observed_at=observed_at,
         measured_variables={"provider_value": {"value": value, "unit": "m"}},
+        geometry=support,
+        crs="OGC:CRS84" if support is not None else None,
         canonical_measurements=(CanonicalMeasurement(
             canonical_variable="earth:surface_water_level",
             value=value,
@@ -42,7 +47,13 @@ def _record_observation(engine, investigation_id, *, value, observed_at, source_
             source_variable="provider_value",
             source_unit="m",
             semantic_status="resolved",
-            source_metadata={"mapping_id": "fixture-map-v1"},
+            source_metadata={
+                "mapping_id": "fixture-map-v1",
+                **({
+                    "observation_support_geometry": support,
+                    "observation_support_crs": "OGC:CRS84",
+                } if support is not None else {}),
+            },
         ),),
         provenance={"record": source_id},
     )
@@ -106,8 +117,70 @@ def test_comparison_aligns_exact_semantic_keys_and_preserves_unknown_science():
         first_observation.observation_id,
         second_observation.observation_id,
     }
-    assert "No deltas, trends, or conclusions were generated." in comparison.markdown
+    assert "No trends, statistical tests, or scientific conclusions were generated." in comparison.markdown
     assert "causation" in group.interpretation
+
+
+def test_comparison_emits_only_exact_support_descriptive_temporal_diagnostics():
+    engine = SatQueryEngine(get_settings())
+    runtime = engine.platform_runtime
+    mission = Mission(name="Gauge", objective="Compare point-supported measurements")
+    runtime.mission_service.create(mission)
+    first = runtime.mission_service.create_investigation(mission.mission_id)
+    second = runtime.mission_service.create_investigation(mission.mission_id)
+    support = {"type": "Point", "coordinates": (72.0, 19.0)}
+    records = (
+        (first.investigation_id, 1.5, datetime(2025, 1, 1, tzinfo=timezone.utc), "before"),
+        (second.investigation_id, 2.0, datetime(2025, 1, 2, tzinfo=timezone.utc), "after"),
+    )
+    for investigation_id, value, observed_at, source_id in records:
+        _record_observation(
+            engine, investigation_id, value=value, observed_at=observed_at,
+            source_id=source_id, support=support,
+        )
+    comparison = compare_investigations(runtime, InvestigationComparisonRequest(
+        investigation_ids=(first.investigation_id, second.investigation_id),
+    ))
+
+    assert len(comparison.observation_stacks) == 1
+    assert comparison.stack_builder_version == "1.1.0"
+    assert comparison.temporal_method_id == "satquery.temporal.consecutive-difference"
+    assert len(comparison.temporal_diagnostics) == 1
+    diagnostic = comparison.temporal_diagnostics[0]
+    assert diagnostic.difference_value == 0.5
+    assert diagnostic.uncertainty_status == "not_propagated"
+    assert diagnostic.interpretation_status == "descriptive_only"
+    assert "No trends, statistical tests, or scientific conclusions were generated." in comparison.markdown
+
+
+def test_conflicting_observation_identity_is_reported_and_excluded_from_alignment():
+    engine = SatQueryEngine(get_settings())
+    runtime = engine.platform_runtime
+    mission = Mission(name="Identity", objective="Check canonical record identity")
+    runtime.mission_service.create(mission)
+    first = runtime.mission_service.create_investigation(mission.mission_id)
+    second = runtime.mission_service.create_investigation(mission.mission_id)
+    support = {"type": "Point", "coordinates": (72.0, 19.0)}
+    _record_observation(
+        engine, first.investigation_id, value=1.0,
+        observed_at=datetime(2025, 1, 1, tzinfo=timezone.utc), source_id="source-a",
+        support=support, observation_id="reused-id",
+    )
+    _record_observation(
+        engine, second.investigation_id, value=2.0,
+        observed_at=datetime(2025, 1, 2, tzinfo=timezone.utc), source_id="source-b",
+        support=support, observation_id="reused-id",
+    )
+
+    comparison = compare_investigations(runtime, InvestigationComparisonRequest(
+        investigation_ids=(first.investigation_id, second.investigation_id),
+    ))
+
+    assert not comparison.observation_stacks
+    assert comparison.observation_identity_conflicts[0]["observation_id"] == "reused-id"
+    assert set(comparison.observation_identity_conflicts[0]["investigation_ids"]) == {
+        first.investigation_id, second.investigation_id,
+    }
 
 
 def test_investigation_report_preserves_temporal_stacks_and_alignment_issues():
@@ -130,12 +203,17 @@ def test_investigation_report_preserves_temporal_stacks_and_alignment_issues():
         "source_id": "scene-second",
         "observed_at": second_time,
     })
+    pixel_support = {"type": "Point", "coordinates": (1.0, 2.0)}
+    source_measurement_metadata = {
+        "pixel_support_geometry": pixel_support,
+        "pixel_support_crs": "OGC:CRS84",
+    }
     stack = ObservationStack(
         stack_id="obs-stack:test",
         variable_key="canonical:surface_temperature",
         canonical_variable="surface_temperature",
         unit="K",
-        spatial_support_geometry={"type": "Point", "coordinates": (1.0, 2.0)},
+        spatial_support_geometry=pixel_support,
         spatial_support_crs="OGC:CRS84",
         spatial_alignment="exact_pixel_support",
         temporal_alignment="source_acquisition_time",
@@ -148,6 +226,7 @@ def test_investigation_report_preserves_temporal_stacks_and_alignment_issues():
                 value=300.0,
                 unit="K",
                 source_variable="LST",
+                source_measurement_metadata=source_measurement_metadata,
             ),
             ObservationStackMember(
                 observation_id=second.observation_id,
@@ -157,6 +236,7 @@ def test_investigation_report_preserves_temporal_stacks_and_alignment_issues():
                 value=301.0,
                 unit="K",
                 source_variable="LST",
+                source_measurement_metadata=source_measurement_metadata,
             ),
         ),
     )
@@ -211,11 +291,16 @@ def test_comparison_api_rejects_duplicate_ids_and_renders_markdown():
     runtime.mission_service.create(mission)
     first = runtime.mission_service.create_investigation(mission.mission_id)
     second = runtime.mission_service.create_investigation(mission.mission_id)
+    support = {"type": "Point", "coordinates": (72.0, 19.0)}
     _record_observation(
-        engine, first.investigation_id, value=12, observed_at=datetime(2025, 1, 1, tzinfo=timezone.utc), source_id="one"
+        engine, first.investigation_id, value=12,
+        observed_at=datetime(2025, 1, 1, tzinfo=timezone.utc), source_id="one",
+        support=support,
     )
     _record_observation(
-        engine, second.investigation_id, value=13, observed_at=datetime(2025, 1, 2, tzinfo=timezone.utc), source_id="two"
+        engine, second.investigation_id, value=13,
+        observed_at=datetime(2025, 1, 2, tzinfo=timezone.utc), source_id="two",
+        support=support,
     )
     set_engine(engine)
     try:
@@ -226,10 +311,53 @@ def test_comparison_api_rejects_duplicate_ids_and_renders_markdown():
         )
         assert response.status_code == 200
         body = response.json()
+        assert body["schema_version"] == "1.2"
         assert body["comparison_sha256"]
         assert "surface_water_level" in body["markdown"]
-        assert "No deltas, trends, or conclusions were generated." in body["markdown"]
-        assert client.get("/").status_code == 200
+        assert "No trends, statistical tests, or scientific conclusions were generated." in body["markdown"]
+        memory = client.post(
+            "/api/v1/platform/earth-memory/search",
+            json={
+                "artifact_types": ["investigation_comparison"],
+                "source_artifact_id": f"investigation:{first.investigation_id}",
+            },
+        )
+        assert memory.status_code == 200
+        assert memory.json()["total"] == 1
+        temporal_memory = client.post(
+            "/api/v1/platform/earth-memory/search",
+            json={
+                "artifact_types": ["temporal_difference"],
+                "source_artifact_id": f"investigation:{first.investigation_id}",
+            },
+        )
+        assert temporal_memory.status_code == 200
+        assert temporal_memory.json()["total"] == 1
+        assert temporal_memory.json()["artifacts"][0]["payload"]["difference_value"] == 1
+        audit = client.get(
+            f"/api/v1/platform/investigations/{first.investigation_id}/audit"
+        )
+        assert audit.status_code == 200
+        assert any(
+            event["event_type"] == "investigation_comparison"
+            for chain in audit.json()["chains"].values()
+            for event in chain["events"]
+        )
+        reproducibility = client.get(
+            f"/api/v1/platform/investigations/{first.investigation_id}/reproducibility"
+        )
+        assert reproducibility.status_code == 200
+        assert len(reproducibility.json()["investigation_comparisons"]) == 1
+        linked_report = client.get(
+            f"/api/v1/platform/investigations/{first.investigation_id}/report"
+        )
+        assert linked_report.status_code == 200
+        assert len(linked_report.json()["comparison_artifacts"]) == 1
+        assert "payload" not in linked_report.json()["comparison_artifacts"][0]
+        assert "Linked cross-investigation comparisons" in linked_report.json()["markdown"]
+        workspace = client.get("/")
+        assert workspace.status_code == 200
+        assert "investigation_comparison" in workspace.text
         assert "investigationCompareSelect" in client.get("/").text
     finally:
         set_engine(None)

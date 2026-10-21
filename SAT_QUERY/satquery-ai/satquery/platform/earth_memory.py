@@ -7,6 +7,7 @@ repository/index adapter can implement the same contract later.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import math
@@ -23,11 +24,20 @@ from pydantic import Field, field_validator, model_validator
 
 from .contracts import Contract
 
+_REVISION_MODULUS = (1 << 521) - 1
+_REVISION_ACCUMULATOR_WIDTH = 132
+_MAX_INDEXED_SEARCH_NGRAMS = 400
+
 MemoryArtifactType = Literal[
-    "investigation", "plan", "observation", "evidence", "hypothesis",
+    "mission", "investigation", "plan", "observation", "evidence", "hypothesis",
     "scientific_method", "reproducibility_artifact", "provenance_node",
-    "earth_object", "object_relationship", "observation_stack",
-    "temporal_difference",
+    "earth_object", "earth_object_extraction", "object_relationship",
+    "earth_object_transition",
+    "observation_stack", "temporal_difference",
+    "monitoring_schedule", "monitoring_run", "monitoring_event",
+    "monitoring_notification",
+    "monitoring_comparison",
+    "investigation_comparison",
 ]
 
 
@@ -77,6 +87,7 @@ class EarthMemoryQuery(Contract):
     spatial_crs: str | None = None
     temporal_start: datetime | None = None
     temporal_end: datetime | None = None
+    cursor: str | None = Field(default=None, min_length=1)
     limit: int = Field(default=100, ge=1, le=1000)
 
     @model_validator(mode="after")
@@ -105,9 +116,13 @@ class EarthMemorySearchResult(Contract):
     artifacts: tuple[EarthMemoryArtifact, ...] = ()
     total: int = Field(ge=0)
     index_revision: str
+    index_revision_algorithm: Literal["sha256_counted_sha512_sum_v1"] = (
+        "sha256_counted_sha512_sum_v1"
+    )
     semantics: Literal["deterministic_literal_search"] = "deterministic_literal_search"
     spatial_semantics: Literal["inclusive_same_crs_bbox_overlap"] | None = None
     temporal_semantics: Literal["inclusive_interval_overlap"] | None = None
+    next_cursor: str | None = None
 
 
 class EarthMemoryIntegrityReport(Contract):
@@ -116,6 +131,14 @@ class EarthMemoryIntegrityReport(Contract):
     artifacts_checked: int
     index_revision: str
     errors: tuple[str, ...] = ()
+
+
+class EarthMemoryCursorError(ValueError):
+    """A continuation cursor is malformed or incompatible with its query."""
+
+
+class StaleEarthMemoryCursorError(EarthMemoryCursorError):
+    """The indexed snapshot changed after the cursor was issued."""
 
 
 class EarthMemoryRepository(Protocol):
@@ -131,6 +154,8 @@ class InMemoryEarthMemory:
     def __init__(self, artifacts: Iterable[EarthMemoryArtifact] = ()) -> None:
         self._artifacts: dict[str, EarthMemoryArtifact] = {}
         self._lock = threading.RLock()
+        self._revision_count = 0
+        self._revision_accumulator = 0
         for artifact in artifacts:
             self.upsert(artifact)
 
@@ -141,6 +166,14 @@ class InMemoryEarthMemory:
                 raise ValueError(
                     "Earth Memory artifact IDs are immutable; changed records require a new artifact ID"
                 )
+            if current is None:
+                self._revision_count += 1
+                self._revision_accumulator = (
+                    self._revision_accumulator
+                    + _revision_entry_value(
+                        artifact.artifact_id, _artifact_record_digest(artifact)
+                    )
+                ) % _REVISION_MODULUS
             self._artifacts[artifact.artifact_id] = artifact
 
     def get(self, artifact_id: str) -> EarthMemoryArtifact | None:
@@ -157,8 +190,14 @@ class InMemoryEarthMemory:
         )
         with self._lock:
             values = tuple(self._artifacts[key] for key in sorted(self._artifacts))
+            revision = _revision_from_state(
+                self._revision_count, self._revision_accumulator
+            )
+        after_artifact_id = _decode_memory_cursor(query.cursor, revision, query)
         matched = []
         for item in values:
+            if after_artifact_id is not None and item.artifact_id <= after_artifact_id:
+                continue
             if query.artifact_types and item.artifact_type not in query.artifact_types:
                 continue
             if query.investigation_id and item.investigation_id != query.investigation_id:
@@ -179,11 +218,13 @@ class InMemoryEarthMemory:
             if terms and not all(term in haystack for term in terms):
                 continue
             matched.append(item)
-        revision = _index_revision(
-            (item.artifact_id, _artifact_record_digest(item)) for item in values
+        page = matched[:query.limit]
+        next_cursor = (
+            _encode_memory_cursor(revision, page[-1].artifact_id, query)
+            if len(matched) > query.limit else None
         )
         return EarthMemorySearchResult(
-            artifacts=tuple(matched[: query.limit]), total=len(matched),
+            artifacts=tuple(page), total=len(matched),
             index_revision=revision,
             spatial_semantics=(
                 "inclusive_same_crs_bbox_overlap" if query.spatial_bbox is not None else None
@@ -191,6 +232,7 @@ class InMemoryEarthMemory:
             temporal_semantics=(
                 "inclusive_interval_overlap" if query.temporal_start is not None else None
             ),
+            next_cursor=next_cursor,
         )
 
 
@@ -203,7 +245,7 @@ class SQLiteEarthMemory:
     adapter; no SQLite tokenizer or relevance ranking changes search meaning.
     """
 
-    SCHEMA_VERSION = 3
+    SCHEMA_VERSION = 6
 
     def __init__(self, path: str | Path, *, busy_timeout_seconds: float = 5.0) -> None:
         if busy_timeout_seconds <= 0 or not math.isfinite(busy_timeout_seconds):
@@ -292,6 +334,31 @@ class SQLiteEarthMemory:
                     "CREATE INDEX IF NOT EXISTS idx_earth_memory_temporal "
                     "ON earth_memory_spatiotemporal(temporal_start, temporal_end)"
                 )
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS earth_memory_variables ("
+                    "artifact_id TEXT NOT NULL, canonical_variable TEXT NOT NULL, "
+                    "PRIMARY KEY (artifact_id, canonical_variable), "
+                    "FOREIGN KEY (artifact_id) REFERENCES earth_memory_artifacts(artifact_id) ON DELETE CASCADE)"
+                )
+                connection.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_earth_memory_variable "
+                    "ON earth_memory_variables(canonical_variable, artifact_id)"
+                )
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS earth_memory_ngrams ("
+                    "artifact_id TEXT NOT NULL, ngram TEXT NOT NULL, "
+                    "PRIMARY KEY (artifact_id, ngram), "
+                    "FOREIGN KEY (artifact_id) REFERENCES earth_memory_artifacts(artifact_id) ON DELETE CASCADE)"
+                )
+                connection.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_earth_memory_ngram "
+                    "ON earth_memory_ngrams(ngram, artifact_id)"
+                )
+                connection.execute(
+                    "CREATE TABLE IF NOT EXISTS earth_memory_revision_state ("
+                    "singleton INTEGER PRIMARY KEY CHECK (singleton = 1), "
+                    "artifact_count INTEGER NOT NULL, accumulator TEXT NOT NULL)"
+                )
                 row = connection.execute(
                     "SELECT version FROM earth_memory_schema WHERE singleton = 1"
                 ).fetchone()
@@ -301,8 +368,14 @@ class SQLiteEarthMemory:
                         (self.SCHEMA_VERSION,),
                     )
                     self._rebuild_spatiotemporal_index(connection)
-                elif row["version"] in {1, 2}:
+                    self._rebuild_canonical_variable_index(connection)
+                    self._rebuild_search_ngram_index(connection)
+                    self._rebuild_revision_state(connection)
+                elif row["version"] in {1, 2, 3, 4, 5}:
                     self._rebuild_spatiotemporal_index(connection)
+                    self._rebuild_canonical_variable_index(connection)
+                    self._rebuild_search_ngram_index(connection)
+                    self._rebuild_revision_state(connection)
                     connection.execute(
                         "UPDATE earth_memory_schema SET version = ? WHERE singleton = 1",
                         (self.SCHEMA_VERSION,),
@@ -312,6 +385,11 @@ class SQLiteEarthMemory:
                         f"Unsupported Earth Memory schema version {row['version']}; "
                         f"this runtime supports {self.SCHEMA_VERSION}"
                     )
+                revision_state = connection.execute(
+                    "SELECT 1 FROM earth_memory_revision_state WHERE singleton = 1"
+                ).fetchone()
+                if revision_state is None:
+                    raise ValueError("Earth Memory revision state is missing")
                 connection.execute("COMMIT")
             except Exception:
                 connection.execute("ROLLBACK")
@@ -325,6 +403,49 @@ class SQLiteEarthMemory:
         ).fetchall()
         for row in rows:
             _write_spatiotemporal_index(connection, _decode_artifact(row["artifact_json"]))
+
+    @staticmethod
+    def _rebuild_canonical_variable_index(connection: sqlite3.Connection) -> None:
+        connection.execute("DELETE FROM earth_memory_variables")
+        rows = connection.execute(
+            "SELECT artifact_id, artifact_json FROM earth_memory_artifacts ORDER BY artifact_id"
+        ).fetchall()
+        for row in rows:
+            _write_canonical_variable_index(
+                connection, _decode_artifact(row["artifact_json"])
+            )
+
+    @staticmethod
+    def _rebuild_search_ngram_index(connection: sqlite3.Connection) -> None:
+        connection.execute("DELETE FROM earth_memory_ngrams")
+        rows = connection.execute(
+            "SELECT artifact_json FROM earth_memory_artifacts ORDER BY artifact_id"
+        ).fetchall()
+        for row in rows:
+            artifact = _decode_artifact(row["artifact_json"])
+            _write_search_ngram_index(connection, artifact)
+
+    @staticmethod
+    def _rebuild_revision_state(connection: sqlite3.Connection) -> None:
+        rows = connection.execute(
+            "SELECT artifact_id, artifact_json, record_sha256, search_index "
+            "FROM earth_memory_artifacts ORDER BY artifact_id"
+        ).fetchall()
+        count = 0
+        accumulator = 0
+        for row in rows:
+            artifact = _verified_row_artifact(row)
+            count += 1
+            accumulator = (
+                accumulator
+                + _revision_entry_value(artifact.artifact_id, row["record_sha256"])
+            ) % _REVISION_MODULUS
+        connection.execute(
+            "INSERT INTO earth_memory_revision_state(singleton, artifact_count, accumulator) "
+            "VALUES (1, ?, ?) ON CONFLICT(singleton) DO UPDATE SET "
+            "artifact_count = excluded.artifact_count, accumulator = excluded.accumulator",
+            (count, f"{accumulator:0132x}"),
+        )
 
     def upsert(self, artifact: EarthMemoryArtifact) -> None:
         encoded = _canonical_json(artifact.model_dump(mode="json"))
@@ -361,6 +482,24 @@ class SQLiteEarthMemory:
                         ((artifact.artifact_id, item) for item in artifact.source_artifact_ids),
                     )
                     _write_spatiotemporal_index(connection, artifact)
+                    _write_canonical_variable_index(connection, artifact)
+                    _write_search_ngram_index(connection, artifact)
+                    state = connection.execute(
+                        "SELECT artifact_count, accumulator FROM earth_memory_revision_state "
+                        "WHERE singleton = 1"
+                    ).fetchone()
+                    if state is None:
+                        raise ValueError("Earth Memory revision state is missing")
+                    accumulator = int(state["accumulator"], 16)
+                    accumulator = (
+                        accumulator
+                        + _revision_entry_value(artifact.artifact_id, record_sha256)
+                    ) % _REVISION_MODULUS
+                    connection.execute(
+                        "UPDATE earth_memory_revision_state SET artifact_count = ?, accumulator = ? "
+                        "WHERE singleton = 1",
+                        (state["artifact_count"] + 1, f"{accumulator:0132x}"),
+                    )
                 connection.execute("COMMIT")
             except Exception:
                 connection.execute("ROLLBACK")
@@ -385,8 +524,42 @@ class SQLiteEarthMemory:
         terms = tuple(token.casefold() for token in (query.text or "").split() if token)
         with self._connection() as connection:
             connection.execute("BEGIN")
+            revision_state = connection.execute(
+                "SELECT artifact_count, accumulator FROM earth_memory_revision_state "
+                "WHERE singleton = 1"
+            ).fetchone()
+            if revision_state is None:
+                raise ValueError("Earth Memory revision state is missing")
+            revision = _revision_from_state(
+                revision_state["artifact_count"], int(revision_state["accumulator"], 16)
+            )
+            after_artifact_id = _decode_memory_cursor(query.cursor, revision, query)
             conditions = []
             parameters: list[Any] = []
+            joins = []
+            if after_artifact_id is not None:
+                conditions.append("a.artifact_id > ?")
+                parameters.append(after_artifact_id)
+            if query.artifact_types:
+                placeholders = ", ".join("?" for _ in query.artifact_types)
+                conditions.append(f"a.artifact_type IN ({placeholders})")
+                parameters.extend(query.artifact_types)
+            if query.investigation_id:
+                conditions.append("a.investigation_id = ?")
+                parameters.append(query.investigation_id)
+            if query.mission_id:
+                conditions.append("a.mission_id = ?")
+                parameters.append(query.mission_id)
+            if query.method_id:
+                conditions.append("a.method_id = ?")
+                parameters.append(query.method_id)
+            if query.source_artifact_id:
+                joins.append(
+                    "JOIN earth_memory_sources source_filter "
+                    "ON source_filter.artifact_id = a.artifact_id"
+                )
+                conditions.append("source_filter.source_artifact_id = ?")
+                parameters.append(query.source_artifact_id)
             if query.spatial_bbox is not None:
                 min_x, min_y, max_x, max_y = query.spatial_bbox
                 conditions.extend((
@@ -403,56 +576,73 @@ class SQLiteEarthMemory:
                     _canonical_timestamp(query.temporal_end),
                     _canonical_timestamp(query.temporal_start),
                 ))
-            spatial_join = (
-                " JOIN earth_memory_spatiotemporal s ON s.artifact_id = a.artifact_id"
-                if conditions else ""
-            )
+            if query.canonical_variable:
+                joins.append(
+                    "JOIN earth_memory_variables v ON v.artifact_id = a.artifact_id"
+                )
+                conditions.append("v.canonical_variable = ?")
+                parameters.append(query.canonical_variable.strip().casefold())
+            query_ngrams = _search_query_ngrams(terms)
+            if query_ngrams:
+                placeholders = ", ".join("?" for _ in query_ngrams)
+                conditions.append(
+                    "a.artifact_id IN (SELECT artifact_id FROM earth_memory_ngrams "
+                    f"WHERE ngram IN ({placeholders}) GROUP BY artifact_id "
+                    "HAVING COUNT(*) = ?)"
+                )
+                parameters.extend(query_ngrams)
+                parameters.append(len(query_ngrams))
+            if query.spatial_bbox is not None or query.temporal_start is not None:
+                joins.append(
+                    "JOIN earth_memory_spatiotemporal s ON s.artifact_id = a.artifact_id"
+                )
             where = " WHERE " + " AND ".join(conditions) if conditions else ""
-            rows = connection.execute(
+            row_cursor = connection.execute(
                 "SELECT a.artifact_id, a.artifact_type, a.investigation_id, a.mission_id, a.method_id, "
-                "a.artifact_json, a.record_sha256, a.search_index FROM earth_memory_artifacts a"
-                + spatial_join + where + " ORDER BY a.artifact_id",
+                "a.artifact_json, a.record_sha256, a.search_index"
+                " FROM earth_memory_artifacts a"
+                + (" " + " ".join(joins) if joins else "")
+                + where + " ORDER BY a.artifact_id",
                 parameters,
-            ).fetchall()
-            revision_rows = connection.execute(
-                "SELECT artifact_id, record_sha256 FROM earth_memory_artifacts ORDER BY artifact_id"
-            ).fetchall()
+            )
+            page_candidates = []
+            total = 0
+            while rows := row_cursor.fetchmany(256):
+                for row in rows:
+                    artifact = _verified_row_artifact(row)
+                    if query.artifact_types and artifact.artifact_type not in query.artifact_types:
+                        continue
+                    if query.investigation_id and artifact.investigation_id != query.investigation_id:
+                        continue
+                    if query.mission_id and artifact.mission_id != query.mission_id:
+                        continue
+                    if query.method_id and artifact.method_id != query.method_id:
+                        continue
+                    if query.canonical_variable and not _matches_canonical_variable(
+                        artifact, query.canonical_variable
+                    ):
+                        continue
+                    if (
+                        query.source_artifact_id
+                        and query.source_artifact_id not in artifact.source_artifact_ids
+                    ):
+                        continue
+                    if not _matches_spatiotemporal_query(artifact, query):
+                        continue
+                    haystack = _search_haystack(artifact)
+                    if terms and not all(term in haystack for term in terms):
+                        continue
+                    total += 1
+                    if len(page_candidates) < query.limit + 1:
+                        page_candidates.append(artifact)
             connection.execute("COMMIT")
-        artifacts = []
-        for row in rows:
-            artifact = _verified_row_artifact(row)
-            artifacts.append(artifact)
-        matched = []
-        for artifact in artifacts:
-            if query.artifact_types and artifact.artifact_type not in query.artifact_types:
-                continue
-            if query.investigation_id and artifact.investigation_id != query.investigation_id:
-                continue
-            if query.mission_id and artifact.mission_id != query.mission_id:
-                continue
-            if query.method_id and artifact.method_id != query.method_id:
-                continue
-            if query.canonical_variable and not _matches_canonical_variable(
-                artifact, query.canonical_variable
-            ):
-                continue
-            if (
-                query.source_artifact_id
-                and query.source_artifact_id not in artifact.source_artifact_ids
-            ):
-                continue
-            if not _matches_spatiotemporal_query(artifact, query):
-                continue
-            haystack = _search_haystack(artifact)
-            if terms and not all(term in haystack for term in terms):
-                continue
-            matched.append(artifact)
-        revision = _index_revision(
-            (row["artifact_id"], row["record_sha256"])
-            for row in revision_rows
+        page = page_candidates[:query.limit]
+        next_cursor = (
+            _encode_memory_cursor(revision, page[-1].artifact_id, query)
+            if total > query.limit else None
         )
         return EarthMemorySearchResult(
-            artifacts=tuple(matched[:query.limit]), total=len(matched),
+            artifacts=tuple(page), total=total,
             index_revision=revision,
             spatial_semantics=(
                 "inclusive_same_crs_bbox_overlap" if query.spatial_bbox is not None else None
@@ -460,6 +650,7 @@ class SQLiteEarthMemory:
             temporal_semantics=(
                 "inclusive_interval_overlap" if query.temporal_start is not None else None
             ),
+            next_cursor=next_cursor,
         )
 
     def verify_integrity(self) -> EarthMemoryIntegrityReport:
@@ -483,6 +674,18 @@ class SQLiteEarthMemory:
             extent_rows = connection.execute(
                 "SELECT artifact_id, spatial_crs, min_x, min_y, max_x, max_y, temporal_start, temporal_end "
                 "FROM earth_memory_spatiotemporal ORDER BY artifact_id"
+            ).fetchall()
+            revision_state = connection.execute(
+                "SELECT artifact_count, accumulator FROM earth_memory_revision_state "
+                "WHERE singleton = 1"
+            ).fetchone()
+            variable_rows = connection.execute(
+                "SELECT artifact_id, canonical_variable FROM earth_memory_variables "
+                "ORDER BY artifact_id, canonical_variable"
+            ).fetchall()
+            ngram_rows = connection.execute(
+                "SELECT artifact_id, ngram FROM earth_memory_ngrams "
+                "ORDER BY artifact_id, ngram"
             ).fetchall()
             connection.execute("COMMIT")
         expected_sources: list[tuple[str, str]] = []
@@ -513,12 +716,46 @@ class SQLiteEarthMemory:
         ]
         if expected_extents != actual_extents:
             errors.append("spatiotemporal index does not match immutable artifact payloads")
+        expected_variables = []
+        for row in rows:
+            try:
+                artifact = _verified_row_artifact(row)
+            except (ValueError, TypeError):
+                continue
+            expected_variables.extend(
+                (artifact.artifact_id, variable)
+                for variable in sorted(_canonical_variable_names(artifact))
+            )
+        actual_variables = [
+            (row["artifact_id"], row["canonical_variable"])
+            for row in variable_rows
+        ]
+        if expected_variables != actual_variables:
+            errors.append("canonical variable index does not match immutable artifact payloads")
+        expected_ngrams = []
+        for row in rows:
+            try:
+                artifact = _verified_row_artifact(row)
+            except (ValueError, TypeError):
+                continue
+            expected_ngrams.extend(
+                (artifact.artifact_id, ngram)
+                for ngram in _artifact_search_ngrams(artifact)
+            )
+        actual_ngrams = [(row["artifact_id"], row["ngram"]) for row in ngram_rows]
+        if expected_ngrams != actual_ngrams:
+            errors.append("search n-gram index does not match immutable artifact records")
+        expected_revision = _index_revision(
+            (row["artifact_id"], row["record_sha256"]) for row in revision_rows
+        )
+        if revision_state is None or expected_revision != _revision_from_state(
+            revision_state["artifact_count"], int(revision_state["accumulator"], 16)
+        ):
+            errors.append("revision state does not match immutable artifact records")
         return EarthMemoryIntegrityReport(
             repository=str(self.path), status="healthy" if not errors else "corrupt",
             artifacts_checked=checked,
-            index_revision=_index_revision(
-                (row["artifact_id"], row["record_sha256"]) for row in revision_rows
-            ),
+            index_revision=expected_revision,
             errors=tuple(errors),
         )
 
@@ -715,9 +952,159 @@ def _write_spatiotemporal_index(
     )
 
 
+def _canonical_variable_names(artifact: EarthMemoryArtifact) -> set[str]:
+    names: set[str] = set()
+    declared = artifact.metadata.get("canonical_variables", ())
+    if isinstance(declared, (list, tuple, set, frozenset)):
+        names.update(
+            value.strip().casefold()
+            for value in declared
+            if isinstance(value, str) and value.strip()
+        )
+    for container in (artifact.metadata, artifact.payload):
+        single = container.get("canonical_variable")
+        if isinstance(single, str) and single.strip():
+            names.add(single.strip().casefold())
+    variable_key = artifact.payload.get("variable_key")
+    if isinstance(variable_key, str) and variable_key.startswith("canonical:"):
+        canonical = variable_key.removeprefix("canonical:").strip()
+        if canonical:
+            names.add(canonical.casefold())
+    for field in ("canonical_measurements", "measurements"):
+        measurements = artifact.payload.get(field, ())
+        if isinstance(measurements, list):
+            names.update(
+                value["canonical_variable"].strip().casefold()
+                for value in measurements
+                if isinstance(value, dict)
+                and value.get("semantic_status") == "resolved"
+                and isinstance(value.get("canonical_variable"), str)
+                and value["canonical_variable"].strip()
+            )
+    return names
+
+
+def _write_canonical_variable_index(
+    connection: sqlite3.Connection, artifact: EarthMemoryArtifact
+) -> None:
+    connection.executemany(
+        "INSERT INTO earth_memory_variables(artifact_id, canonical_variable) VALUES (?, ?)",
+        (
+            (artifact.artifact_id, variable)
+            for variable in sorted(_canonical_variable_names(artifact))
+        ),
+    )
+
+
+def _artifact_search_ngrams(artifact: EarthMemoryArtifact) -> tuple[str, ...]:
+    text = _search_haystack(artifact)
+    return tuple(sorted({text[index : index + 3] for index in range(len(text) - 2)}))
+
+
+def _search_query_ngrams(terms: tuple[str, ...]) -> tuple[str, ...]:
+    grams = {
+        term[index : index + 3]
+        for term in terms
+        if len(term) >= 3
+        for index in range(len(term) - 2)
+    }
+    if not grams or len(grams) > _MAX_INDEXED_SEARCH_NGRAMS:
+        return ()
+    return tuple(sorted(grams))
+
+
+def _write_search_ngram_index(
+    connection: sqlite3.Connection, artifact: EarthMemoryArtifact
+) -> None:
+    connection.executemany(
+        "INSERT INTO earth_memory_ngrams(artifact_id, ngram) VALUES (?, ?)",
+        ((artifact.artifact_id, ngram) for ngram in _artifact_search_ngrams(artifact)),
+    )
+
+
 def _index_revision(records: Iterable[tuple[str, str]]) -> str:
-    encoded = _canonical_json(sorted(records))
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    count = 0
+    accumulator = 0
+    for artifact_id, record_sha256 in records:
+        count += 1
+        accumulator = (
+            accumulator + _revision_entry_value(artifact_id, record_sha256)
+        ) % _REVISION_MODULUS
+    return _revision_from_state(count, accumulator)
+
+
+def _revision_entry_value(artifact_id: str, record_sha256: str) -> int:
+    identity = f"{artifact_id}\0{record_sha256.lower()}".encode("utf-8")
+    return int.from_bytes(hashlib.sha512(identity).digest(), "big") % _REVISION_MODULUS
+
+
+def _revision_from_state(artifact_count: int, accumulator: int) -> str:
+    revision_state = (
+        f"satquery-earth-memory:{artifact_count}:"
+        f"{accumulator % _REVISION_MODULUS:0{_REVISION_ACCUMULATOR_WIDTH}x}"
+    )
+    return hashlib.sha256(revision_state.encode("ascii")).hexdigest()
+
+
+def _query_fingerprint(query: EarthMemoryQuery) -> str:
+    query_payload = query.model_dump(mode="json", exclude={"cursor", "limit"})
+    canonical_query = json.dumps(
+        query_payload, sort_keys=True, separators=(",", ":"), allow_nan=False
+    )
+    return hashlib.sha256(canonical_query.encode("utf-8")).hexdigest()
+
+
+def _encode_memory_cursor(
+    revision: str, after_artifact_id: str, query: EarthMemoryQuery
+) -> str:
+    payload = json.dumps(
+        {
+            "version": 1,
+            "revision": revision,
+            "after_artifact_id": after_artifact_id,
+            "query_sha256": _query_fingerprint(query),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_memory_cursor(
+    cursor: str | None, revision: str, query: EarthMemoryQuery
+) -> str | None:
+    if cursor is None:
+        return None
+    try:
+        encoded = cursor.encode("ascii")
+        if not encoded or any(
+            char not in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+            for char in encoded
+        ):
+            raise ValueError
+        payload = base64.b64decode(
+            encoded + b"=" * (-len(encoded) % 4), altchars=b"-_", validate=True
+        )
+        decoded = json.loads(payload)
+        if (
+            not isinstance(decoded, dict)
+            or type(decoded.get("version")) is not int
+            or decoded["version"] != 1
+            or not isinstance(decoded.get("revision"), str)
+            or not isinstance(decoded.get("after_artifact_id"), str)
+            or not decoded["after_artifact_id"]
+            or not isinstance(decoded.get("query_sha256"), str)
+        ):
+            raise ValueError
+    except (UnicodeEncodeError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise EarthMemoryCursorError("Earth Memory cursor is malformed or unsupported") from exc
+    if decoded["revision"] != revision:
+        raise StaleEarthMemoryCursorError(
+            "Earth Memory cursor is stale because the index revision changed"
+        )
+    if decoded["query_sha256"] != _query_fingerprint(query):
+        raise EarthMemoryCursorError("Earth Memory cursor does not match this search query")
+    return decoded["after_artifact_id"]
 
 
 def _search_haystack(artifact: EarthMemoryArtifact) -> str:
@@ -729,32 +1116,7 @@ def _matches_canonical_variable(
 ) -> bool:
     """Match only declared canonical variable identifiers, not fuzzy aliases."""
     wanted = canonical_variable.strip().casefold()
-    if not wanted:
-        return False
-    declared = artifact.metadata.get("canonical_variables", ())
-    if not isinstance(declared, (list, tuple, set, frozenset)):
-        declared = ()
-    names = {value.casefold() for value in declared if isinstance(value, str)}
-    single = artifact.metadata.get("canonical_variable")
-    if isinstance(single, str):
-        names.add(single.casefold())
-    payload = artifact.payload
-    single = payload.get("canonical_variable")
-    if isinstance(single, str):
-        names.add(single.casefold())
-    variable_key = payload.get("variable_key")
-    if isinstance(variable_key, str) and variable_key.startswith("canonical:"):
-        names.add(variable_key.removeprefix("canonical:").casefold())
-    measurements = payload.get("canonical_measurements", ())
-    if isinstance(measurements, list):
-        names.update(
-            value["canonical_variable"].casefold()
-            for value in measurements
-            if isinstance(value, dict)
-            and value.get("semantic_status") == "resolved"
-            and isinstance(value.get("canonical_variable"), str)
-        )
-    return wanted in names
+    return bool(wanted) and wanted in _canonical_variable_names(artifact)
 
 
 def _decode_artifact(encoded: str) -> EarthMemoryArtifact:

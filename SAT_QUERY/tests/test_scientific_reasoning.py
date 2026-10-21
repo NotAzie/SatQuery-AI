@@ -140,6 +140,90 @@ def test_hypothesis_lifecycle_is_versioned_and_append_only():
         raise AssertionError("stale hypothesis update was accepted")
 
 
+def test_hypothesis_lifecycle_events_restore_exact_history_and_reject_tampering():
+    import hashlib
+    import json
+
+    original = HypothesisLifecycleLedger()
+    record = HypothesisRecord(
+        hypothesis_id="persistent-hypothesis",
+        proposition="Surface water expanded.",
+        source_text="The question explicitly proposed expansion.",
+        origin="explicit",
+    )
+    original.add(record, actor="researcher", rationale="Preregistered.")
+    active = original.transition(
+        record.hypothesis_id,
+        expected_version=1,
+        status="active",
+        actor="researcher",
+        rationale="Approved for evaluation.",
+    )
+
+    restored = HypothesisLifecycleLedger()
+    restored.restore_event(record, original.events()[0])
+    restored.restore_event(active, original.events()[1])
+
+    assert restored.graph() == original.graph()
+    assert restored.events() == original.events()
+
+    tampered = active.model_copy(update={"proposition": "A different proposition."})
+    tampered_restore = HypothesisLifecycleLedger()
+    tampered_restore.restore_event(record, original.events()[0])
+    with pytest.raises(ValueError, match="identity or declared content changed"):
+        tampered_restore.restore_event(tampered, original.events()[1])
+
+    invalid_initial = HypothesisLifecycleLedger()
+    proposed_event = original.events()[0]
+    active_record = record.model_copy(update={"lifecycle": "active"})
+    invalid_initial_event = proposed_event.model_copy(
+        update={
+            "to_status": "active",
+            "event_id": hashlib.sha256(
+                json.dumps(
+                    [record.hypothesis_id, 1, None, "active", "researcher", "Preregistered."],
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest(),
+        }
+    )
+    with pytest.raises(ValueError, match="must start proposed"):
+        invalid_initial.restore_event(active_record, invalid_initial_event)
+
+
+def test_hypothesis_graph_orders_composites_after_parents_deterministically():
+    graph = HypothesisGraph(
+        hypotheses=(
+            HypothesisRecord(
+                hypothesis_id="z-composite",
+                proposition="Both conditions hold.",
+                source_text="Explicit conjunction.",
+                origin="composite",
+                parent_hypothesis_ids=("a-parent", "b-parent"),
+                composition="all",
+            ),
+            HypothesisRecord(
+                hypothesis_id="b-parent",
+                proposition="Condition B holds.",
+                source_text="Explicitly proposed.",
+                origin="explicit",
+            ),
+            HypothesisRecord(
+                hypothesis_id="a-parent",
+                proposition="Condition A holds.",
+                source_text="Explicitly proposed.",
+                origin="explicit",
+            ),
+        )
+    )
+
+    assert tuple(item.hypothesis_id for item in graph.topological_order()) == (
+        "a-parent",
+        "b-parent",
+        "z-composite",
+    )
+
+
 def test_hypothesis_graph_rejects_unknown_parents_and_cycles():
     with pytest.raises(ValueError, match="known parents"):
         HypothesisGraph(

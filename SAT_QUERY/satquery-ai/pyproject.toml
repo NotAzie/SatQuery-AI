@@ -33,7 +33,7 @@ vision = ["torch>=2.1", "transformers>=4.38"]
 large = ["accelerate", "sentencepiece"]
 dev = ["pytest>=8.0"]
 geospatial = ["pyproj>=3.6", "shapely>=2.0"]
-raster = ["rasterio>=1.3", "pyproj>=3.6"]
+raster = ["rasterio>=1.3", "pyproj>=3.6", "shapely>=2.0"]
 
 [project.scripts]
 satquery = "satquery.__main__:main"
@@ -46,5 +46,6 @@ testpaths = ["../tests"]
 pythonpath = [".", "../tests"]
 addopts = "-q --tb=short"
 markers = [
+  "vision: requires the optional torch and transformers dependencies",
   "real_acceptance: loads the configured Hugging Face models and runs real-image smoke checks",
 ]

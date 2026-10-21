@@ -91,6 +91,24 @@ class HypothesisGraph(Contract):
             visit(hypothesis_id)
         return self
 
+    def topological_order(self) -> tuple[HypothesisRecord, ...]:
+        """Return a stable parent-before-child order for lifecycle registration."""
+        pending = {item.hypothesis_id: item for item in self.hypotheses}
+        registered: set[str] = set()
+        ordered: list[HypothesisRecord] = []
+        while pending:
+            ready = sorted(
+                hypothesis_id
+                for hypothesis_id, item in pending.items()
+                if set(item.parent_hypothesis_ids) <= registered
+            )
+            if not ready:
+                raise ValueError("hypothesis graph cannot be ordered by its dependencies")
+            for hypothesis_id in ready:
+                ordered.append(pending.pop(hypothesis_id))
+                registered.add(hypothesis_id)
+        return tuple(ordered)
+
 
 class HypothesisLifecycleLedger:
     """Append-only, optimistic-versioned in-memory hypothesis lifecycle."""
@@ -154,11 +172,77 @@ class HypothesisLifecycleLedger:
             self._append_event(updated, current.lifecycle, current.version, actor, rationale)
             return updated
 
+    def restore_event(
+        self, record: HypothesisRecord, event: HypothesisLifecycleEvent
+    ) -> None:
+        """Restore a recorded transition only when its prior state and identity match."""
+        with self._lock:
+            if event.hypothesis_id != record.hypothesis_id:
+                raise ValueError("hypothesis event and record identities differ")
+            if event.version != record.version or event.to_status != record.lifecycle:
+                raise ValueError("hypothesis event does not describe the supplied record")
+            expected_id = hashlib.sha256(
+                json.dumps(
+                    [
+                        record.hypothesis_id,
+                        event.version,
+                        event.from_status,
+                        event.to_status,
+                        event.actor,
+                        event.rationale,
+                    ],
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            if event.event_id != expected_id:
+                raise ValueError("hypothesis event identity digest is invalid")
+
+            current = self._records.get(record.hypothesis_id)
+            if current is None:
+                if (
+                    event.version != 1
+                    or event.prior_version != 0
+                    or event.from_status is not None
+                    or event.to_status != "proposed"
+                ):
+                    raise ValueError(
+                        "hypothesis lifecycle history must start proposed at version 1"
+                    )
+                HypothesisGraph(
+                    hypotheses=(*self._records.values(), record)
+                )
+            else:
+                if (
+                    event.prior_version != current.version
+                    or event.version != current.version + 1
+                    or event.from_status != current.lifecycle
+                    or event.to_status not in self._TRANSITIONS[current.lifecycle]
+                ):
+                    raise ValueError("hypothesis lifecycle events are not a valid transition")
+                prior_fields = current.model_dump(exclude={"version", "lifecycle"})
+                restored_fields = record.model_dump(exclude={"version", "lifecycle"})
+                if prior_fields != restored_fields:
+                    raise ValueError("hypothesis identity or declared content changed in lifecycle")
+                HypothesisGraph(
+                    hypotheses=(
+                        *(
+                            record if key == record.hypothesis_id else value
+                            for key, value in sorted(self._records.items())
+                        ),
+                    )
+                )
+            self._records[record.hypothesis_id] = record
+            self._events.append(event)
+
     def graph(self) -> HypothesisGraph:
         with self._lock:
             return HypothesisGraph(
                 hypotheses=tuple(self._records[key] for key in sorted(self._records))
             )
+
+    def get(self, hypothesis_id: str) -> HypothesisRecord | None:
+        with self._lock:
+            return self._records.get(hypothesis_id)
 
     def events(self, hypothesis_id: str | None = None) -> tuple[HypothesisLifecycleEvent, ...]:
         with self._lock:

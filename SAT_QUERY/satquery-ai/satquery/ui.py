@@ -212,6 +212,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
           <div class="field">
             <label for="earthQuery">Optional structured EarthQuery override</label>
             <textarea id="earthQuery" placeholder='{"point":[80.15,12.84],"requested_variables":["air_temperature_2m"]}'></textarea>
+            <small>For explicit categorical raster masks, include <code>raster_component_extraction</code> rules in this EarthQuery. Class meanings and connectivity must be supplied; SatQuery does not classify imagery.</small>
           </div>
           <div class="row">
             <button class="run" id="startInvestigation" type="button">Create investigation</button>
@@ -221,6 +222,26 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         <div>
           <label>Capability matrix and runtime</label>
           <pre class="trace" id="platformSummary">Loading registered Earth capabilities&hellip;</pre>
+          <div class="field" style="margin-top:14px;">
+            <label>Earth data catalog and connector operations</label>
+            <label for="modalityCatalog">Registered sensing domains</label>
+            <pre class="trace" id="modalityCatalog">Sensing domains have not been loaded.</pre>
+            <div class="row">
+              <input id="datasetSearch" type="text" placeholder="Search registered datasets" />
+              <button id="searchDatasets" type="button">Search datasets</button>
+            </div>
+            <button id="listDatasets" type="button">List all registered datasets</button>
+            <pre class="trace" id="datasetCatalog">Dataset catalog has not been loaded.</pre>
+            <label for="connectorExplorer" style="margin-top:10px;">Registered connectors</label>
+            <select id="connectorExplorer"><option value="">No connectors loaded</option></select>
+            <div class="row">
+              <button id="refreshConnectorHealth" type="button">Refresh passive health</button>
+              <button id="probeConnector" type="button" disabled>Probe selected provider</button>
+            </div>
+            <button id="discoverConnector" type="button" disabled>Discover selected connector datasets</button>
+            <pre class="trace" id="connectorCatalog">Connector registrations and health have not been loaded.</pre>
+            <small>Passive health reads local diagnostics. Probe and discovery actions can make live provider requests.</small>
+          </div>
           <label style="margin-top:12px;">Investigation design, execution, evidence coverage, provenance</label>
           <pre class="trace" id="platformResult">No platform investigation selected.</pre>
           <div id="reasoningWorkspace" class="field" style="display:none; margin-top:14px;">
@@ -240,6 +261,11 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             <label for="earthObjectDeclaration">Explicit Earth Object declaration JSON</label>
             <textarea id="earthObjectDeclaration" placeholder='{"identity_namespace":"source-system","identity_value":"feature-id","object_type":"earth:Feature","declared_by":"reviewer-or-adapter-id","observation_ids":["observation-id"],"evidence_ids":[],"lifecycle":"observed"}'></textarea>
             <button class="run" id="materializeEarthObject" type="button" disabled>Materialize from investigation evidence</button>
+            <label for="earthObjectTransitionId">Earth Object revision ID</label>
+            <input id="earthObjectTransitionId" placeholder="Select an object ID from the object inventory" />
+            <label for="earthObjectTransition">Explicit lifecycle or reclassification transition JSON</label>
+            <textarea id="earthObjectTransition" placeholder='{"prior_object_id":"earth-object-id","transition_type":"lifecycle","actor":"reviewer","rationale":"Cited station source confirms decommissioning","observation_ids":["source-observation-id"],"evidence_ids":[],"prior_lifecycle":"active","new_lifecycle":"inactive"}'></textarea>
+            <button class="run" id="transitionEarthObject" type="button" disabled>Record explicit object transition</button>
             <button class="run" id="reevaluateWithEarthObjects" type="button" disabled>Re-evaluate with Earth Objects</button>
             <label>Canonical Earth Objects</label><pre class="trace" id="earthObjects">No Earth Objects materialized.</pre>
             <label>Evidence-backed object relationships</label><pre class="trace" id="earthObjectGraph">No object relationships recorded.</pre>
@@ -249,6 +275,35 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
       <div class="field" style="margin-top:18px;">
         <label for="missionExplorer">Mission history</label>
         <select id="missionExplorer"><option value="">No missions loaded</option></select>
+        <label style="margin-top:12px;">Recurring Earth observation</label>
+        <input id="monitorName" type="text" placeholder="Monitoring schedule name" />
+        <input id="monitorInterval" type="number" min="1" value="3600" style="margin-top:8px;" />
+        <label for="monitorPriority" style="margin-top:8px;">Execution priority (0–100)</label>
+        <input id="monitorPriority" type="number" min="0" max="100" value="0" />
+        <select id="monitorOverlapPolicy" style="margin-top:8px;">
+          <option value="skip_while_running">Coalesce while a run is active</option>
+          <option value="allow">Allow overlapping runs</option>
+        </select>
+        <textarea id="monitorEarthQuery" style="margin-top:8px;" placeholder='EarthQuery JSON, e.g. {"bbox":[...],"requested_variables":[...]}'></textarea>
+        <label for="monitorTriggerPolicies" style="margin-top:8px;">Operator-authored trigger policies (JSON array; optional)</label>
+        <textarea id="monitorTriggerPolicies" placeholder='[ {"policy_id":"rain-change-review","name":"Review rainfall change","canonical_variable":"precipitation","unit":"mm","operator":"gt","threshold":25,"follow_up_query":{...},"cooldown_seconds":86400} ]'></textarea>
+        <button class="run" id="createMonitor" type="button">Schedule this EarthQuery</button>
+        <button class="run" id="reviseMonitor" type="button" disabled>Save schedule revision</button>
+        <button class="run" id="runDueMonitoring" type="button">Run due schedules now</button>
+        <label style="margin-top:10px;">Scheduler health and expired leases</label>
+        <pre class="trace" id="monitoringHealth">Monitoring health has not been loaded.</pre>
+        <div id="monitoringScheduleList"></div>
+        <pre class="trace" id="monitoringHistory">No monitoring schedules are registered.</pre>
+        <label style="margin-top:10px;">Recent run measurement alignment</label>
+        <pre class="trace" id="monitoringComparison">Select Compare runs on a schedule with at least two completed investigations.</pre>
+        <label style="margin-top:10px;">Monitoring lifecycle events</label>
+        <pre class="trace" id="monitoringEvents">No monitoring events are recorded.</pre>
+        <button class="run" id="loadOlderMonitoringEvents" type="button" disabled>Load older events</button>
+        <label style="margin-top:10px;">Trigger policies and investigation chain</label>
+        <pre class="trace" id="monitoringTriggers">Select Triggers on a schedule to inspect policy evaluations and follow-up investigations.</pre>
+        <button class="run" id="loadOlderMonitoringTriggers" type="button" disabled>Load older trigger history</button>
+        <label style="margin-top:10px;">Monitoring notifications</label>
+        <div id="monitoringNotificationList"></div>
         <label for="investigationExplorer" style="margin-top:10px;">Investigations in selected mission</label>
         <select id="investigationExplorer"><option value="">No investigation selected</option></select>
         <label for="investigationCompareSelect" style="margin-top:10px;">Compare investigations</label>
@@ -271,6 +326,21 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
         <label>Earth Memory search · optional explicit bounds</label>
         <input id="memoryTerms" type="text" placeholder="Literal terms (optional)" />
         <input id="memoryVariable" type="text" placeholder="Exact canonical variable, e.g. ndvi" style="margin-top:8px;" />
+        <select id="memoryArtifactType" style="margin-top:8px;">
+          <option value="">Any artifact type</option>
+          <option>investigation</option><option>plan</option><option>observation</option>
+          <option>earth_object_extraction</option>
+          <option>evidence</option><option>hypothesis</option><option>scientific_method</option>
+          <option>reproducibility_artifact</option><option>provenance_node</option>
+          <option>earth_object</option><option>object_relationship</option><option>earth_object_transition</option>
+          <option>mission</option><option>monitoring_schedule</option><option>monitoring_run</option><option>monitoring_event</option><option>monitoring_notification</option>
+          <option>investigation_comparison</option><option>monitoring_comparison</option>
+          <option>observation_stack</option><option>temporal_difference</option>
+        </select>
+        <input id="memoryMission" type="text" placeholder="Mission ID (optional)" style="margin-top:8px;" />
+        <input id="memoryInvestigation" type="text" placeholder="Investigation ID (optional)" style="margin-top:8px;" />
+        <input id="memoryMethod" type="text" placeholder="Scientific method ID (optional)" style="margin-top:8px;" />
+        <input id="memorySourceArtifact" type="text" placeholder="Linked source artifact ID (optional)" style="margin-top:8px;" />
         <input id="memoryBbox" type="text" placeholder="min x, min y, max x, max y" style="margin-top:8px;" />
         <input id="memoryCrs" type="text" value="OGC:CRS84" placeholder="CRS required with bounds" style="margin-top:8px;" />
         <div class="row" style="margin-top:8px;">
@@ -278,6 +348,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
           <input id="memoryEnd" type="text" placeholder="End (ISO-8601 with timezone)" />
         </div>
         <button class="run" id="searchEarthMemory" type="button">Search recorded Earth evidence</button>
+        <button id="nextEarthMemoryPage" type="button" disabled>Next page</button>
         <pre class="trace" id="earthMemoryResults">No Earth Memory search performed.</pre>
       </div>
     </div>
@@ -385,7 +456,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <script>
 'use strict';
 
-const state = { files: [], response: null, activeImage: 0, objectUrls: [], investigationId: null, missionId: null };
+const state = { files: [], response: null, activeImage: 0, objectUrls: [], investigationId: null, missionId: null, memoryCursor: null, monitoringScheduleId: null, monitoringRevision: null, monitoringEventCursor: null, monitoringEvents: [], monitoringTriggerScheduleId: null, monitoringTriggerCursor: null, monitoringTriggerResult: null };
 
 const EXAMPLES = [
   'Describe this scene in detail',
@@ -445,8 +516,295 @@ async function refreshPlatform() {
     missionSelect.value = missions[missions.length - 1].mission_id;
     state.missionId = missionSelect.value;
   }
+  await refreshEarthSources();
   await refreshInvestigationHistory();
+  await refreshMonitoringSchedules();
   await refreshEarthObjects();
+}
+
+async function platformJSON(path, options) {
+  const response = await fetch(path, options);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.detail || payload.error || response.statusText);
+  return payload;
+}
+
+async function refreshEarthSources() {
+  const [modalities, connectors, health, datasets] = await Promise.all([
+    platformJSON('/api/v1/platform/modalities'),
+    platformJSON('/api/v1/platform/connectors'),
+    platformJSON('/api/v1/platform/connectors/health'),
+    platformJSON('/api/v1/platform/datasets')
+  ]);
+  $('modalityCatalog').textContent = JSON.stringify(modalities, null, 2);
+  $('datasetCatalog').textContent = JSON.stringify(datasets, null, 2);
+  const connectorSelect = $('connectorExplorer');
+  const priorConnector = connectorSelect.value;
+  connectorSelect.replaceChildren(new Option('Select a connector', ''));
+  connectors.forEach((connector) => connectorSelect.add(new Option(
+    connector.name || connector.connector_id,
+    connector.connector_id
+  )));
+  if (connectors.some((connector) => connector.connector_id === priorConnector)) {
+    connectorSelect.value = priorConnector;
+  }
+  const hasConnector = Boolean(connectorSelect.value);
+  $('probeConnector').disabled = !hasConnector;
+  $('discoverConnector').disabled = !hasConnector;
+  $('connectorCatalog').textContent = JSON.stringify({connectors, health}, null, 2);
+}
+
+async function searchRegisteredDatasets() {
+  const query = $('datasetSearch').value.trim();
+  if (!query) {
+    $('datasetCatalog').textContent = 'Enter a search term, or use List all registered datasets.';
+    return;
+  }
+  const params = new URLSearchParams({q: query});
+  const datasets = await platformJSON('/api/v1/platform/datasets/search?' + params.toString());
+  $('datasetCatalog').textContent = JSON.stringify(datasets, null, 2);
+}
+
+async function refreshConnectorHealth() {
+  const health = await platformJSON('/api/v1/platform/connectors/health');
+  $('connectorCatalog').textContent = JSON.stringify({
+    connectors: await platformJSON('/api/v1/platform/connectors'),
+    health
+  }, null, 2);
+}
+
+async function runConnectorOperation(operation) {
+  const connectorId = $('connectorExplorer').value;
+  if (!connectorId) return;
+  const path = '/api/v1/platform/connectors/' + encodeURIComponent(connectorId) + '/' + operation;
+  const result = await platformJSON(path, {method: 'POST'});
+  $('connectorCatalog').textContent = JSON.stringify(result, null, 2);
+  await refreshEarthSources();
+}
+
+async function refreshMonitoringSchedules() {
+  const suffix = state.missionId ? '?mission_id=' + encodeURIComponent(state.missionId) : '';
+  const [response, healthResponse, eventsResponse, notificationsResponse] = await Promise.all([
+    fetch('/api/v1/platform/monitoring/schedules' + suffix),
+    fetch('/api/v1/platform/monitoring/health'),
+    fetch('/api/v1/platform/monitoring/events/page?limit=100'),
+    fetch('/api/v1/platform/monitoring/notifications?limit=100')
+  ]);
+  const [schedules, health, eventPage, notifications] = await Promise.all([
+    response.json(), healthResponse.json(), eventsResponse.json(), notificationsResponse.json()
+  ]);
+  if (!response.ok) throw new Error(schedules.detail || 'Could not load monitoring schedules.');
+  if (!healthResponse.ok) throw new Error(health.detail || 'Could not load monitoring health.');
+  if (!eventsResponse.ok) throw new Error(eventPage.detail || 'Could not load monitoring events.');
+  if (!notificationsResponse.ok) throw new Error(notifications.detail || 'Could not load monitoring notifications.');
+  $('monitoringHealth').textContent = JSON.stringify(health, null, 2);
+  state.monitoringEvents = eventPage.events || [];
+  state.monitoringEventCursor = eventPage.next_cursor || null;
+  renderMonitoringEvents(eventPage.has_more);
+  const notificationHost = $('monitoringNotificationList');
+  notificationHost.replaceChildren();
+  notifications.forEach((notification) => {
+    const row = document.createElement('div');
+    row.className = 'field';
+    row.style.marginTop = '8px';
+    const title = document.createElement('span');
+    title.textContent = notification.severity.toUpperCase() + ' · ' +
+      notification.title + ' · ' + notification.status;
+    const detail = document.createElement('p');
+    detail.textContent = notification.detail;
+    row.append(title, detail);
+    if (notification.status === 'unread') {
+      const acknowledge = document.createElement('button');
+      acknowledge.type = 'button';
+      acknowledge.textContent = 'Acknowledge';
+      acknowledge.addEventListener('click', async () => {
+        acknowledge.disabled = true;
+        const result = await fetch('/api/v1/platform/monitoring/notifications/' +
+          encodeURIComponent(notification.notification_id) + '/acknowledge', { method: 'POST' });
+        if (!result.ok) throw new Error((await result.json()).detail || 'Could not acknowledge notification.');
+        await refreshMonitoringSchedules();
+      });
+      row.appendChild(acknowledge);
+    }
+    notificationHost.appendChild(row);
+  });
+  const schedulesWithRuns = await Promise.all(schedules.map(async (schedule) => {
+    const runsResponse = await fetch('/api/v1/platform/monitoring/schedules/' + encodeURIComponent(schedule.schedule_id) + '/runs');
+    const runs = await runsResponse.json();
+    return { schedule, runs: runsResponse.ok ? runs : [] };
+  }));
+  $('monitoringHistory').textContent = schedules.length
+    ? JSON.stringify(schedulesWithRuns, null, 2)
+    : 'No monitoring schedules are registered for this mission.';
+  const host = $('monitoringScheduleList');
+  host.replaceChildren();
+  schedules.forEach((schedule) => {
+    const row = document.createElement('div');
+    row.className = 'field';
+    row.style.marginTop = '8px';
+    const title = document.createElement('span');
+    title.textContent = schedule.name + ' · ' + (schedule.enabled ? 'enabled' : 'paused') +
+      ' · next ' + schedule.next_run_at;
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'run';
+    toggle.textContent = schedule.enabled ? 'Pause schedule' : 'Enable schedule';
+    toggle.addEventListener('click', async () => {
+      toggle.disabled = true;
+      try {
+        const action = schedule.enabled ? 'disable' : 'enable';
+        const result = await fetch('/api/v1/platform/monitoring/schedules/' +
+          encodeURIComponent(schedule.schedule_id) + '/' + action, { method: 'POST' });
+        if (!result.ok) throw new Error((await result.json()).detail || 'Could not change schedule state.');
+        await refreshMonitoringSchedules();
+      } catch (error) {
+        $('monitoringHistory').textContent = error.message;
+      } finally { toggle.disabled = false; }
+    });
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.textContent = 'Edit definition';
+    edit.addEventListener('click', () => {
+      state.monitoringScheduleId = schedule.schedule_id;
+      state.monitoringRevision = schedule.revision;
+      $('monitorName').value = schedule.name;
+      $('monitorInterval').value = schedule.interval_seconds;
+      $('monitorPriority').value = schedule.priority || 0;
+      $('monitorOverlapPolicy').value = schedule.overlap_policy;
+      $('monitorEarthQuery').value = JSON.stringify(schedule.earth_query, null, 2);
+      $('monitorTriggerPolicies').value = JSON.stringify(schedule.trigger_policies || [], null, 2);
+      $('reviseMonitor').disabled = false;
+      $('monitoringHistory').textContent = 'Editing ' + schedule.schedule_id +
+        ' at definition revision ' + schedule.revision + '. Saving uses an expected revision check.';
+    });
+    const compare = document.createElement('button');
+    compare.type = 'button';
+    compare.textContent = 'Compare runs';
+    compare.addEventListener('click', async () => {
+      compare.disabled = true;
+      $('monitoringComparison').textContent = 'Aligning recorded canonical measurements…';
+      try {
+        const result = await fetch('/api/v1/platform/monitoring/schedules/' +
+          encodeURIComponent(schedule.schedule_id) + '/comparison');
+        const comparison = await result.json();
+        if (!result.ok) throw new Error(comparison.detail || 'Could not compare monitoring runs.');
+        $('monitoringComparison').textContent = comparison.markdown || JSON.stringify(comparison, null, 2);
+      } catch (error) {
+        $('monitoringComparison').textContent = error.message;
+      } finally { compare.disabled = false; }
+    });
+    const triggers = document.createElement('button');
+    triggers.type = 'button';
+    triggers.textContent = 'Triggers';
+    triggers.addEventListener('click', async () => {
+      $('monitoringTriggers').textContent = 'Loading trigger policy history…';
+      try { await loadMonitoringTriggerPage(schedule.schedule_id, null, false); }
+      catch (error) { $('monitoringTriggers').textContent = error.message; }
+    });
+    row.append(title, toggle, edit, compare, triggers);
+    host.appendChild(row);
+  });
+}
+
+function renderMonitoringEvents(hasMore) {
+  $('monitoringEvents').textContent = state.monitoringEvents.length
+    ? JSON.stringify(state.monitoringEvents, null, 2)
+    : 'No monitoring lifecycle events are recorded.';
+  $('loadOlderMonitoringEvents').disabled = !hasMore || !state.monitoringEventCursor;
+}
+
+async function loadOlderMonitoringEvents() {
+  if (!state.monitoringEventCursor) return;
+  const params = new URLSearchParams({ limit: '100', cursor: state.monitoringEventCursor });
+  const response = await fetch('/api/v1/platform/monitoring/events/page?' + params);
+  const page = await response.json();
+  if (!response.ok) throw new Error(page.detail || 'Could not load older monitoring events.');
+  state.monitoringEvents = [...(page.events || []), ...state.monitoringEvents];
+  state.monitoringEventCursor = page.next_cursor || null;
+  renderMonitoringEvents(page.has_more);
+}
+
+async function loadMonitoringTriggerPage(scheduleId, cursor, appendOlder) {
+  const params = new URLSearchParams({ limit: '100' });
+  if (cursor) params.set('cursor', cursor);
+  const response = await fetch('/api/v1/platform/monitoring/schedules/' +
+    encodeURIComponent(scheduleId) + '/triggers?' + params);
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || 'Could not load trigger history.');
+  const prior = appendOlder && state.monitoringTriggerResult;
+  state.monitoringTriggerResult = prior
+    ? { ...result, events: [...(result.events || []), ...(prior.events || [])] }
+    : result;
+  state.monitoringTriggerScheduleId = scheduleId;
+  state.monitoringTriggerCursor = result.next_cursor || null;
+  $('monitoringTriggers').textContent = JSON.stringify(state.monitoringTriggerResult, null, 2);
+  $('loadOlderMonitoringTriggers').disabled = !result.has_more || !state.monitoringTriggerCursor;
+}
+
+async function createMonitoringSchedule() {
+  if (!state.missionId) throw new Error('Select an active mission before creating a schedule.');
+  const query = JSON.parse($('monitorEarthQuery').value);
+  const triggerPolicies = $('monitorTriggerPolicies').value.trim()
+    ? JSON.parse($('monitorTriggerPolicies').value) : [];
+  if (!Array.isArray(triggerPolicies)) throw new Error('Trigger policies must be a JSON array.');
+  const interval = Number($('monitorInterval').value);
+  if (!Number.isInteger(interval) || interval < 1) throw new Error('Interval must be a positive whole number of seconds.');
+  const priority = Number($('monitorPriority').value);
+  if (!Number.isInteger(priority) || priority < 0 || priority > 100) throw new Error('Priority must be an integer from 0 to 100.');
+  const response = await fetch('/api/v1/platform/monitoring/schedules', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mission_id: state.missionId, name: $('monitorName').value,
+      interval_seconds: interval,
+      priority,
+      overlap_policy: $('monitorOverlapPolicy').value,
+      earth_query: query,
+      trigger_policies: triggerPolicies
+    })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || 'Could not create monitoring schedule.');
+  await refreshMonitoringSchedules();
+}
+
+async function reviseMonitoringSchedule() {
+  if (!state.monitoringScheduleId || !state.monitoringRevision) {
+    throw new Error('Choose Edit definition on a schedule first.');
+  }
+  const query = JSON.parse($('monitorEarthQuery').value);
+  const triggerPolicies = $('monitorTriggerPolicies').value.trim()
+    ? JSON.parse($('monitorTriggerPolicies').value) : [];
+  if (!Array.isArray(triggerPolicies)) throw new Error('Trigger policies must be a JSON array.');
+  const interval = Number($('monitorInterval').value);
+  if (!Number.isInteger(interval) || interval < 1) throw new Error('Interval must be a positive whole number of seconds.');
+  const priority = Number($('monitorPriority').value);
+  if (!Number.isInteger(priority) || priority < 0 || priority > 100) throw new Error('Priority must be an integer from 0 to 100.');
+  const response = await fetch('/api/v1/platform/monitoring/schedules/' +
+    encodeURIComponent(state.monitoringScheduleId), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expected_revision: state.monitoringRevision,
+        name: $('monitorName').value,
+        interval_seconds: interval,
+        priority,
+        overlap_policy: $('monitorOverlapPolicy').value,
+        earth_query: query,
+        trigger_policies: triggerPolicies
+      })
+    });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || 'Could not revise monitoring schedule.');
+  state.monitoringScheduleId = null;
+  state.monitoringRevision = null;
+  $('reviseMonitor').disabled = true;
+  await refreshMonitoringSchedules();
+}
+
+async function runMonitoringDueNow() {
+  const response = await fetch('/api/v1/platform/monitoring/run-due', { method: 'POST' });
+  const runs = await response.json();
+  if (!response.ok) throw new Error(runs.detail || 'Could not run due monitoring schedules.');
+  await refreshPlatform();
 }
 
 async function refreshInvestigationHistory() {
@@ -571,14 +929,25 @@ async function refreshEarthObjects() {
   $('earthObjects').textContent = JSON.stringify(objects, null, 2);
   $('earthObjectGraph').textContent = JSON.stringify(graph, null, 2);
   $('materializeEarthObject').disabled = !Array.isArray(observations) || observations.length === 0;
+  $('transitionEarthObject').disabled = !Array.isArray(objects) || objects.length === 0;
+  if (Array.isArray(objects) && objects.length === 1 && !$('earthObjectTransitionId').value) {
+    $('earthObjectTransitionId').value = objects[0].object_id;
+  }
   $('reevaluateWithEarthObjects').disabled = objects.length === 0;
 }
 
-async function searchEarthMemory() {
+async function searchEarthMemory(nextPage = false) {
+  if (!nextPage) state.memoryCursor = null;
   try {
     const payload = {
       text: $('memoryTerms').value || null,
       canonical_variable: $('memoryVariable').value.trim() || null,
+      artifact_types: $('memoryArtifactType').value ? [$('memoryArtifactType').value] : [],
+      mission_id: $('memoryMission').value.trim() || null,
+      investigation_id: $('memoryInvestigation').value.trim() || null,
+      method_id: $('memoryMethod').value.trim() || null,
+      source_artifact_id: $('memorySourceArtifact').value.trim() || null,
+      cursor: nextPage ? state.memoryCursor : null,
       limit: 100
     };
     const bboxText = $('memoryBbox').value.trim();
@@ -599,8 +968,12 @@ async function searchEarthMemory() {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.detail || result.error || response.statusText);
+    state.memoryCursor = result.next_cursor || null;
+    $('nextEarthMemoryPage').disabled = !state.memoryCursor;
     $('earthMemoryResults').textContent = JSON.stringify(result, null, 2);
   } catch (error) {
+    state.memoryCursor = null;
+    $('nextEarthMemoryPage').disabled = true;
     $('earthMemoryResults').textContent = 'Earth Memory search failed: ' + error.message;
   }
 }
@@ -619,6 +992,24 @@ async function materializeEarthObject() {
     await refreshEarthObjects();
   } catch (error) {
     $('earthObjects').textContent = 'Earth Object materialization failed: ' + error.message;
+  }
+}
+
+async function transitionEarthObject() {
+  const objectId = $('earthObjectTransitionId').value.trim();
+  if (!objectId) return;
+  try {
+    const transition = JSON.parse($('earthObjectTransition').value);
+    const response = await fetch('/api/v1/platform/earth-objects/id/' + encodeURIComponent(objectId) + '/transitions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(transition)
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.detail || body.error || response.statusText);
+    $('earthObjects').textContent = JSON.stringify(body, null, 2);
+    await refreshEarthObjects();
+  } catch (error) {
+    $('earthObjects').textContent = 'Earth Object transition failed: ' + error.message;
   }
 }
 
@@ -740,10 +1131,73 @@ async function cancelInvestigation() {
 }
 
 $('refreshPlatform').addEventListener('click', refreshPlatform);
+$('searchDatasets').addEventListener('click', () => {
+  searchRegisteredDatasets().catch((error) => {
+    $('datasetCatalog').textContent = 'Dataset search failed: ' + error.message;
+  });
+});
+$('datasetSearch').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    $('searchDatasets').click();
+  }
+});
+$('listDatasets').addEventListener('click', async () => {
+  try {
+    $('datasetCatalog').textContent = JSON.stringify(
+      await platformJSON('/api/v1/platform/datasets'), null, 2
+    );
+  } catch (error) {
+    $('datasetCatalog').textContent = 'Dataset listing failed: ' + error.message;
+  }
+});
+$('refreshConnectorHealth').addEventListener('click', () => {
+  refreshConnectorHealth().catch((error) => {
+    $('connectorCatalog').textContent = 'Connector health unavailable: ' + error.message;
+  });
+});
+$('probeConnector').addEventListener('click', () => {
+  runConnectorOperation('health-check').catch((error) => {
+    $('connectorCatalog').textContent = 'Provider health probe failed: ' + error.message;
+  });
+});
+$('discoverConnector').addEventListener('click', () => {
+  runConnectorOperation('discover').catch((error) => {
+    $('connectorCatalog').textContent = 'Dataset discovery failed: ' + error.message;
+  });
+});
+$('createMonitor').addEventListener('click', async () => {
+  $('createMonitor').disabled = true;
+  try { await createMonitoringSchedule(); }
+  catch (error) { $('monitoringHistory').textContent = error.message; }
+  finally { $('createMonitor').disabled = false; }
+});
+$('reviseMonitor').addEventListener('click', async () => {
+  try { await reviseMonitoringSchedule(); }
+  catch (error) { $('monitoringHistory').textContent = error.message; }
+});
+$('runDueMonitoring').addEventListener('click', async () => {
+  $('runDueMonitoring').disabled = true;
+  try { await runMonitoringDueNow(); }
+  catch (error) { $('monitoringHistory').textContent = error.message; }
+  finally { $('runDueMonitoring').disabled = false; }
+});
+$('loadOlderMonitoringEvents').addEventListener('click', async () => {
+  try { await loadOlderMonitoringEvents(); }
+  catch (error) { $('monitoringHistory').textContent = error.message; }
+});
+$('loadOlderMonitoringTriggers').addEventListener('click', async () => {
+  if (!state.monitoringTriggerScheduleId || !state.monitoringTriggerCursor) return;
+  try {
+    await loadMonitoringTriggerPage(
+      state.monitoringTriggerScheduleId, state.monitoringTriggerCursor, true
+    );
+  } catch (error) { $('monitoringTriggers').textContent = error.message; }
+});
 $('missionExplorer').addEventListener('change', async (event) => {
   state.missionId = event.target.value || null;
   state.investigationId = null;
-  try { await refreshInvestigationHistory(); } catch (error) { $('missionHistory').textContent = error.message; }
+  try { await refreshInvestigationHistory(); await refreshMonitoringSchedules(); } catch (error) { $('missionHistory').textContent = error.message; }
 });
 $('investigationExplorer').addEventListener('change', loadInvestigationHistory);
 $('compareInvestigations').addEventListener('click', compareInvestigations);
@@ -752,8 +1206,10 @@ $('executeInvestigation').addEventListener('click', executeInvestigation);
 $('resumeInvestigation').addEventListener('click', resumeInvestigation);
 $('cancelInvestigation').addEventListener('click', cancelInvestigation);
 $('materializeEarthObject').addEventListener('click', materializeEarthObject);
+$('transitionEarthObject').addEventListener('click', transitionEarthObject);
 $('reevaluateWithEarthObjects').addEventListener('click', reevaluateWithEarthObjects);
 $('searchEarthMemory').addEventListener('click', searchEarthMemory);
+$('nextEarthMemoryPage').addEventListener('click', () => searchEarthMemory(true));
 
 async function loadStatus() {
   const line = $('statusline');
