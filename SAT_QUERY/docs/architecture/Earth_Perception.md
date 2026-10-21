@@ -1,5 +1,11 @@
 # Earth Perception Layer
 
+> Current-state note: this page documents working local capabilities, not
+> complete global coverage. The canonical adapter inventory and limitations
+> are in [Supported datasets](../datasets/SUPPORTED_DATASETS.md) and
+> [implementation status](../IMPLEMENTATION_STATUS.md). Provider manifests
+> are opt-in; declared support is not live availability.
+
 ## Scope
 
 The implemented perception layer accepts a validated `EarthQuery`, plans
@@ -8,9 +14,12 @@ implementations, obtains canonical `ObservationSearchResult` values, adds
 acquisition provenance, and can return an aggregated result or asynchronous
 observation stream. Aggregated results
 include conservative exact-duplicate compaction, overlapping observation
-groups, and explicit conflicts. It is independent of
-the existing user-query and image-analysis paths. It does not analyze raster
-assets or plan investigations.
+groups, and explicit conflicts. This is the structured Earth observation
+path; the retained image question-answering capability is a separate task
+that is also composed through the platform runtime. It does not analyze raster
+assets unless point sampling, zonal analysis, or explicit categorical component
+polygonization is requested; investigation planning is handled by the planning
+layer and versioned workflow compiler.
 
 ## Contracts
 
@@ -40,10 +49,32 @@ resolved canonical measurement records. Provider quality is ranked only when
 the source supplies a normalized score in the canonical quality field.
 The original provider document remains available in `source_document`.
 
-`ObservationAsset` is the common reference for assets and does not open,
-download, or interpret them. `AssetCatalog` searches assets attached to
-observations and registered dataset metadata by dataset, role, media type, and
-text. It preserves the source URI, roles, metadata, and source ID.
+`ObservationAsset` is the common reference for assets. `AssetCatalog` searches
+assets attached to observations and registered dataset metadata by dataset,
+role, media type, and text. It preserves the source URI, roles, metadata, and
+source ID. Raster assets remain lazy until an explicit sampling, zonal analysis,
+or categorical component request is made.
+
+### Explicit categorical raster components
+
+An `EarthQuery` may provide `raster_component_extraction` entries naming an
+asset, band, source variable, exact class-code-to-object-type mappings,
+4- or 8-neighbor connectivity, AOI pixel-selection rule, minimum component
+size, and maximum component count. The versioned investigation DAG carries this
+request into its Earth Object extraction stage. Rasterio polygonizes only cells
+selected by the declared pixel-center or all-touched AOI rule. Emitted geometry
+retains full selected-cell footprints in the source CRS and can extend beyond
+the AOI boundary; it is not clipped. The operator does not infer a class,
+identify objects in imagery, or validate the source classification.
+
+Each output Earth Object retains its source observation and dataset, native
+raster CRS and polygon, class code mapping, algorithm parameters, library
+versions, source-window SHA-256, and a deterministic component identity. The
+pixel-count assertion is exact only conditional on the selected raster cells
+and mask rules. Classification and geometry uncertainty remain
+`not_assessed`; no confidence is assigned. Components beyond the configured
+limit produce an explicit issue and no truncated result set. Local-file access
+is disabled by default, and execution requires the optional `raster` extra.
 
 ## Earth sensing modalities
 
@@ -419,34 +450,43 @@ available in each product's reproducibility metadata for later validated
 alignment methods.
 
 For multi-observation point-sampling requests, `PerceptionEngine` also builds
-`ObservationStack` records from raster samples only when each member has a
-source acquisition time, finite numeric value, declared unit, and identical
-pixel-support geometry and CRS. Resolved canonical variables may align across
-datasets; unresolved variables are scoped to the same declared dataset and
-source-variable name. Units must match exactly. The stack retains every source
-observation, measurement metadata, uncertainty record, and provenance record.
-It does not resample, reproject support, convert units, interpolate time,
-aggregate uncertainty, or calculate a trend. A versioned consecutive-difference
-diagnostic now reports `later - earlier` for each adjacent pair in a valid
-stack only when both samples identify the exact same dataset and source
-variable. Cross-dataset or source-variable comparisons are returned as explicit
-issues and remain available in the unaggregated stack until a validated
-compatibility method exists. It embeds both source members, exact pixel support,
-units, provenance, and source uncertainty; its status is explicitly descriptive
-and uncertainty is explicitly not propagated. It does not calculate a rate,
-test significance, interpret physical meaning, or support a scientific
-conclusion. Non-finite arithmetic is returned as a typed issue instead of a
-result. Alignment blockers remain available as
+`ObservationStack` records from raster samples and direct point observations
+only when each member has a source acquisition time, finite numeric value,
+declared unit, and identical support geometry and CRS. Raster samples retain
+the sampled pixel support; point products use their declared observation point.
+Resolved canonical variables may align across datasets; unresolved variables
+are scoped to the same declared dataset and source-variable name. Units must
+match exactly. The stack retains every source observation, measurement
+metadata, uncertainty record, and provenance record. It does not resample,
+reproject support, convert units, interpolate time, aggregate uncertainty, or
+calculate a trend. A versioned consecutive-difference diagnostic reports
+`later - earlier` for each adjacent pair in a valid stack only when both
+samples identify the exact same dataset and source variable. Cross-dataset or
+source-variable comparisons are returned as explicit issues and remain
+available in the unaggregated stack until a validated compatibility method
+exists. It embeds both source members, exact support, units, provenance, and
+source uncertainty; its status is explicitly descriptive and uncertainty is
+explicitly not propagated. It does not calculate a rate, test significance,
+interpret physical meaning, or support a scientific conclusion. Non-finite
+arithmetic is returned as a typed issue instead of a result. Alignment blockers remain available as
 `PerceptionResult.alignment_issues`; they do not erase acquired observations.
 The streaming API continues to yield observations individually and does not
 claim to produce an aggregate stack.
 
+NASA POWER daily point records are available through the configured
+`nasa_power` connector. Its canonical observations preserve POWER parameter
+codes, reported units, fill values, query community, and provider response
+metadata. The connector uses UTC daily timestamps and does not represent the
+gridded product as a station reading. See the
+[`NASA POWER connector guide`](../datasets/NASA_POWER_CONNECTOR.md) for query
+limits and parameter mappings.
+
 Diagnostics are part of `PerceptionResult`, indexed in Earth Memory with their
 exact CRS-scoped spatial support and source time interval, and exposed through
-the investigation API, CLI inspection, and workspace. Earth Memory schema v3
-rebuilds the derived spatiotemporal index from immutable payloads when opening
-v1 or v2 stores. These records are descriptive arithmetic, not validated trend
-or change methods.
+the investigation API, CLI inspection, and workspace. Current Earth Memory
+SQLite schema version is 6; migrations rebuild derived indexes from immutable
+canonical payloads. These records are descriptive arithmetic, not validated
+trend or change methods.
 
 The NASA Earthdata connector uses NASA CMR collection discovery and granule
 search. It can discover configured collection concept IDs or short names,
@@ -507,22 +547,23 @@ The current modality-to-implementation coverage is intentionally incomplete:
 
 | Modality | Current declared implementations | Main gaps |
 |---|---|---|
-| Visual | STAC collections with recognized imagery metadata; Esri World Imagery point fetcher | Platform point sampling and zonal descriptive statistics can process compatible STAC assets with declared raster bands; no spectral-index derivation, area weighting, or sample uncertainty |
-| Atmospheric | Open-Meteo weather, historical weather, and climate endpoints; STAC collections when variables are declared | No broad reanalysis, atmospheric composition, or multi-source gridded coverage |
-| Hydrological | Open-Meteo modeled river discharge; STAC collections when variables are declared | No dedicated surface-water, groundwater, flood-monitoring, or basin products |
-| Ecological | STAC collections when ecological variables are declared | No dedicated vegetation, biodiversity, or land-cover products |
-| Geological | USGS 3DEP EPQS point elevation; STAC collections when variables are declared | Explicitly declared elevation bands can be point-sampled; no terrain derivatives or broad geology products |
-| Human | OpenStreetMap/Overpass; STAC collections when variables are declared | No population, census, or harmonized administrative-boundary products |
-| Oceanic | STAC collections when marine variables are declared | No dedicated ocean-state products |
-| Disaster | STAC collections when hazard variables are declared | No dedicated active-event, impact, or response feeds |
-| Cryospheric | STAC collections when cryosphere variables are declared | No dedicated snow, glacier, or sea-ice products |
+| Visual | STAC imagery; Esri World Imagery point fetcher; explicit raster sample/zonal operations | No general classification, spectral-index derivation, area-weighted statistics, or sample uncertainty |
+| Atmospheric | Open-Meteo weather, historical weather, climate; NASA POWER daily point parameters; STAC declarations | No broad atmospheric composition or comprehensive multi-source gridded service |
+| Hydrological | Open-Meteo modeled river discharge; USGS Water daily discharge; STAC declarations | No general flood extent, groundwater, or basin-scale workflow |
+| Ecological | STAC collections where variables are declared; caller-mapped categorical raster components | No validated vegetation, biodiversity, or ecological condition extraction method |
+| Geological | USGS 3DEP EPQS point elevation; STAC declarations | EPQS is single-point; no terrain derivatives or broad geological products |
+| Human | OpenStreetMap/Overpass; STAC declarations | No population, census, or harmonized administrative-boundary products |
+| Oceanic | NOAA CO-OPS station water levels; STAC marine declarations | No broad ocean-state coverage (waves, currents, temperature, or ocean color) |
+| Disaster | NASA FIRMS active-fire detections; STAC hazard declarations | No general event impact, flood, cyclone, or response products |
+| Cryospheric | STAC collections where cryosphere variables are declared | No dedicated snow, glacier, or sea-ice adapter |
 
 NASA Earthdata CMR supplies cross-domain catalog discovery; it is not treated
 as one observation modality. The implemented data adapters include STAC
-catalogs (including the three presets above), NASA Earthdata CMR,
-OpenStreetMap/Overpass, USGS 3DEP EPQS, the Esri World Imagery image fetcher,
-and Open-Meteo. EPQS covers single-point elevation only; it does not provide
-DEM raster access, terrain derivatives, or global elevation coverage. Asset
+catalogs (including the three presets above), NASA Earthdata CMR, NASA POWER,
+NASA FIRMS, NOAA CO-OPS, USGS Water, OpenStreetMap/Overpass, USGS 3DEP EPQS,
+the Esri World Imagery image fetcher, and Open-Meteo. EPQS covers single-point
+elevation only; it does not provide DEM raster access, terrain derivatives, or
+global elevation coverage. Asset
 URIs are references by default; explicitly requested point samples can read
 declared HTTPS raster bands through the optional raster extra. General asset
 download, area materialization, and cross-provider unit conversion are not implemented. The dataset registry is in-memory and has no
@@ -537,7 +578,14 @@ Connector request concurrency is managed by the existing perception engine,
 but the Open-Meteo adapter does not split one query into scheduled subrequests.
 Active health probing is implemented for STAC landing pages only; other
 connectors currently expose local diagnostics unless they add a probe hook.
-Adaptive scheduling and live quota monitoring are not implemented.
+Adaptive dataset selection and live provider-quota monitoring are not
+implemented. Mission-linked recurring EarthQuery schedules are available via
+the API, CLI, and browser workspace. They dispatch ordinary investigations
+using bounded concurrency, configurable overlap policy, renewable durable
+leases, crash-expiry recovery, append-only lifecycle events, scheduler health,
+and an acknowledgeable local notification inbox. They do not claim change
+detection unless an explicit scientific method produces it. External message
+delivery still requires an owner-selected channel and credentials.
 
 ## Extension contract
 

@@ -7,22 +7,23 @@ implementation declares. A modality can be supplied by multiple independent
 datasets, and a single query can use multiple implementations.
 
 "Supported" means SatQuery has an implementation that can discover or return
-the listed source records. Raster assets remain references by default. An
-explicit, metadata-gated point-sampling or polygon zonal-summary request can
-read declared raster bands when the optional raster dependencies are installed.
-It does not imply global coverage, automatic asset processing, or provider
-availability. Unknown source metadata stays unknown in SatQuery.
+the listed source records. Raster assets remain references by default. Explicit
+point sampling, polygon zonal summaries, and caller-configured categorical
+component polygonization can process declared raster bands when the optional
+raster dependencies are installed. It does not imply automatic asset
+processing, classification, global coverage, or provider availability. Unknown
+source metadata stays unknown in SatQuery.
 
 | Earth sensing modality | Current interchangeable implementations | Current coverage and boundary |
 |---|---|---|
-| Visual | STAC collections with recognized optical bands; Esri World Imagery | The provider-neutral perception runtime can sample compatible STAC raster assets for explicitly requested point values and polygon zonal descriptive statistics when band metadata is declared and the platform raster extra is installed. Optional ellipsoidal cell-area weighting is available for unrotated geographic grids with `pyproj`; no spectral indices or sample uncertainty are derived. Esri has no source acquisition timestamp or image footprint. |
-| Atmospheric | Open-Meteo; STAC collections with declared atmospheric variables | Open-Meteo serves point weather, historical weather, and climate products. These are modeled provider outputs, not direct instrument measurements. |
+| Visual | STAC collections with recognized optical bands; Esri World Imagery | The provider-neutral runtime supports explicitly requested point values and polygon zonal descriptive statistics. Investigation execution can also polygonize exact class codes from a categorical raster band into Earth Objects when the source declares categorical band metadata and the request supplies class mappings, connectivity, AOI selection, and size limits. This does not classify imagery or validate the raster labels; no spectral indices or sample uncertainty are derived. Esri has no source acquisition timestamp or image footprint. |
+| Atmospheric | Open-Meteo; NASA POWER daily point products; STAC collections with declared atmospheric variables | Open-Meteo serves point weather, historical weather, and climate products. NASA POWER adds daily point time series with source-reported parameter units and UTC dates; its parameter/community availability and effective resolution vary. These products are not direct site measurements. |
 | Hydrological | USGS daily river-discharge statistics; Open-Meteo modeled river discharge; declared STAC collections | USGS values are station-based daily records for parameter code 00060 and require an explicit daily statistic ID and a station ID or CRS84 bounding box. They are not continuous spatial fields. No groundwater, flood-map, or basin product is implemented. |
 | Ecological | Declared STAC collections | No dedicated land-cover, vegetation, or biodiversity implementation. |
 | Geological | USGS 3DEP EPQS; declared STAC collections | EPQS returns one interpolated elevation sample per point in supported geographic coordinates. Declared elevation raster bands can be sampled at an explicit point; no terrain derivatives, local error estimate, or history are inferred. |
-| Human | OpenStreetMap / Overpass; declared STAC collections | Read-only vector features for supported point, bbox, and single-ring polygon queries. No population or census implementation. |
-| Oceanic | NOAA CO-OPS water levels; declared STAC collections | In-situ coastal water levels for explicitly selected stations and bounded time intervals. No station discovery, spatial-area query, wave, current, or basin-scale ocean state implementation. |
-| Disaster | NASA LANCE FIRMS active-fire observations; declared STAC collections | Satellite thermal-anomaly records from a selected VIIRS/MODIS product, requested by 2D bbox and no more than five calendar days. These records do not alone establish fire cause, extent, or impact. |
+| Human | OpenStreetMap / Overpass; declared STAC collections | Read-only vector features for supported point, bbox, and single-ring polygon queries. Explicit tagged-feature candidates may be materialized as source-declared Earth Objects with versioned observation lineage; this is not independent validation or remote-sensing detection. No population or census implementation. |
+| Oceanic | NOAA CO-OPS water levels; declared STAC collections | In-situ coastal water levels for explicitly selected stations and bounded time intervals. Explicit NOAA station metadata materializes as `earth:CoastalWaterLevelStation`; sample data do not infer station status or regional representativeness. No station discovery, spatial-area query, wave, current, or basin-scale ocean state implementation. |
+| Disaster | NASA LANCE FIRMS active-fire observations; declared STAC collections | Satellite thermal-anomaly records from a selected VIIRS/MODIS product, requested by 2D bbox and no more than five calendar days. Source records materialize as `earth:ThermalAnomalyDetection`; they do not establish wildfire cause, extent, or impact. |
 | Cryospheric | Declared STAC collections | No dedicated snow, glacier, or sea-ice implementation. |
 
 NASA Earthdata CMR provides cross-domain collection and granule discovery; it
@@ -63,3 +64,6 @@ asset is currently reachable.
 FIRMS access requires a NASA MAP_KEY. Set `SATQUERY_NASA_FIRMS_MAP_KEY` and add
 an enabled `nasa_firms` implementation to the connector manifest. The
 credential is kept out of connector metadata and provider error messages.
+
+See the [NASA POWER connector guide](NASA_POWER_CONNECTOR.md) for its daily
+point query contract, parameter mappings, and limitations.

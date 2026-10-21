@@ -55,6 +55,14 @@ added independently without changing this connector's contract.
   metadata.
 - `Connector.stream` yields `Observation` objects page by page, retaining each
   source item without requiring a full result collection in memory.
+- Collection band declarations can advertise platform raster capabilities.
+  Categorical component polygonization is advertised only when the collection
+  explicitly marks a raster band `measurement_kind: categorical` and the
+  optional raster and geometry dependencies are installed. The investigation
+  must still supply class-code meanings and polygonization rules.
+- The `raster` optional extra installs Rasterio, PyProj, and Shapely for those
+  platform processing operations; base STAC acquisition remains usable without
+  these libraries.
 - Optional bearer authentication, or required bearer authentication when the
   connector configuration declares it.
 - Cache keys include one-way scope hashes for the catalog URL and bearer

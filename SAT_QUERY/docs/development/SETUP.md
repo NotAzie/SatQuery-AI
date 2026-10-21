@@ -9,27 +9,59 @@ The package requires Python 3.10 or newer; Python 3.11 or 3.12 is recommended.
 Run these commands in PowerShell from the repository root:
 
 ```powershell
-cd C:\Users\mazin\SatQuery-AI\SAT_QUERY\satquery-ai
+cd .\satquery-ai
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m pip install -e .
-python -m pip install -r requirements-dev.txt
+python -m pip install -e ".[dev,geospatial]"
 ```
 
+This installs the platform and development/geospatial dependencies without
+the optional image models. Install `python -m pip install -e ".[raster]"` for
+documented raster processing. Install `python -m pip install -e ".[vision]"`
+for image models; `.[large]` provides additional optional model-loading
+packages. The legacy `requirements.txt` includes the vision stack and is not
+the minimal platform installation.
+
 If PowerShell blocks virtual environment activation, use the environment's
-Python directly, for example `\.venv\Scripts\python.exe -m satquery doctor`.
-Install a PyTorch build appropriate for the machine when the default wheel is
-not suitable. For CPU-only systems, install the CPU wheel before installing
-the remaining requirements:
+Python directly, for example `..\.venv\Scripts\python.exe -m satquery doctor`
+from the repository root, or `\.venv\Scripts\python.exe -m satquery doctor`
+from `satquery-ai/`.
+If you install the optional `vision` extra, select a PyTorch build appropriate
+for the machine. For a CPU-only install, install the CPU wheel before the
+`vision` extra:
 
 ```powershell
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -e ".[vision]"
 ```
 
-Copy `satquery-ai/.env.example` to `satquery-ai/.env` if you want to change
-model, device, cache, or image-root settings. Defaults are provided.
+From `satquery-ai/`, copy `.env.example` to `.env` if you want to change model,
+device, cache, or image-root settings. Defaults are provided.
+
+## Install on Linux or macOS
+
+From the repository root, create an environment and install the package in
+editable mode:
+
+```sh
+cd satquery-ai
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev,geospatial]"
+```
+
+For the documented raster operations, install the optional `raster` extra as
+well. For the legacy image models, install the optional `vision` extra and
+ensure the selected PyTorch wheel matches the host. Platform API/CLI Earth
+investigations do not require the `vision` extra. Run
+`python -m satquery doctor` to inspect local setup, then
+`python -m satquery serve` to start the application.
+
+Manifest and storage paths are relative to the process working directory.
+Connector implementations remain disabled until `SATQUERY_CONNECTORS_CONFIG`
+points to a manifest. See the following connector section for example setup.
 
 ## Start SatQuery
 
@@ -39,8 +71,10 @@ Check local dependencies and model configuration:
 python -m satquery doctor
 ```
 
-The first model warmup downloads the configured CLIP, captioning, and VQA
-weights. Skip it to download lazily on the first image request:
+The Earth Intelligence API and workspace do not require vision models. The
+optional warmup command loads configured CLIP, captioning, and VQA weights for
+the retained image-analysis capability; that may download model files. You can
+skip warmup and let the image path load models lazily on its first request:
 
 ```powershell
 python -m satquery warmup
@@ -81,10 +115,17 @@ python -m satquery serve --platform-config ..\satquery-platform.json
 ```
 
 The path is resolved from the server's current working directory. The same
-SQLite database stores Earth Memory, mission/investigation lifecycle state, and
-the execution journal. Use `storage.lifecycle_path` to separate lifecycle
-records and `storage.execution_path` to separate execution records. The API and
-browser mission explorer can inspect records after server restarts. Successful task checkpoints
+SQLite database stores Earth Memory, mission/investigation lifecycle state,
+the execution journal, and the append-only scientific audit trail. Use
+`storage.lifecycle_path`, `storage.execution_path`, or `storage.audit_path` to
+place those records in separate SQLite databases. The API and
+browser mission explorer can inspect records after server restarts. Method
+certification transitions and complete benchmark reproducibility reports are
+restored from verified audit history and remain bound to the implementation
+digest that was validated. Older benchmark audit summaries that omitted the
+report content cannot restore a certification; the affected method version is
+blocked from emitting findings and a replacement method version must be
+independently validated. Successful task checkpoints
 are restored only when the exact workflow fingerprint and registered output
 codec versions match. Resume an interrupted investigation with
 `python -m satquery investigation resume <investigation-id>`; the CLI/API report
@@ -127,6 +168,19 @@ collections, then inspect their declared dataset metadata:
 
 ```powershell
 python -m satquery platform discover earth-search
+```
+
+The same connector operations are available from the CLI; passive health only
+reads local metrics, while `probe` and `discover` explicitly contact providers.
+The browser workspace also lists registered datasets, searches their metadata,
+and exposes those same connector actions:
+
+```powershell
+python -m satquery connectors
+python -m satquery connectors health
+python -m satquery connectors probe earth-search
+python -m satquery connectors discover earth-search
+python -m satquery datasets --query "surface temperature"
 ```
 
 Create an `earth-query.json` file with a canonical query, for example:
@@ -205,6 +259,82 @@ advertised as point-sample capable only when its metadata declares raster
 bands. Then use a structured EarthQuery with an exact point, the requested
 band names, and `asset_sampling: "point"`:
 
+For categorical class rasters, investigation EarthQueries can additionally
+specify `raster_component_extraction` with exact source-band class codes,
+caller-provided object types, connectivity, AOI pixel selection, and component
+limits. The platform polygonizes the encoded classes; it does not classify
+imagery or validate source labels. See the example in the API reference.
+
+Recurring observations use the same structured EarthQuery and investigation
+execution path. Create a schedule from the workspace or API, then run due work
+with `satquery monitor run-due`. To enable the API process's local polling loop,
+configure `monitoring.enabled`, `monitoring.poll_interval_seconds`,
+`monitoring.max_runs_per_tick`, and `monitoring.max_concurrency` in the platform configuration.
+`monitoring.max_triggered_investigations_per_tick` independently bounds the
+number of rule-triggered follow-up investigations dispatched by a scheduler
+cycle (default 5).
+`monitoring.lease_seconds` sets the worker lease and heartbeat interval. Due runs
+are claimed deterministically and dispatched with that concurrency bound.
+Schedule definition revisions change only when user-controlled schedule state
+changes; each run retains the exact definition revision that scheduled it.
+Expired worker leases are recorded as failures and are not automatically
+re-acquired, since SatQuery cannot know whether an upstream acquisition completed
+before the worker stopped. Inspect scheduler state with `satquery monitor health`
+and the append-only journal with `satquery monitor events`. The workspace and
+`satquery monitor notifications` expose a durable local inbox for partial and
+failed runs; acknowledge an item with `satquery monitor acknowledge <id>`. A
+monitoring event page includes `next_cursor`; load older history with
+`satquery monitor events --cursor <next_cursor>`. The API offers the same
+keyset pagination through `/api/v1/platform/monitoring/events/page`. A
+schedule defaults to `skip_while_running`, which lets missed interval handling
+coalesce future work while an acquisition remains active; `allow` can be chosen
+when overlapping runs are explicitly desired. External message delivery needs
+an owner-selected channel and credentials.
+Revise a schedule using the API's `PATCH` endpoint or a JSON patch file with
+`satquery monitor update <schedule-id> --update-file <path>`; the inspected
+`expected_revision` is required so concurrent operator edits cannot silently
+overwrite each other.
+When `monitoring.enabled` is true under the `production` profile, configuration
+validation requires a durable monitoring, Earth Memory, lifecycle, or execution
+path. The profile does not provision storage. Each scheduled occurrence creates a normal child
+investigation; missed intervals are coalesced into one acquisition and recorded,
+never replayed as fabricated observations. Use `satquery monitor list`,
+`satquery monitor runs <schedule-id>`, and the `enable`/`disable` subcommands to
+inspect and control schedules.
+Use `satquery monitor compare <schedule-id>` or the workspace's Compare runs
+action to align exact resolved canonical variable/unit labels across recent
+successful runs. The stored comparison preserves source investigation reports
+and explicitly does not infer trends or scientific change.
+Schedules may declare `trigger_policies` in their create or revision payload.
+Each policy must provide the exact canonical variable and unit, an explicit
+scalar operator and finite threshold, plus a complete follow-up `EarthQuery`.
+For example:
+
+```json
+{
+  "policy_id": "rain-change-review",
+  "name": "Review large precipitation difference",
+  "canonical_variable": "precipitation",
+  "unit": "mm",
+  "operator": "abs_gte",
+  "threshold": 25,
+  "follow_up_query": {
+    "requested_variables": ["precipitation", "air_temperature"]
+  },
+  "cooldown_seconds": 86400
+}
+```
+
+This is an operator-defined workflow condition over a descriptive exact-support
+difference; it is not a validated scientific threshold or significance test.
+The follow-up investigation records its policy revision, diagnostic, comparison
+digest, and source observations. It is executed through the normal DAG and
+appears in mission history, the investigation report, Earth Memory, and the
+reproducibility bundle. `max_attempts` configures bounded retries of the
+observation task, not a replay of the entire investigation; values above one
+require explicit `retry_safe: true`. Threshold appropriateness and external
+notification channels remain domain-owner decisions.
+
 ```json
 {
   "point": [12.4, 41.9],
@@ -254,3 +384,11 @@ semantic search. Treat the database as research data: it can contain complete
 investigation and observation payloads, so choose its location and filesystem
 access controls accordingly. Leaving the setting unset keeps the in-memory
 repository used by tests and ephemeral local sessions.
+
+When the platform audit store is configured, hypothesis lifecycle transitions
+are also recorded there with the complete versioned hypothesis and transition
+event. The runtime verifies the audit chain and replays those events after a
+restart. Older summary-only lifecycle entries, or persisted Earth Memory
+hypothesis snapshots without matching replayable audit events, are reported as
+unavailable rather than reconstructed as trusted current state. In that case,
+reasoning and lifecycle writes fail closed for the affected investigation.

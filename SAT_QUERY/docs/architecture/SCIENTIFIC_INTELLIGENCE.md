@@ -98,9 +98,12 @@ met.
 The report is available from
 `GET /api/v1/platform/investigations/{id}/reasoning`, is included in the
 investigation intelligence payload, and is shown in the browser workspace and
-CLI investigation inspection. The current report store is process-local and
-overwrites the latest report for an investigation; durable append-only
-reasoning history and signed reproducibility manifests remain future work.
+CLI investigation inspection. The runtime retains the current report in
+process memory and indexes each produced report as an Earth Memory artifact;
+SQLite Earth Memory can preserve those artifacts across local restarts. The
+route selects the current/latest report, while prior indexed reports remain
+searchable. Signed reproducibility manifests and distributed history are not
+provided.
 
 ## Inference bookkeeping and lifecycle
 
@@ -216,13 +219,14 @@ graph, reasoning report, uncertainty inventory, execution task trace, audit
 events, capability-matrix revision, missing-artifact list, and per-artifact
 hashes. Missing source artifacts are called out rather than reconstructed.
 
-These are in-memory reference implementations. A durable transactional event
-store, signed attestations, independent reviewer identity, complete immutable
-capability/data snapshots, sandbox runtime, range-aware dependency solver, and
-benchmark comparators for scientifically justified tolerances are still needed
-before multi-organization or distributed deployments. The hash chain detects
-accidental or partial changes but is not a signature and cannot protect against
-an administrator rewriting the entire store.
+Audit events can use the default in-memory trail or the configured local
+SQLite audit adapter. This is durable single-host storage, not a distributed
+transactional event service. Signed attestations, independent reviewer
+identity, complete immutable capability/data snapshots, sandbox runtime,
+range-aware dependency solver, and benchmark comparators for scientifically
+justified tolerances remain absent. The hash chain detects accidental or
+partial changes but is not a signature and cannot protect against an
+administrator rewriting the entire store.
 
 ## Scientific knowledge and workflow scaffolds
 
@@ -271,10 +275,11 @@ IDs with every result. Probabilistic and model-assisted components must be
 replaceable adapters whose outputs are distinguishable from deterministic
 checks and source observations.
 
-Current designs, plans, and evidence assessments are stored in process memory,
-consistent with the default mission and execution repositories. Durable,
-transactional lineage remains a storage-layer requirement before deployment
-across workers or restarts.
+Plans, designs, assessments, and reasoning reports are available through the
+runtime and are indexed as memory artifacts when produced. Default stores are
+in process; configured SQLite adapters can retain supported lifecycle and
+memory artifacts across local restarts. This persistence does not provide a
+distributed transaction across acquisition, analysis, and all stores.
 
 ## Cited method knowledge, sufficiency, and Earth Memory
 

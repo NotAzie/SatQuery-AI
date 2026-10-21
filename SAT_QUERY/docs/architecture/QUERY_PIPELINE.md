@@ -1,84 +1,68 @@
-User Query
+# Investigation and execution pipeline
 
-↓
+The pipeline is implemented through shared platform services, not duplicated
+inside endpoint handlers. A request can stop at planning/design or continue
+through acquisition and diagnostic evaluation.
 
-Intent Detection
+```text
+Natural language / EarthQuery
+  -> deterministic plan and capability analysis
+  -> mission + investigation (for investigate workflow)
+  -> evidence requirements and investigation design
+  -> versioned workflow compilation
+  -> dependency-aware local execution DAG
+  -> configured connector acquisition
+  -> canonical observations and explicit Earth Object candidates
+  -> evidence coverage assessment
+  -> registered diagnostic reasoning
+  -> report, provenance, audit, reproducibility, optional memory index
+```
 
-↓
+## Planning and design
 
-Mission Creation
+The planner uses supported terms, ontology mappings, explicit structured query
+fields, and configured capabilities. Ambiguous or missing requirements remain
+unresolved and can produce clarification or candidate plans. The intelligence
+design links requirements to proposed observation steps; it does not claim
+that those observations scientifically support hypotheses. Planning and
+design endpoints do not acquire data.
 
-↓
+## Workflow execution
 
-Planning
+Ready investigations compile into a versioned `ExecutionPlan`. The DAG
+validates IDs, dependencies, and cycles. The local runtime schedules ready
+tasks up to the configured concurrency and records independent outcomes.
+Cancellation is cooperative for synchronous handlers and direct for async
+handlers. Retry counts are bounded and retries require explicit `retry_safe`
+declaration. Evidence assessment and reasoning can consume successful
+acquisition branches when another independent branch failed; a cancelled
+dependency does not proceed as success.
 
-↓
+When a SQLite execution journal is configured, workflow fingerprints,
+checkpointable typed outputs, and append-only hash-chained events persist.
+Resume uses only matching successful outputs with compatible registered
+codecs. It does not replay an uncertain side effect unless the task explicitly
+allows safe retry. Unsupported outputs remain uncheckpointed. The event API
+provides ordered polling; it is not a live event bus.
 
-Dataset Discovery
+## Evidence and reasoning boundaries
 
-↓
+Earth Object extraction requires explicit, supported candidates. Evidence
+assessment reports coverage, missing requirements, and conflicts. The
+reasoning system runs deterministic registered diagnostics and rules; it does
+not invent probabilities, validate general scientific claims, or substitute
+for an independently validated method. Reports distinguish evidence,
+diagnostics, unknowns, and limits.
 
-Evidence Collection
+## Interfaces and lifecycle
 
-↓
+The FastAPI API, CLI, and browser workspace use the same runtime composition.
+The legacy image `ask` capability is preserved as a platform task, but it
+does not transform arbitrary satellite data into canonical scientific
+observations. Missions, investigations, execution results, audit, memory, and
+monitoring records may persist through configured SQLite adapters; otherwise
+they are process-local.
 
-Analysis
-
-↓
-
-Reasoning
-
-↓
-
-Verification
-
-↓
-
-Explanation
-
-↓
-
-Visualization
-
-↓
-
-Memory Update
-
-## Investigation execution
-
-Planned investigations compile their selected observation steps into an
-execution DAG. The platform runtime appends explicit evidence-assessment and
-scientific-reasoning stages when a stored plan and design identify an
-executable candidate. The API delegates execution to this same runtime path;
-it does not run scientific stages in route code.
-
-Workflow compilation is versioned and registered. A compiler produces a
-validated `ExecutionPlan`; registered task handlers remain separately
-replaceable. The local scheduler releases downstream work as soon as its own
-dependencies finish, within the configured concurrency bound, instead of
-waiting for an entire DAG layer. Operators can request cancellation through
-the API, CLI, or workspace. Async handlers are cancelled by the scheduler;
-synchronous or long-running handlers can inspect the shared cancellation token
-through `TaskContext`. Unstarted work is recorded as cancelled.
-
-Assessment and reasoning stages declare their acquisition dependencies and may
-consume successful branches when another acquisition fails. Cancelled branches
-still stop downstream work. Each task result preserves its handler, declared
-dependencies, description, and redacted parameters alongside the output, so the
-execution endpoint and reproducibility artifacts retain the graph that ran.
-
-Partial execution remains visible as a partial investigation lifecycle state.
-Assessment and reasoning outputs remain evidence-scoped diagnostics. No
-scientific conclusion is asserted unless an independently governed method
-supports it.
-
-The scheduler remains local and in-process, while a replaceable execution
-journal can persist workflow fingerprints, immutable successful task
-checkpoints, and append-only hash-chained events in SQLite. Output replay is allowed only
-through an explicitly registered codec version. `investigation resume` and the
-matching API route reuse compatible successful checkpoints after a process
-restart. Tasks whose prior completion is uncertain require an explicit
-`retry_safe` declaration before they can be replayed; unsupported output
-contracts are reported as uncheckpointed rather than reconstructed heuristically.
-The event API supports ordered polling. Live SSE, distributed workers, worker
-leases, and remote scheduling remain future work.
+Detailed routes are in the [API reference](../api/API_REFERENCE.md); command
+examples are in [setup](../development/SETUP.md). See [runtime data flow](DATAFLOW.md)
+for acquisition and persistence semantics.

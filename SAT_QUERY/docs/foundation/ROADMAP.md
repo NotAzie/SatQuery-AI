@@ -49,6 +49,29 @@ None of these phases are isolated products.
 
 Together they become one continuously evolving Earth Intelligence Operating System.
 
+## Current implementation snapshot (2026-10-21)
+
+The phase descriptions below define long-term capability goals. This snapshot
+separates those goals from code that currently runs; detailed evidence and
+limitations are in [implementation status](../IMPLEMENTATION_STATUS.md).
+
+| Phase | Current repository state |
+|---|---|
+| 0 — Core Foundation | Local typed contracts, registries, configuration, connector lifecycle, bounded DAG execution, diagnostics, tests, CI, and optional single-host SQLite stores exist. Distributed execution, sandboxing, production security/deployment, and cross-subsystem transactions do not. |
+| 1 — Earth Perception | Several configured real-source adapters, modality/capability selection, canonical observations, provenance, fusion, streaming, cache, and bounded raster operations exist. Domain coverage, automatic asset processing, harmonization, reprojection, and uncertainty propagation remain limited. |
+| 2 — Earth Understanding | Explicit source/caller-declared candidates can produce canonical Earth Objects with lineage, revisions, relationships, and memory/report integration. General segmentation, object detection, unconstrained entity resolution, and validated lifecycle inference are absent. |
+| 3 — Investigation Engine | Deterministic planning/design, mission lifecycle, compiled execution DAG, local scheduler, cancellation, safe retry, checkpoint resume, reports, comparison, and monitoring-linked investigations exist. Planning-language coverage, remote scheduling, and autonomous investigation adaptation remain bounded or absent. |
+| 4 — Earth Reasoning Engine | Hypotheses, evidence coverage, sufficiency/preflight, rules/operators, cited knowledge records, uncertainty inventory, and governance scaffolds exist. No bundled method is certified for general scientific conclusions; general probabilistic, causal, and calibrated inference is not active. |
+| 5 — Multi-Agent Intelligence | No multi-agent runtime, communication, delegation, agent policy, or collaboration UI is implemented. Existing task and plugin registries are not agents. |
+| 6 — Earth Memory | Deterministic artifact and lineage search with in-memory and optional SQLite stores, spatial-envelope/time filters, and cursor paging exists. It is local, non-semantic, same-CRS, and does not learn or provide planet-scale distributed retrieval. |
+| 7 — Continuous Earth Observation | Mission-linked recurring queries, local scheduling/recovery, trigger policies, events, notifications, comparisons, and history integration exist. Operational triggers are not validated change detection; external notifications and distributed scheduling are absent. |
+| 8 — Earth Intelligence Platform | Local FastAPI/OpenAPI, CLI, browser workspace, and grouped synchronous Python SDK cover the local platform workflows. A full GIS/map workspace, authentication, organizations, cloud deployment, and production operations are absent. |
+| 9 — Earth Intelligence Ecosystem | Local extension/connector/method interfaces and registration exist. There is no public package ecosystem, marketplace, institutional governance network, or contribution/compatibility service. |
+
+This snapshot is descriptive, not a completion score or release certification.
+Historical reports under `archive/` and `satquery-ai/test_runs/` remain dated
+records and should not override the current implementation documentation.
+
 ---
 
 # Phase 0 — Core Foundation
@@ -234,20 +257,50 @@ Relationships
 ### Current implementation boundary
 
 The platform now has an evidence-backed Earth Object contract and deterministic
-materialization/catalog layer. It creates an object only from an explicit
-identity, semantic type, and declaring-actor declaration plus cited canonical observations;
-it does not detect entities from arbitrary measurements. The OpenStreetMap adapter
-emits versioned candidates only for a bounded set of explicit tags; these remain
-source classifications, not validated ground truth. Property assertions
-retain observation/evidence links, source measurements, uncertainty and source
-metadata. Geometry and temporal validity are populated only when all supplied
+materialization/catalog layer, now fronted by a provider-neutral candidate
+extraction pipeline. It reconciles stable identities across observations and
+rejects conflicting type or method declarations rather than merging them.
+Extraction batches retain source-observation and candidate digests and are
+indexed in Earth Memory, including empty candidate batches so an unrecorded
+extraction can be distinguished from one that emitted no candidates. The
+versioned investigation DAG includes extraction and object materialization as
+a typed, checkpointed task between acquisition and reasoning; its output lists
+materialized object revision IDs and is replayable through the registered
+task-output codec. Observation, extraction, object, and transition records are
+captured together in versioned reproducibility bundles. The
+same task can polygonize caller-selected classes from categorical raster
+assets into connected component Earth Objects. Class mappings, connectivity,
+AOI inclusion rule, size filters, output limits, native CRS, source-window
+digests, and extraction software versions are retained. This is vectorization
+of an already-encoded class mask, not classification or validated image
+segmentation. The
+OpenStreetMap adapter emits candidates for a bounded set of explicit tags,
+NASA FIRMS emits source-identified thermal-anomaly records, and NOAA CO-OPS
+emits provider-identified monitoring-station objects. These remain source
+classifications, not validated ground truth. Independent adapters that declare
+the same identity namespace, value, and canonical type can contribute evidence
+to one object while retaining each method and declarer. Extraction metadata
+preserves method identity, applicability context, limits, and an explicit
+not-independently-validated status. Canonical property assertions retain
+observation/evidence links, source measurements, uncertainty, and source
+metadata. Explicit candidate source attributes are separately retained as
+typed, unmapped values with observation, dataset, method, uncertainty status, and
+provenance links; they do not become canonical properties without an explicit
+validated mapping. Geometry and temporal validity are populated only when all supplied
 source records agree exactly; otherwise they remain unknown and each original
 record is retained in provenance. Relationships are explicit assertions with
 evidence/observation references. Earth Objects are indexed in Earth Memory,
-exposed in the API/CLI/workspace, and supplied in the reasoning context. General
-entity detection, cross-source object resolution, object-native planning and
-reasoning operators, geometry aggregation, lifecycle inference and scientific
-conclusions remain future capabilities requiring validated methods.
+exposed in the API/CLI/workspace, and supplied to reasoning before it evaluates
+the same investigation's observations. Validated image segmentation,
+cross-source entity resolution without shared source identity, object-native
+planning and reasoning operators, geometry aggregation, automatic lifecycle inference,
+and scientific conclusions still require validated methods and suitable
+reference evidence.
+
+The extraction implementation can be run through the shared scientific
+validation executor using `EarthObjectExtractionBenchmarkRunner` and an
+owner-supplied reference bundle. This hook validates exact output reproducibility
+only; no scientific accuracy claim follows from a matching output.
 
 These become the language of Earth.
 
@@ -534,8 +587,8 @@ literal search, explicit source links, and optional SQLite durability. Its
 spatiotemporal retrieval accepts explicit CRS-scoped bounding boxes and
 timezone-aware intervals. Spatial filtering is inclusive envelope overlap in
 the same CRS; it performs no reprojection or exact geometry predicate. SQLite
-schema v2 keeps derived extent indexes separate from immutable source payloads
-and migrates the prior index schema transactionally. Unknown extents remain
+SQLite schema version 6 keeps derived extent indexes separate from immutable
+source payloads and migrates prior index schemas transactionally. Unknown extents remain
 unmatched for constrained searches. Semantic retrieval, exact geometry search,
 planet-scale distributed indexing, and continuous change memory remain open
 work.
@@ -555,6 +608,25 @@ SatQuery becomes proactive.
 ## Capabilities
 
 Continuous monitoring
+
+Current implementation: recurring mission-linked EarthQuery schedules can be
+durably journaled when a platform storage path is configured, can be processed
+by an opt-in local poller or explicit API/CLI tick, and execute as ordinary
+versioned investigation workflows. Due investigations are claimed atomically
+and dispatched with a configurable concurrency bound. Runs retain the exact
+immutable schedule-definition revision that caused acquisition; scheduler
+cursor advancement does not create configuration versions. A missed schedule
+interval is coalesced and recorded; this scheduler does not itself infer change
+or guarantee upstream acquisition availability. Workers renew durable leases;
+expired or legacy unleased work is finalized as failed and is not automatically
+replayed. Schedule/run events are journaled, indexed in Earth Memory, and exposed
+alongside scheduler health. Schedule overlap policy can coalesce due work while
+a prior run is active or allow overlapping investigations. Failures and partial
+runs create durable local notifications with explicit acknowledgement state.
+Schedule definitions can be revised with optimistic revision checks, and each
+run remains linked to the definition revision that was current at claim time.
+This provides local crash recovery without claiming exactly-once behavior for
+external acquisitions; remote notification delivery remains adapter-dependent.
 
 Change detection
 
