@@ -34,6 +34,7 @@ from .platform.earth_objects import (
     EarthObjectDeclaration,
     EarthObjectRevisionTransition,
 )
+from .platform.geojson import earth_objects_to_geojson
 from .platform.monitoring import (
     MonitoringRevisionConflict,
     MonitoringSchedule,
@@ -1679,6 +1680,23 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         if investigation_id:
             objects = tuple(item for item in objects if investigation_id in item.investigation_ids or item.investigation_id == investigation_id)
         return JSONResponse(jsonable_encoder(objects))
+
+    @app.get(
+        "/api/v1/platform/earth-objects/geojson",
+        summary="Export explicitly WGS 84 Earth Object geometries as GeoJSON",
+    )
+    async def earth_objects_geojson(investigation_id: str | None = None) -> JSONResponse:
+        objects = get_engine().platform_runtime.earth_objects.all()
+        if investigation_id:
+            objects = tuple(
+                item for item in objects
+                if investigation_id in item.investigation_ids
+                or item.investigation_id == investigation_id
+            )
+        return JSONResponse(
+            jsonable_encoder(earth_objects_to_geojson(objects)),
+            media_type="application/geo+json",
+        )
 
     @app.get(
         "/api/v1/platform/earth-objects/id/{object_id}",

@@ -170,6 +170,7 @@ uncertainty as not propagated.
 | `GET` | `/api/v1/platform/investigations/{investigation_id}/temporal-differences` | Return reproducible consecutive-sample arithmetic diagnostics from exact-support raster stacks; no trend or uncertainty propagation is claimed. |
 | `POST` | `/api/v1/platform/investigations/{investigation_id}/earth-objects` | Materialize an Earth Object from an explicit identity/type declaration and source observations; every supplied evidence reference is validated. |
 | `GET` | `/api/v1/platform/earth-objects` | List current process/memory-restored Earth Object revisions; optional `investigation_id` filter. |
+| `GET` | `/api/v1/platform/earth-objects/geojson` | Export RFC 7946 GeoJSON for valid geometries with a declared WGS 84 CRS; optional `investigation_id` filter. Unknown/projected CRS and invalid geographic geometries are listed in `satquery:omitted_objects`, not silently transformed. |
 | `GET` | `/api/v1/platform/earth-objects/id/{object_id}` | Inspect one canonical object with its source records, measurements, provenance, uncertainty, and revision metadata. |
 | `POST` | `/api/v1/platform/earth-objects/id/{object_id}/transitions` | Create a reclassification or lifecycle revision with an exact prior object ID, actor, rationale, and already-linked observation/evidence support. |
 | `GET` | `/api/v1/platform/earth-objects/graph` | Read the selected Earth Object graph and evidence-backed relationships; optional `investigation_id` filter. |
@@ -275,6 +276,7 @@ python -m satquery monitor compare <schedule-id> --limit 10
 python -m satquery reasoning show <investigation-id>
 python -m satquery reasoning methods
 python -m satquery objects list --investigation-id <investigation-id>
+python -m satquery objects geojson --investigation-id <investigation-id>
 python -m satquery objects show <object-id>
 python -m satquery objects graph --investigation-id <investigation-id>
 python -m satquery hypotheses show <investigation-id>
@@ -330,8 +332,10 @@ report for API, CLI, and browser inspection.
 
 The browser workspace at `/` uses these same routes to create investigations,
 inspect the capability matrix and runtime, execute a structured observation
-task, and inspect its output and provenance. The legacy image query remains
-available in the same workspace as an image-perception capability.
+task, and inspect its output and provenance. Its Earth Object locator view uses
+the GeoJSON export route and only draws explicitly WGS 84 geometry; it is an
+equirectangular locator, not a basemap or measurement surface. The legacy image
+query remains available in the same workspace as an image-perception capability.
 
 Mission and investigation repositories are in-memory by default. Configure
 SQLite storage paths to retain supported lifecycle, execution journal, audit,

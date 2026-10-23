@@ -183,6 +183,17 @@ python -m satquery connectors discover earth-search
 python -m satquery datasets --query "surface temperature"
 ```
 
+The workspace's Earth Object panel includes a local SVG locator view, and
+canonical GeoJSON can be exported without adding a mapping-library dependency:
+
+```powershell
+python -m satquery objects geojson --investigation-id <investigation-id>
+```
+
+Only valid geometries with a declared WGS 84 CRS are included. Other geometry
+records are returned in the export's `satquery:omitted_objects` diagnostics;
+SatQuery does not guess their CRS or reproject them.
+
 Create an `earth-query.json` file with a canonical query, for example:
 
 ```json

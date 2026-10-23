@@ -6,6 +6,7 @@ import pytest
 from satquery import CLIENT_API_VERSION, PlatformAPIError, SatQueryClient
 from satquery.__main__ import (
     build_parser,
+    command_platform_earth_objects,
     command_platform_observe,
     command_platform_plan,
 )
@@ -60,6 +61,43 @@ def test_client_encodes_user_supplied_resource_identifiers():
         client.investigation_report("case/with?reserved=value")
 
     assert requests[0].url.raw_path.endswith(b"/case%2Fwith%3Freserved%3Dvalue/report")
+
+
+def test_earth_object_geojson_resource_uses_canonical_export_route():
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200, json={"type": "FeatureCollection", "features": []})
+
+    with SatQueryClient(transport=httpx.MockTransport(respond)) as client:
+        result = client.objects.geojson(investigation_id="investigation-1")
+
+    assert result == {"type": "FeatureCollection", "features": []}
+    assert requests[0].method == "GET"
+    assert requests[0].url.path == "/api/v1/platform/earth-objects/geojson"
+    assert requests[0].url.params["investigation_id"] == "investigation-1"
+
+
+def test_cli_exposes_filtered_geojson_object_export(monkeypatch, capsys):
+    import satquery.__main__ as cli
+
+    calls = []
+
+    def request(method, path, *, params=None, payload=None):
+        calls.append((method, path, params, payload))
+        return {"type": "FeatureCollection", "features": []}
+
+    monkeypatch.setattr(cli, "_platform_api_request", request)
+    args = build_parser().parse_args(
+        ["objects", "geojson", "--investigation-id", "case-1"]
+    )
+    assert args.func is command_platform_earth_objects
+    assert command_platform_earth_objects(args) == 0
+    assert calls == [
+        ("GET", "/api/v1/platform/earth-objects/geojson", {"investigation_id": "case-1"}, None)
+    ]
+    assert '"type": "FeatureCollection"' in capsys.readouterr().out
 
 
 def test_client_preserves_api_error_payload_and_retry_semantics():

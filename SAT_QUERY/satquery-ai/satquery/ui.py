@@ -150,6 +150,12 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   .viewer { position: relative; display: inline-block; max-width: 100%; }
   .viewer img { display: block; max-width: 100%; border: 1px solid var(--rule); border-radius: var(--radius); }
   .viewer canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .earth-map { width: 100%; border: 1px solid var(--rule); background: #0a1118; }
+  .earth-map svg { display: block; width: 100%; height: auto; aspect-ratio: 2 / 1; }
+  .earth-map .gridline { stroke: #263542; stroke-width: 1; stroke-dasharray: 3 5; }
+  .earth-map .axis-label { fill: #71889b; font: 10px 'IBM Plex Mono', monospace; }
+  .earth-map .earth-feature { cursor: pointer; outline: none; }
+  .earth-map .earth-feature:hover, .earth-map .earth-feature:focus { filter: brightness(1.6); }
   .thumbs { display: flex; gap: 8px; margin-bottom: 12px; }
   .thumbs button {
     background: none; border: 1px solid var(--rule); border-radius: var(--radius);
@@ -268,6 +274,10 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
             <button class="run" id="transitionEarthObject" type="button" disabled>Record explicit object transition</button>
             <button class="run" id="reevaluateWithEarthObjects" type="button" disabled>Re-evaluate with Earth Objects</button>
             <label>Canonical Earth Objects</label><pre class="trace" id="earthObjects">No Earth Objects materialized.</pre>
+            <label style="margin-top:12px;">Geographic object view (declared WGS 84 geometries only)</label>
+            <div class="earth-map"><svg id="earthObjectMap" viewBox="0 0 960 480" role="img" aria-label="Geographic Earth Object view"></svg></div>
+            <small id="earthObjectMapStatus">Object geometries have not been loaded. Unknown or projected coordinate systems are not reprojected.</small>
+            <pre class="trace" id="earthObjectMapSelection">Select a feature to inspect its full Earth Object record.</pre>
             <label>Evidence-backed object relationships</label><pre class="trace" id="earthObjectGraph">No object relationships recorded.</pre>
           </div>
         </div>
@@ -919,21 +929,125 @@ async function refreshEarthObjects() {
   if (!state.investigationId) return;
   const base = '/api/v1/platform/earth-objects';
   const query = '?investigation_id=' + encodeURIComponent(state.investigationId);
-  const [objectsResponse, graphResponse, observationsResponse] = await Promise.all([
-    fetch(base + query), fetch(base + '/graph' + query),
+  const [objectsResponse, graphResponse, observationsResponse, geojsonResponse] = await Promise.all([
+    fetch(base + query), fetch(base + '/graph' + query), fetch('/api/v1/platform/earth-objects/geojson' + query),
     fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/observations')
   ]);
-  const [objects, graph, observations] = await Promise.all([
-    objectsResponse.json(), graphResponse.json(), observationsResponse.json()
+  const [objects, graph, observations, geojson] = await Promise.all([
+    objectsResponse.json(), graphResponse.json(), observationsResponse.json(), geojsonResponse.json()
   ]);
   $('earthObjects').textContent = JSON.stringify(objects, null, 2);
   $('earthObjectGraph').textContent = JSON.stringify(graph, null, 2);
+  renderEarthObjectMap(geojson);
   $('materializeEarthObject').disabled = !Array.isArray(observations) || observations.length === 0;
   $('transitionEarthObject').disabled = !Array.isArray(objects) || objects.length === 0;
   if (Array.isArray(objects) && objects.length === 1 && !$('earthObjectTransitionId').value) {
     $('earthObjectTransitionId').value = objects[0].object_id;
   }
   $('reevaluateWithEarthObjects').disabled = objects.length === 0;
+}
+
+function renderEarthObjectMap(collection) {
+  const svg = $('earthObjectMap');
+  const NS = 'http://www.w3.org/2000/svg';
+  const omitted = Array.isArray(collection?.['satquery:omitted_objects']) ? collection['satquery:omitted_objects'] : [];
+  $('earthObjectMapSelection').textContent = omitted.length
+    ? `Objects omitted from map geometry export:\n${JSON.stringify(omitted, null, 2)}`
+    : 'Select a feature to inspect its full Earth Object record.';
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const make = (name, attrs = {}) => {
+    const node = document.createElementNS(NS, name);
+    Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, String(value)));
+    return node;
+  };
+  svg.appendChild(make('rect', { x: 0, y: 0, width: 960, height: 480, fill: '#0a1118' }));
+  for (let index = 1; index < 8; index++) {
+    const x = index * 120;
+    svg.appendChild(make('line', { x1: x, y1: 20, x2: x, y2: 460, class: 'gridline' }));
+  }
+  for (let index = 1; index < 4; index++) {
+    const y = index * 120;
+    svg.appendChild(make('line', { x1: 20, y1: y, x2: 940, y2: y, class: 'gridline' }));
+  }
+  const features = Array.isArray(collection?.features) ? collection.features : [];
+  const supported = features.slice(0, 2000);
+  const positionList = (geometry, output = []) => {
+    if (!geometry) return output;
+    if (geometry.type === 'GeometryCollection') {
+      (geometry.geometries || []).forEach((item) => positionList(item, output));
+      return output;
+    }
+    const visit = (value) => {
+      if (Array.isArray(value) && value.length >= 2 && typeof value[0] === 'number' && typeof value[1] === 'number') output.push(value);
+      else if (Array.isArray(value)) value.forEach(visit);
+    };
+    visit(geometry.coordinates);
+    return output;
+  };
+  const positions = supported.flatMap((feature) => positionList(feature.geometry));
+  if (!positions.length) {
+    const empty = make('text', { x: 480, y: 245, 'text-anchor': 'middle', fill: '#71889b', 'font-family': 'IBM Plex Mono', 'font-size': 14 });
+    empty.textContent = 'No explicitly WGS 84 object geometry to display';
+    svg.appendChild(empty);
+    $('earthObjectMapStatus').textContent = `${features.length} renderable features; ${omitted.length} objects omitted by the CRS/geometry policy.`;
+    return;
+  }
+  const xs = positions.map((position) => position[0]);
+  const ys = positions.map((position) => position[1]);
+  const minX = xs.reduce((a, b) => Math.min(a, b), Infinity), maxX = xs.reduce((a, b) => Math.max(a, b), -Infinity);
+  const minY = ys.reduce((a, b) => Math.min(a, b), Infinity), maxY = ys.reduce((a, b) => Math.max(a, b), -Infinity);
+  const spanX = Math.max(maxX - minX, 0.02), spanY = Math.max(maxY - minY, 0.02);
+  const padX = spanX * 0.06, padY = spanY * 0.06;
+  const left = (minX + maxX - spanX) / 2 - padX;
+  const top = (minY + maxY + spanY) / 2 + padY;
+  const width = spanX + 2 * padX, height = spanY + 2 * padY;
+  const point = (position) => [24 + (position[0] - left) / width * 912, 24 + (top - position[1]) / height * 432];
+  const colors = ['#4cc5c0', '#e8a33d', '#8c9eff', '#db7d9b', '#83c77d', '#d2a7ff'];
+  const colorFor = (value) => colors[[...String(value || 'unknown')].reduce((sum, char) => sum + char.charCodeAt(0), 0) % colors.length];
+  const appendGeometry = (parent, geometry, color) => {
+    if (!geometry) return;
+    if (geometry.type === 'GeometryCollection') { (geometry.geometries || []).forEach((child) => appendGeometry(parent, child, color)); return; }
+    if (geometry.type === 'Point') {
+      const [cx, cy] = point(geometry.coordinates);
+      parent.appendChild(make('circle', { cx, cy, r: 5, fill: color, stroke: '#071016', 'stroke-width': 1.5 }));
+      return;
+    }
+    if (geometry.type === 'MultiPoint') {
+      geometry.coordinates.forEach((coordinates) => appendGeometry(parent, { type: 'Point', coordinates }, color));
+      return;
+    }
+    const linePath = (line, close = false) => line.map((position, index) => {
+      const [x, y] = point(position); return `${index ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`;
+    }).join(' ') + (close ? ' Z' : '');
+    let paths = [];
+    if (geometry.type === 'LineString') paths = [linePath(geometry.coordinates)];
+    else if (geometry.type === 'MultiLineString') paths = geometry.coordinates.map((line) => linePath(line));
+    else if (geometry.type === 'Polygon') paths = [geometry.coordinates.map((ring) => linePath(ring, true)).join(' ')];
+    else if (geometry.type === 'MultiPolygon') paths = geometry.coordinates.map((polygon) => polygon.map((ring) => linePath(ring, true)).join(' '));
+    paths.forEach((d) => parent.appendChild(make('path', { d, fill: geometry.type.includes('Polygon') ? color : 'none', 'fill-opacity': 0.18, stroke: color, 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' })));
+  };
+  supported.forEach((feature) => {
+    const featurePositions = positionList(feature.geometry, []);
+    const longitudes = featurePositions.map((item) => item[0]);
+    if (!featurePositions.length || longitudes.reduce((a, b) => Math.max(a, b), -Infinity) - longitudes.reduce((a, b) => Math.min(a, b), Infinity) > 180) return;
+    const properties = feature.properties || {};
+    const group = make('g', { class: 'earth-feature', tabindex: 0, role: 'button', 'aria-label': `${properties.object_type || 'Earth Object'} ${properties.object_id || feature.id || ''}` });
+    const title = make('title'); title.textContent = `${properties.object_type || 'Earth Object'} · ${properties.object_id || feature.id || 'unknown id'}`; group.appendChild(title);
+    appendGeometry(group, feature.geometry, colorFor(properties.object_type));
+    const inspect = async () => {
+      $('earthObjectMapSelection').textContent = 'Loading Earth Object provenance…';
+      try {
+        const response = await fetch('/api/v1/platform/earth-objects/id/' + encodeURIComponent(properties.object_id || feature.id));
+        const record = await response.json();
+        if (!response.ok) throw new Error(record.detail || record.error || response.statusText);
+        $('earthObjectMapSelection').textContent = JSON.stringify(record, null, 2);
+      } catch (error) { $('earthObjectMapSelection').textContent = 'Could not load Earth Object: ' + error.message; }
+    };
+    group.addEventListener('click', inspect);
+    group.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); inspect(); } });
+    svg.appendChild(group);
+  });
+  $('earthObjectMapStatus').textContent = `Showing up to ${supported.length} RFC 7946 features using an equirectangular locator view. ${features.length > supported.length ? `${features.length - supported.length} additional features were not drawn. ` : ''}${omitted.length} objects were omitted by the CRS/geometry policy. Geometry spanning the antimeridian is not drawn. This view is not a basemap or a measurement surface.`;
 }
 
 async function searchEarthMemory(nextPage = false) {

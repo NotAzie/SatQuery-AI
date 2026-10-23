@@ -393,6 +393,13 @@ class EarthObjectsResource(_Resource):
             "/api/v1/platform/earth-objects", investigation_id=investigation_id
         )
 
+    def geojson(self, *, investigation_id: str | None = None) -> Any:
+        """Export only geometries whose declared CRS is RFC 7946 compatible."""
+        return self._get(
+            "/api/v1/platform/earth-objects/geojson",
+            investigation_id=investigation_id,
+        )
+
     def get(self, object_id: str) -> Any:
         return self._get(f"/api/v1/platform/earth-objects/id/{self._id(object_id)}")
 

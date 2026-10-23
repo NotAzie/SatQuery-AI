@@ -824,6 +824,9 @@ def test_platform_earth_memory_api_accepts_spatiotemporal_filters():
             workspace = client.get("/")
             assert workspace.status_code == 200
             assert 'id="modalityCatalog"' in workspace.text
+            assert 'id="earthObjectMap"' in workspace.text
+            assert "renderEarthObjectMap" in workspace.text
+            assert "/earth-objects/geojson" in workspace.text
             assert 'id="datasetSearch"' in workspace.text
             assert 'id="connectorExplorer"' in workspace.text
             assert "searchRegisteredDatasets" in workspace.text

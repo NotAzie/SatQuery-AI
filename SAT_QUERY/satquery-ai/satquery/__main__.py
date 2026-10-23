@@ -592,6 +592,9 @@ def command_platform_earth_objects(args: argparse.Namespace) -> int:
         return 0
     if args.object_command == "show":
         path = f"/api/v1/platform/earth-objects/id/{_api_segment(args.object_id)}"
+    elif args.object_command == "geojson":
+        path = "/api/v1/platform/earth-objects/geojson"
+        params = {"investigation_id": args.investigation_id} if args.investigation_id else None
     elif args.object_command == "graph":
         path = "/api/v1/platform/earth-objects/graph"
         params = {"investigation_id": args.investigation_id} if args.investigation_id else None
@@ -1072,6 +1075,11 @@ def build_parser() -> argparse.ArgumentParser:
     objects_list = objects_sub.add_parser("list", help="List materialized Earth Objects.")
     objects_list.add_argument("--investigation-id")
     objects_list.set_defaults(func=command_platform_earth_objects)
+    objects_geojson = objects_sub.add_parser(
+        "geojson", help="Export supported WGS 84 object geometries as GeoJSON."
+    )
+    objects_geojson.add_argument("--investigation-id")
+    objects_geojson.set_defaults(func=command_platform_earth_objects)
     objects_show = objects_sub.add_parser("show", help="Inspect an object and its traceability.")
     objects_show.add_argument("object_id")
     objects_show.set_defaults(func=command_platform_earth_objects)
