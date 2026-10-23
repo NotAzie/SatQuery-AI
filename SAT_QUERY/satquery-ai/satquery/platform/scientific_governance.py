@@ -19,7 +19,7 @@ from typing import Any, Iterable, Iterator, Literal, Protocol
 
 from pydantic import Field, model_validator
 
-from .contracts import Contract, utc_now
+from .contracts import Contract, EarthCapabilitySnapshot, utc_now
 
 
 def canonical_digest(value: Any) -> str:
@@ -954,10 +954,11 @@ def _verify_audit_event(event: AuditEvent) -> bool:
 
 
 class InvestigationReproducibilityBundle(Contract):
-    schema_version: str = "1.3.0"
+    schema_version: str = "1.4.0"
     bundle_id: str
     investigation_id: str
     capability_matrix_revision: str | None = None
+    capability_snapshots: tuple[EarthCapabilitySnapshot, ...] = ()
     hypotheses: tuple[dict[str, Any], ...] = ()
     plans: tuple[dict[str, Any], ...] = ()
     datasets: tuple[dict[str, Any], ...] = ()
@@ -987,6 +988,7 @@ class InvestigationReproducibilityBundle(Contract):
 
 def build_reproducibility_bundle(
     *, investigation_id: str, capability_matrix_revision: str | None,
+    capability_snapshots: Iterable[EarthCapabilitySnapshot] = (),
     hypotheses: Iterable[dict[str, Any]], plans: Iterable[dict[str, Any]],
     datasets: Iterable[dict[str, Any]], observations: Iterable[dict[str, Any]],
     provenance: Iterable[dict[str, Any]], scientific_methods: Iterable[dict[str, Any]],
@@ -1005,6 +1007,7 @@ def build_reproducibility_bundle(
     investigation_comparisons: Iterable[dict[str, Any]] = (),
 ) -> InvestigationReproducibilityBundle:
     artifacts: dict[str, Any] = {
+        "capability_snapshots": tuple(capability_snapshots),
         "hypotheses": tuple(hypotheses), "plans": tuple(plans), "datasets": tuple(datasets),
         "observations": tuple(observations), "provenance": tuple(provenance),
         "earth_objects": tuple(earth_objects),
@@ -1038,6 +1041,7 @@ def build_reproducibility_bundle(
     bundle = InvestigationReproducibilityBundle(
         bundle_id=f"repro-{identity[:24]}", investigation_id=investigation_id,
         capability_matrix_revision=capability_matrix_revision,
+        capability_snapshots=artifacts["capability_snapshots"],
         hypotheses=artifacts["hypotheses"], plans=artifacts["plans"], datasets=artifacts["datasets"],
         observations=artifacts["observations"],
         earth_objects=artifacts["earth_objects"],

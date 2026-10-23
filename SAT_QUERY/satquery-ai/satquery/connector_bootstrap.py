@@ -77,6 +77,58 @@ def _build_stac(value: Mapping[str, Any], policy: ConnectorPolicy) -> Connector:
     return StacCatalogConnector(configuration=configuration, policy=policy)
 
 
+def _build_planetary_computer(
+    value: Mapping[str, Any], policy: ConnectorPolicy
+) -> Connector:
+    from connectors.catalogs import PlanetaryComputerConnector
+
+    configuration = value.get("configuration", {})
+    if not isinstance(configuration, Mapping):
+        raise ConfigurationError(
+            "Planetary Computer connector configuration must be an object."
+        )
+    return PlanetaryComputerConnector(configuration=configuration, policy=policy)
+
+
+def _build_copernicus_data_space(
+    value: Mapping[str, Any], policy: ConnectorPolicy
+) -> Connector:
+    from connectors.catalogs import CopernicusDataSpaceConnector
+
+    configuration = value.get("configuration", {})
+    if not isinstance(configuration, Mapping):
+        raise ConfigurationError(
+            "Copernicus Data Space connector configuration must be an object."
+        )
+    return CopernicusDataSpaceConnector(configuration=configuration, policy=policy)
+
+
+def _build_usgs_landsat(
+    value: Mapping[str, Any], policy: ConnectorPolicy
+) -> Connector:
+    from connectors.catalogs import UsGSLandsatConnector
+
+    configuration = value.get("configuration", {})
+    if not isinstance(configuration, Mapping):
+        raise ConfigurationError(
+            "USGS Landsat connector configuration must be an object."
+        )
+    return UsGSLandsatConnector(configuration=configuration, policy=policy)
+
+
+def _build_image_fetcher(
+    value: Mapping[str, Any], policy: ConnectorPolicy
+) -> Connector:
+    from connectors.image_fetcher.connector import ImageFetcherConnector
+
+    configuration = value.get("configuration", {})
+    if not isinstance(configuration, Mapping):
+        raise ConfigurationError(
+            "Image fetcher connector configuration must be an object."
+        )
+    return ImageFetcherConnector(configuration=configuration, policy=policy)
+
+
 def _build_openstreetmap(
     value: Mapping[str, Any], policy: ConnectorPolicy
 ) -> Connector:
@@ -156,6 +208,10 @@ DEFAULT_CONNECTOR_FACTORIES = ConnectorFactoryRegistry()
 for _name, _factory in (
     ("open_meteo", _build_open_meteo),
     ("stac", _build_stac),
+    ("planetary_computer", _build_planetary_computer),
+    ("copernicus_data_space", _build_copernicus_data_space),
+    ("usgs_landsat", _build_usgs_landsat),
+    ("image_fetcher", _build_image_fetcher),
     ("openstreetmap", _build_openstreetmap),
     ("usgs_3dep", _build_usgs_3dep),
     ("usgs_water", _build_usgs_water),

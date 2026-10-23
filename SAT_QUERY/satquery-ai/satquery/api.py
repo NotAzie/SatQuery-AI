@@ -3,21 +3,26 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import math
+import time
 from contextlib import asynccontextmanager, suppress
 from typing import List, Literal, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from connectors.noaa_coops import NoaaCoopsConnector
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel, Field
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field, model_validator
 
 from .config import Settings, get_settings
 from .connector_bootstrap import load_configured_connectors
-from .errors import QueryError, SatQueryError
+from .errors import ExtensionError, QueryError, SatQueryError
 from .orchestrator import SatQueryEngine
 from .platform.comparisons import InvestigationComparisonRequest
 from .platform.contracts import (
+    EarthCapabilitySnapshot,
     EarthObjectRelationship,
     EarthQuery,
     Evidence,
@@ -75,6 +80,26 @@ class EarthInvestigationRequest(BaseModel):
     earth_query: Optional[EarthQuery] = None
     mission_id: Optional[str] = None
     mission_name: Optional[str] = None
+
+
+class StationSearchRequest(BaseModel):
+    bbox: tuple[float, float, float, float] = Field(min_length=4, max_length=4)
+
+    @model_validator(mode="after")
+    def validate_bbox(self) -> "StationSearchRequest":
+        west, south, east, north = self.bbox
+        if not all(math.isfinite(value) for value in self.bbox):
+            raise ValueError("bbox coordinates must be finite")
+        if (
+            not -180 <= west <= 180
+            or not -180 <= east <= 180
+            or not -90 <= south <= 90
+            or not -90 <= north <= 90
+            or west > east
+            or south > north
+        ):
+            raise ValueError("bbox must be ordered CRS84 longitude/latitude coordinates")
+        return self
 
 
 class HypothesisTransitionRequest(BaseModel):
@@ -270,7 +295,11 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     async def connector_health() -> JSONResponse:
         manager = get_engine().platform_runtime.connector_manager
         diagnostics = await manager.health_snapshot(active=False)
-        return JSONResponse([_connector_health_summary(item) for item in diagnostics])
+        return JSONResponse(
+            jsonable_encoder(
+                [_connector_health_summary(item) for item in diagnostics]
+            )
+        )
 
     @app.post(
         "/api/v1/platform/connectors/{connector_id}/health-check",
@@ -278,9 +307,15 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     )
     async def connector_health_check(connector_id: str) -> JSONResponse:
         manager = get_engine().platform_runtime.connector_manager
-        connector = manager.registry.get(connector_id)
+        try:
+            connector = manager.registry.get(connector_id)
+        except ExtensionError as exc:
+            raise QueryError(
+                f"Connector {connector_id!r} is not registered."
+            ) from exc
+        await manager.start(connector_id)
         diagnostic = await connector.health_check(active=True)
-        return JSONResponse(_connector_health_summary(diagnostic))
+        return JSONResponse(jsonable_encoder(_connector_health_summary(diagnostic)))
 
     @app.post(
         "/api/v1/platform/connectors/{connector_id}/discover",
@@ -291,6 +326,29 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             connector_id
         )
         return JSONResponse(jsonable_encoder(references))
+
+    @app.post(
+        "/api/v1/platform/connectors/{connector_id}/stations/search",
+        summary="Find provider-declared station candidates inside a CRS84 bbox",
+    )
+    async def search_connector_stations(
+        connector_id: str, request: StationSearchRequest
+    ) -> JSONResponse:
+        manager = get_engine().platform_runtime.connector_manager
+        try:
+            connector = manager.registry.get(connector_id)
+        except ExtensionError as exc:
+            raise QueryError(
+                f"Connector {connector_id!r} is not registered."
+            ) from exc
+        if not isinstance(connector, NoaaCoopsConnector):
+            raise QueryError(
+                "Station candidate search is not supported by this connector.",
+                context={"connector_id": connector_id},
+            )
+        await manager.start(connector_id)
+        result = await connector.search_stations(request.bbox)
+        return JSONResponse(jsonable_encoder(result))
 
     @app.get("/api/v1/platform/datasets", summary="List known Earth datasets")
     async def platform_datasets() -> JSONResponse:
@@ -317,7 +375,11 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         matrix = (
             get_engine().platform_runtime.perception_engine.build_capability_matrix()
         )
-        return JSONResponse(jsonable_encoder(matrix))
+        payload = matrix.model_dump(mode="json")
+        snapshot = matrix.capability_snapshot()
+        payload["snapshot_sha256"] = snapshot.snapshot_sha256
+        payload["snapshot_schema_version"] = snapshot.schema_version
+        return JSONResponse(jsonable_encoder(payload))
 
     @app.get("/api/v1/platform/inspect", summary="Inspect local platform registrations")
     async def platform_inspect() -> JSONResponse:
@@ -638,6 +700,30 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             ),
             None,
         )
+        capability_snapshots: dict[str, EarthCapabilitySnapshot] = {}
+
+        def retain_capability_snapshot(
+            snapshot: EarthCapabilitySnapshot | None,
+        ) -> None:
+            if snapshot is not None:
+                capability_snapshots[snapshot.snapshot_sha256] = snapshot
+
+        if plan is not None:
+            retain_capability_snapshot(plan.capability_snapshot)
+            for candidate in plan.candidate_plans:
+                retain_capability_snapshot(
+                    candidate.perception_plan.capability_snapshot
+                )
+        for execution in executions:
+            for task in execution.tasks:
+                perception_plan = getattr(task.output, "plan", None)
+                if perception_plan is not None:
+                    retain_capability_snapshot(
+                        perception_plan.capability_snapshot
+                    )
+        ordered_capability_snapshots = tuple(
+            capability_snapshots[key] for key in sorted(capability_snapshots)
+        )
         dataset_records = {
             (item.connector_id, item.dataset_id, item.version or ""): item.model_dump(mode="json")
             for item in (observation.dataset for observation in observations)
@@ -766,6 +852,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         bundle = build_reproducibility_bundle(
             investigation_id=investigation_id,
             capability_matrix_revision=capability_revision,
+            capability_snapshots=ordered_capability_snapshots,
             hypotheses=tuple(
                 item.model_dump(mode="json") for item in ledger.graph().hypotheses
             ) if ledger else (),
@@ -1838,6 +1925,86 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             "events": events,
             "next_sequence": events[-1]["sequence"] if events else after_sequence,
         }))
+
+    @app.get(
+        "/api/v1/platform/investigations/{investigation_id}/events/stream",
+        summary="Stream replayable execution journal events as Server-Sent Events",
+    )
+    async def stream_investigation_events(
+        investigation_id: str,
+        request: Request,
+        after_sequence: int = 0,
+        last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+    ) -> StreamingResponse:
+        if after_sequence < 0:
+            raise QueryError("after_sequence must be zero or greater.")
+        cursor = after_sequence
+        if last_event_id is not None:
+            try:
+                last_sequence = int(last_event_id)
+            except ValueError as exc:
+                raise QueryError("Last-Event-ID must be a non-negative sequence.") from exc
+            if last_sequence < 0:
+                raise QueryError("Last-Event-ID must be a non-negative sequence.")
+            cursor = max(cursor, last_sequence)
+        runtime = get_engine().platform_runtime
+        investigation = runtime.investigation_service.get(investigation_id)
+        try:
+            plan = runtime.compile_investigation_execution_plan(investigation)
+        except ValueError as exc:
+            raise QueryError(str(exc)) from exc
+        existing_events = await asyncio.to_thread(
+            runtime.execution_events, plan.plan_id
+        )
+        latest_sequence = max(
+            (event["sequence"] for event in existing_events), default=0
+        )
+        if cursor > latest_sequence:
+            raise QueryError(
+                "The execution event cursor is beyond the current journal.",
+                context={"latest_sequence": latest_sequence},
+            )
+
+        async def stream():
+            sequence = cursor
+            last_keepalive = time.monotonic()
+            yield "retry: 3000\n\n"
+            while not await request.is_disconnected():
+                events = await asyncio.to_thread(
+                    runtime.execution_events,
+                    plan.plan_id,
+                    after_sequence=sequence,
+                )
+                terminal_sequence = max(
+                    (
+                        event["sequence"]
+                        for event in events
+                        if event["event_type"] == "execution.finished"
+                    ),
+                    default=None,
+                )
+                for event in events:
+                    sequence = event["sequence"]
+                    yield (
+                        f"id: {sequence}\n"
+                        f"data: {json.dumps(jsonable_encoder(event), separators=(',', ':'))}\n\n"
+                    )
+                    last_keepalive = time.monotonic()
+                    if sequence == terminal_sequence:
+                        return
+                if time.monotonic() - last_keepalive >= 15:
+                    yield ": keep-alive\n\n"
+                    last_keepalive = time.monotonic()
+                await asyncio.sleep(0.25)
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @app.post(
         "/api/v1/platform/investigations/{investigation_id}/execute",

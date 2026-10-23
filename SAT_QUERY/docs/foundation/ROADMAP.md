@@ -49,7 +49,7 @@ None of these phases are isolated products.
 
 Together they become one continuously evolving Earth Intelligence Operating System.
 
-## Current implementation snapshot (2026-10-21)
+## Current implementation snapshot (2026-10-23)
 
 The phase descriptions below define long-term capability goals. This snapshot
 separates those goals from code that currently runs; detailed evidence and
@@ -58,12 +58,12 @@ limitations are in [implementation status](../IMPLEMENTATION_STATUS.md).
 | Phase | Current repository state |
 |---|---|
 | 0 — Core Foundation | Local typed contracts, registries, configuration, connector lifecycle, bounded DAG execution, diagnostics, tests, CI, and optional single-host SQLite stores exist. Distributed execution, sandboxing, production security/deployment, and cross-subsystem transactions do not. |
-| 1 — Earth Perception | Several configured real-source adapters, modality/capability selection, canonical observations, provenance, fusion, streaming, cache, and bounded raster operations exist. Domain coverage, automatic asset processing, harmonization, reprojection, and uncertainty propagation remain limited. |
+| 1 — Earth Perception | Several configured real-source adapters, modality/capability selection, canonical observations, provenance, fusion, streaming, cache, and bounded raster operations exist. Plans retain integrity-checked snapshots of the safe public capability-selection metadata. Domain coverage, automatic asset processing, harmonization, reprojection, and uncertainty propagation remain limited. |
 | 2 — Earth Understanding | Explicit source/caller-declared candidates can produce canonical Earth Objects with lineage, revisions, relationships, and memory/report integration. General segmentation, object detection, unconstrained entity resolution, and validated lifecycle inference are absent. |
-| 3 — Investigation Engine | Deterministic planning/design, mission lifecycle, compiled execution DAG, local scheduler, cancellation, safe retry, checkpoint resume, reports, comparison, and monitoring-linked investigations exist. Planning-language coverage, remote scheduling, and autonomous investigation adaptation remain bounded or absent. |
+| 3 — Investigation Engine | Deterministic planning/design, mission lifecycle, compiled execution DAG, local scheduler, cancellation, safe retry, checkpoint resume, reports, comparison, and monitoring-linked investigations exist. Plan and acquisition capability snapshots are retained in Earth Memory, reports, and reproducibility exports. Planning-language coverage, remote scheduling, and autonomous investigation adaptation remain bounded or absent. |
 | 4 — Earth Reasoning Engine | Hypotheses, evidence coverage, sufficiency/preflight, rules/operators, cited knowledge records, uncertainty inventory, and governance scaffolds exist. No bundled method is certified for general scientific conclusions; general probabilistic, causal, and calibrated inference is not active. |
 | 5 — Multi-Agent Intelligence | No multi-agent runtime, communication, delegation, agent policy, or collaboration UI is implemented. Existing task and plugin registries are not agents. |
-| 6 — Earth Memory | Deterministic artifact and lineage search with in-memory and optional SQLite stores, spatial-envelope/time filters, and cursor paging exists. It is local, non-semantic, same-CRS, and does not learn or provide planet-scale distributed retrieval. |
+| 6 — Earth Memory | Deterministic artifact and lineage search with in-memory and optional SQLite stores, capability snapshot artifacts, spatial-envelope/time filters, and cursor paging exists. It is local, non-semantic, same-CRS, and does not learn or provide planet-scale distributed retrieval. |
 | 7 — Continuous Earth Observation | Mission-linked recurring queries, local scheduling/recovery, trigger policies, events, notifications, comparisons, and history integration exist. Operational triggers are not validated change detection; external notifications and distributed scheduling are absent. |
 | 8 — Earth Intelligence Platform | Local FastAPI/OpenAPI, CLI, browser workspace, and grouped synchronous Python SDK cover local platform workflows. The workspace includes an interactive locator view for supported Earth Object geometries and GeoJSON export is available through API, CLI, and SDK. A full GIS/map workspace, authentication, organizations, cloud deployment, and production operations remain absent. |
 | 9 — Earth Intelligence Ecosystem | Local extension/connector/method interfaces and registration exist. There is no public package ecosystem, marketplace, institutional governance network, or contribution/compatibility service. |
@@ -297,6 +297,12 @@ planning and reasoning operators, geometry aggregation, automatic lifecycle infe
 and scientific conclusions still require validated methods and suitable
 reference evidence.
 
+EarthQuery validates supplied GeoJSON structure and finite coordinates,
+applying longitude/latitude bounds only when a geographic CRS is explicitly
+declared. This does not establish topological validity, repair geometry,
+aggregate geometries, or validate source observations; malformed source
+geometries remain subject to explicit downstream handling.
+
 The extraction implementation can be run through the shared scientific
 validation executor using `EarthObjectExtractionBenchmarkRunner` and an
 owner-supplied reference bundle. This hook validates exact output reproducibility
@@ -361,8 +367,9 @@ versioned output codecs. Explicit resumption reuses only successful compatible
 checkpoints; a task with an uncertain prior attempt is replayed only when its
 contract declares retry safety. Unsupported output types remain inspectable in
 the current result but are explicitly marked as not checkpointed. SQLite event
-records are immutable and hash chained. Live SSE, distributed execution,
-cross-process worker leases, and remote scheduling remain open capabilities.
+records are immutable and hash chained. The API, SDK, workspace, and CLI expose
+replayable live SSE over that journal. Distributed execution, cross-process
+worker leases, and remote scheduling remain open capabilities.
 
 ---
 
@@ -582,16 +589,22 @@ Build a searchable planetary memory.
 
 ### Current implementation boundary
 
-Earth Memory indexes immutable investigation artifacts with deterministic
-literal search, explicit source links, and optional SQLite durability. Its
+Earth Memory indexes immutable investigation artifacts, including safe
+capability-selection snapshots, with deterministic literal search, explicit
+source links, and optional SQLite durability. Its
 spatiotemporal retrieval accepts explicit CRS-scoped bounding boxes and
 timezone-aware intervals. Spatial filtering is inclusive envelope overlap in
 the same CRS; it performs no reprojection or exact geometry predicate. SQLite
-SQLite schema version 6 keeps derived extent indexes separate from immutable
+schema version 6 keeps derived extent indexes separate from immutable
 source payloads and migrates prior index schemas transactionally. Unknown extents remain
 unmatched for constrained searches. Semantic retrieval, exact geometry search,
 planet-scale distributed indexing, and continuous change memory remain open
 work.
+
+Capability snapshots retain the public, source-neutral selection metadata
+associated with a matrix revision and carry a separately verified content
+digest. Raw dataset metadata, asset URIs, and connector source/provider payloads
+are intentionally omitted; snapshots do not freeze or reproduce upstream data.
 
 ---
 

@@ -13,6 +13,7 @@ from ..errors import ExtensionError, ValidationError
 from .config import PlatformConfig
 from .connectors import AuthenticationProvider, Connector, ConnectorManager
 from .contracts import (
+    EarthCapabilitySnapshot,
     EarthObject,
     EarthObjectRelationship,
     EarthQuery,
@@ -592,6 +593,17 @@ class PlatformRuntime:
                 and "materialized_object_ids" in output
             ):
                 output = EarthObjectExtractionBatch.model_validate(output)
+            if (
+                isinstance(output, PerceptionResult)
+                and output.plan is not None
+                and output.plan.capability_snapshot is not None
+            ):
+                self.index_capability_snapshot(
+                    output.plan.capability_snapshot,
+                    source_artifact_id=execution_artifact_id,
+                    investigation_id=investigation_id,
+                    mission_id=mission_id,
+                )
             observations = getattr(output, "observations", ())
             observation_artifacts: dict[str, str] = {}
             for observation in observations:
@@ -724,11 +736,47 @@ class PlatformRuntime:
         self._index_memory_artifact(
             artifact_id=f"plan:{plan.plan_id}", artifact_type="plan", payload=plan,
         )
+        if plan.capability_snapshot is not None:
+            self.index_capability_snapshot(
+                plan.capability_snapshot,
+                source_artifact_id=f"plan:{plan.plan_id}",
+            )
+        for candidate in plan.candidate_plans:
+            if candidate.perception_plan.capability_snapshot is not None:
+                self.index_capability_snapshot(
+                    candidate.perception_plan.capability_snapshot,
+                    source_artifact_id=f"plan:{plan.plan_id}",
+                )
         self.audit_trail.append(
             aggregate_id=plan.plan_id, event_type="planning", actor="satquery.planner",
             payload={"plan_id": plan.plan_id, "planner_version": plan.planner_version,
                      "capability_matrix_revision": plan.capability_matrix_revision,
                      "plan_sha256": hashlib.sha256(plan.model_dump_json().encode()).hexdigest()},
+        )
+
+    def index_capability_snapshot(
+        self,
+        snapshot: EarthCapabilitySnapshot,
+        *,
+        source_artifact_id: str,
+        investigation_id: str | None = None,
+        mission_id: str | None = None,
+    ) -> None:
+        """Index the safe, content-verified capability view used by a plan."""
+        self._index_memory_artifact(
+            artifact_id=(
+                f"capability-snapshot:{source_artifact_id}:"
+                f"{snapshot.snapshot_sha256}"
+            ),
+            artifact_type="capability_snapshot",
+            payload=snapshot,
+            investigation_id=investigation_id,
+            mission_id=mission_id,
+            source_artifact_ids=(source_artifact_id,),
+            metadata={
+                "capability_matrix_revision": snapshot.revision,
+                "snapshot_sha256": snapshot.snapshot_sha256,
+            },
         )
 
     def get_investigation_plan(self, plan_id: str) -> InvestigationPlan:

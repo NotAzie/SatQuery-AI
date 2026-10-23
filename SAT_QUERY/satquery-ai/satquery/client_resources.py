@@ -6,7 +6,7 @@ contracts unchanged so the SDK does not silently reinterpret scientific data.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -52,6 +52,14 @@ class PlatformResource(_Resource):
     def discover_connector(self, connector_id: str) -> Any:
         return self._post(
             f"/api/v1/platform/connectors/{self._id(connector_id)}/discover"
+        )
+
+    def search_station_candidates(
+        self, connector_id: str, bbox: tuple[float, float, float, float]
+    ) -> Any:
+        return self._post(
+            f"/api/v1/platform/connectors/{self._id(connector_id)}/stations/search",
+            {"bbox": bbox},
         )
 
     def datasets(self) -> Any:
@@ -255,6 +263,14 @@ class InvestigationsResource(_Resource):
         return self._get(
             f"/api/v1/platform/executions/{self._id(execution_id)}/events",
             after_sequence=after_sequence,
+        )
+
+    def stream_events(
+        self, investigation_id: str, *, after_sequence: int = 0
+    ) -> Iterator[Any]:
+        return self._client.stream_json_events(
+            f"/api/v1/platform/investigations/{self._id(investigation_id)}/events/stream",
+            params={"after_sequence": after_sequence},
         )
 
     def execute(self, investigation_id: str) -> Any:

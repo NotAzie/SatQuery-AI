@@ -302,6 +302,10 @@ def test_perception_cache_uses_canonical_fingerprint_and_marks_hits():
         assert not first.cache_hit
         assert second.cache_hit
         assert connector.calls == 1
+        assert first.plan.capability_snapshot is not None
+        assert first.plan.capability_snapshot.revision == (
+            first.plan.capability_matrix_revision
+        )
         assert (
             first.observations[0].provenance["satquery"]["earth_perception"][
                 "capability_matrix_revision"

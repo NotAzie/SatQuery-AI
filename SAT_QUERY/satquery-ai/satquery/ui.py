@@ -245,8 +245,12 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
               <button id="probeConnector" type="button" disabled>Probe selected provider</button>
             </div>
             <button id="discoverConnector" type="button" disabled>Discover selected connector datasets</button>
+            <div class="row" style="margin-top:8px;">
+              <input id="stationSearchBbox" type="text" placeholder="NOAA bbox: west,south,east,north" />
+              <button id="searchStations" type="button" disabled>Find station candidates</button>
+            </div>
             <pre class="trace" id="connectorCatalog">Connector registrations and health have not been loaded.</pre>
-            <small>Passive health reads local diagnostics. Probe and discovery actions can make live provider requests.</small>
+            <small>Passive health reads local diagnostics. Probe, discovery, and station search can make live provider requests. Station candidates are not automatically selected or treated as evidence.</small>
           </div>
           <label style="margin-top:12px;">Investigation design, execution, evidence coverage, provenance</label>
           <pre class="trace" id="platformResult">No platform investigation selected.</pre>
@@ -466,7 +470,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <script>
 'use strict';
 
-const state = { files: [], response: null, activeImage: 0, objectUrls: [], investigationId: null, missionId: null, memoryCursor: null, monitoringScheduleId: null, monitoringRevision: null, monitoringEventCursor: null, monitoringEvents: [], monitoringTriggerScheduleId: null, monitoringTriggerCursor: null, monitoringTriggerResult: null };
+const state = { files: [], response: null, activeImage: 0, objectUrls: [], investigationId: null, missionId: null, executionEventSequence: 0, memoryCursor: null, monitoringScheduleId: null, monitoringRevision: null, monitoringEventCursor: null, monitoringEvents: [], monitoringTriggerScheduleId: null, monitoringTriggerCursor: null, monitoringTriggerResult: null };
 
 const EXAMPLES = [
   'Describe this scene in detail',
@@ -551,16 +555,23 @@ async function refreshEarthSources() {
   const connectorSelect = $('connectorExplorer');
   const priorConnector = connectorSelect.value;
   connectorSelect.replaceChildren(new Option('Select a connector', ''));
-  connectors.forEach((connector) => connectorSelect.add(new Option(
-    connector.name || connector.connector_id,
-    connector.connector_id
-  )));
-  if (connectors.some((connector) => connector.connector_id === priorConnector)) {
+  connectors.forEach((manifest) => {
+    const connector = manifest.metadata || manifest;
+    const option = new Option(
+      connector.name || connector.connector_id,
+      connector.connector_id
+    );
+    option.dataset.provider = connector.provider_metadata?.provider || '';
+    connectorSelect.add(option);
+  });
+  if ([...connectorSelect.options].some((option) => option.value === priorConnector)) {
     connectorSelect.value = priorConnector;
   }
   const hasConnector = Boolean(connectorSelect.value);
   $('probeConnector').disabled = !hasConnector;
   $('discoverConnector').disabled = !hasConnector;
+  $('searchStations').disabled =
+    connectorSelect.selectedOptions[0]?.dataset.provider !== 'NOAA CO-OPS';
   $('connectorCatalog').textContent = JSON.stringify({connectors, health}, null, 2);
 }
 
@@ -590,6 +601,24 @@ async function runConnectorOperation(operation) {
   const result = await platformJSON(path, {method: 'POST'});
   $('connectorCatalog').textContent = JSON.stringify(result, null, 2);
   await refreshEarthSources();
+}
+
+async function searchNoaaStationCandidates() {
+  const bbox = $('stationSearchBbox').value.split(',').map((value) => Number(value.trim()));
+  if (bbox.length !== 4 || bbox.some((value) => !Number.isFinite(value))) {
+    throw new Error('Enter four finite CRS84 values: west,south,east,north.');
+  }
+  const connectorId = $('connectorExplorer').value;
+  if (!connectorId) throw new Error('Select a registered NOAA CO-OPS connector.');
+  const response = await platformJSON(
+    '/api/v1/platform/connectors/' + encodeURIComponent(connectorId) + '/stations/search',
+    {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({bbox})
+    }
+  );
+  $('connectorCatalog').textContent = JSON.stringify(response, null, 2);
 }
 
 async function refreshMonitoringSchedules() {
@@ -876,6 +905,12 @@ async function loadInvestigationHistory() {
     const response = await fetch('/api/v1/platform/executions/' + encodeURIComponent(execution.plan_id) + '/events');
     return response.ok ? response.json() : null;
   }));
+  state.executionEventSequence = Math.max(
+    0,
+    ...eventStreams.filter(Boolean).flatMap((stream) =>
+      (stream.events || []).map((event) => event.sequence)
+    )
+  );
   $('executionGraph').textContent = JSON.stringify(executions.map((execution) => ({
     execution_id: execution.plan_id,
     trace_id: execution.trace_id,
@@ -1172,6 +1207,7 @@ async function startInvestigation() {
     const body = await response.json();
     if (!response.ok) throw new Error(body.detail || body.error || response.statusText);
     state.investigationId = body.investigation.investigation_id;
+    state.executionEventSequence = 0;
     state.missionId = body.mission.mission_id;
     $('executeInvestigation').disabled = body.state !== 'ready';
     $('platformResult').textContent = JSON.stringify(body, null, 2);
@@ -1181,10 +1217,31 @@ async function startInvestigation() {
   } finally { $('startInvestigation').disabled = false; }
 }
 
+function streamInvestigationEvents(investigationId) {
+  const params = new URLSearchParams({
+    after_sequence: String(state.executionEventSequence)
+  });
+  const source = new EventSource(
+    '/api/v1/platform/investigations/' +
+    encodeURIComponent(investigationId) + '/events/stream?' + params.toString()
+  );
+  const events = [];
+  $('executionEvents').textContent = 'Waiting for execution events...';
+  source.onmessage = (message) => {
+    const event = JSON.parse(message.data);
+    events.push(event);
+    state.executionEventSequence = event.sequence;
+    $('executionEvents').textContent = JSON.stringify(events, null, 2);
+    if (event.event_type === 'execution.finished') source.close();
+  };
+  return source;
+}
+
 async function executeInvestigation() {
   if (!state.investigationId) return;
   $('executeInvestigation').disabled = true;
   $('cancelInvestigation').disabled = false;
+  const eventStream = streamInvestigationEvents(state.investigationId);
   try {
     const response = await fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/execute', { method: 'POST' });
     const execution = await response.json();
@@ -1206,6 +1263,7 @@ async function executeInvestigation() {
     $('platformResult').textContent = 'Observation execution failed: ' + error.message;
     $('executeInvestigation').disabled = false;
   } finally {
+    eventStream.close();
     $('cancelInvestigation').disabled = true;
   }
 }
@@ -1214,6 +1272,7 @@ async function resumeInvestigation() {
   if (!state.investigationId) return;
   $('resumeInvestigation').disabled = true;
   $('cancelInvestigation').disabled = false;
+  const eventStream = streamInvestigationEvents(state.investigationId);
   try {
     const response = await fetch('/api/v1/platform/investigations/' + encodeURIComponent(state.investigationId) + '/resume', { method: 'POST' });
     const execution = await response.json();
@@ -1226,6 +1285,7 @@ async function resumeInvestigation() {
     $('platformResult').textContent = 'Could not resume investigation: ' + error.message;
     $('resumeInvestigation').disabled = false;
   } finally {
+    eventStream.close();
     $('cancelInvestigation').disabled = true;
   }
 }
@@ -1278,6 +1338,15 @@ $('probeConnector').addEventListener('click', () => {
 $('discoverConnector').addEventListener('click', () => {
   runConnectorOperation('discover').catch((error) => {
     $('connectorCatalog').textContent = 'Dataset discovery failed: ' + error.message;
+  });
+});
+$('connectorExplorer').addEventListener('change', () => {
+  $('searchStations').disabled =
+    $('connectorExplorer').selectedOptions[0]?.dataset.provider !== 'NOAA CO-OPS';
+});
+$('searchStations').addEventListener('click', () => {
+  searchNoaaStationCandidates().catch((error) => {
+    $('connectorCatalog').textContent = 'Station search failed: ' + error.message;
   });
 });
 $('createMonitor').addEventListener('click', async () => {

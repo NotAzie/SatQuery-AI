@@ -35,6 +35,12 @@ added independently without changing this connector's contract.
   Configured IDs become the default search scope and are checked against the
   catalog during discovery; explicit searches cannot select undiscovered
   collections.
+- Manifest presets for Microsoft Planetary Computer
+  (`planetary_computer`), Copernicus Data Space (`copernicus_data_space`),
+  and USGS LandsatLook (`usgs_landsat`) reuse this same STAC implementation
+  with provider-specific default catalog URLs and descriptive metadata.
+  Configuration may override the catalog URL and collection IDs. These
+  presets do not add provider-specific search behavior or asset downloads.
 - An example Earth Search catalog configuration is provided at
   `configs/catalogs/earth-search.json`; its selected collection IDs were
   confirmed in the catalog landing page during this implementation.
@@ -142,13 +148,16 @@ HTTP client.
 - This is a protocol connector, not an exhaustive provider integration. No
   provider endpoint, collection ID, data entitlement, or successful live
   acquisition is bundled or guaranteed.
-- Sentinel, Landsat, MODIS, Copernicus, Google Earth Engine, ERA5, CHIRPS,
-  OpenStreetMap, NOAA, and other sources are not individually configured by
-  this change. Any catalog exposing suitable STAC endpoints and collections
-  may be used through configuration, subject to its auth, network, and API
-  behavior. The Earth Search example selects Sentinel-1, Sentinel-2, Landsat,
-  and Copernicus DEM collections; this is a catalog configuration, not an
-  independently maintained provider connector.
+- Sentinel, Landsat, and some Copernicus collections can be accessed through
+  configured STAC catalogs; the provider presets above expose three catalog
+  endpoints through the shared adapter, not independent provider APIs.
+  MODIS, Google Earth Engine, ERA5, CHIRPS, OpenStreetMap, NOAA, and other
+  sources are not thereby made available through these presets. Any catalog
+  exposing suitable STAC endpoints and collections may be used through
+  configuration, subject to its auth, network, and API behavior. The Earth
+  Search example selects Sentinel-1, Sentinel-2, Landsat, and Copernicus DEM
+  collections; this is a catalog configuration, not an independently
+  maintained provider connector.
 - OAuth refresh, API-key authentication, signed asset downloads, cloud
   storage transfer, raster reprojection, asset materialization, and dataset
   version pinning are not implemented.

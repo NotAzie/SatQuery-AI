@@ -10,6 +10,7 @@ from pydantic import Field
 from ..errors import ValidationError
 from .contracts import (
     Contract,
+    EarthCapabilitySnapshot,
     EarthObject,
     ExecutionResult,
     Observation,
@@ -37,11 +38,12 @@ class InvestigationReport(Contract):
     report_id: str = Field(min_length=1)
     report_sha256: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
     source_records_sha256: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
-    schema_version: str = "1.4"
+    schema_version: str = "1.5"
     mission: dict[str, Any]
     investigation: dict[str, Any]
     plan: dict[str, Any] | None = None
     design: dict[str, Any] | None = None
+    capability_snapshots: tuple[EarthCapabilitySnapshot, ...] = ()
     executions: tuple[dict[str, Any], ...] = ()
     observations: tuple[Observation, ...] = ()
     observation_stacks: tuple[ObservationStack, ...] = ()
@@ -93,6 +95,18 @@ def build_investigation_report(
             unavailable.append(execution_id)
 
     observations_by_id: dict[str, Observation] = {}
+    capability_snapshots_by_digest: dict[str, EarthCapabilitySnapshot] = {}
+
+    def retain_capability_snapshot(
+        snapshot: EarthCapabilitySnapshot | None,
+    ) -> None:
+        if snapshot is not None:
+            capability_snapshots_by_digest[snapshot.snapshot_sha256] = snapshot
+
+    if plan is not None:
+        retain_capability_snapshot(plan.capability_snapshot)
+        for candidate in plan.candidate_plans:
+            retain_capability_snapshot(candidate.perception_plan.capability_snapshot)
     stacks_by_id: dict[str, ObservationStack] = {}
     differences_by_id: dict[str, TemporalDifferenceDiagnostic] = {}
     difference_issues_by_key: dict[tuple[str, str, str], TemporalDifferenceIssue] = {}
@@ -105,6 +119,8 @@ def build_investigation_report(
                     output = PerceptionResult.model_validate(output)
                 else:
                     output = ObservationSearchResult.model_validate(output)
+            if isinstance(output, PerceptionResult) and output.plan is not None:
+                retain_capability_snapshot(output.plan.capability_snapshot)
             for observation in getattr(output, "observations", ()):
                 observations_by_id.setdefault(observation.observation_id, observation)
             for stack in getattr(output, "observation_stacks", ()):
@@ -122,6 +138,10 @@ def build_investigation_report(
                     issue,
                 )
     observations = tuple(observations_by_id[key] for key in sorted(observations_by_id))
+    capability_snapshots = tuple(
+        capability_snapshots_by_digest[key]
+        for key in sorted(capability_snapshots_by_digest)
+    )
     observation_stacks = tuple(stacks_by_id[key] for key in sorted(stacks_by_id))
     temporal_differences = tuple(
         sorted(
@@ -279,6 +299,9 @@ def build_investigation_report(
         "investigation": investigation_data,
         "plan": plan_data,
         "design": design_data,
+        "capability_snapshots": tuple(
+            item.model_dump(mode="json") for item in capability_snapshots
+        ),
         "executions": execution_data,
         "observations": tuple(item.model_dump(mode="json") for item in observations),
         "observation_stacks": tuple(
@@ -311,6 +334,7 @@ def build_investigation_report(
         earth_objects, tuple(unavailable), tuple(limitations), source_digest,
         monitoring_context,
         tuple(comparison_artifacts),
+        capability_snapshots,
     )
     digest = canonical_digest({**artifact_payload, "markdown": markdown})
     return InvestigationReport(
@@ -321,6 +345,7 @@ def build_investigation_report(
         investigation=investigation_data,
         plan=plan_data,
         design=design_data,
+        capability_snapshots=capability_snapshots,
         executions=execution_data,
         observations=observations,
         observation_stacks=observation_stacks,
@@ -359,6 +384,7 @@ def _render_markdown(
     source_digest: str,
     monitoring_context: dict[str, Any] | None,
     comparison_artifacts: tuple[dict[str, Any], ...],
+    capability_snapshots: tuple[EarthCapabilitySnapshot, ...],
 ) -> str:
     lines = [
         f"# Investigation report: {mission['name']}",
@@ -377,7 +403,23 @@ def _render_markdown(
         f"- Observations: {len(observations)} distinct canonical observation(s)",
         f"- Earth Objects: {len(earth_objects)} evidence-backed object(s)",
         "",
+        "## Capability snapshot",
+        "",
     ]
+    if capability_snapshots:
+        lines.extend(
+            f"- Matrix revision `{item.revision}`; snapshot digest "
+            f"`{item.snapshot_sha256}`; {len(item.entries)} capability entry/entries; "
+            f"{len(item.modalities)} modality declaration(s)"
+            for item in capability_snapshots
+        )
+        lines.append(
+            "Snapshots retain public selection metadata; raw dataset metadata, "
+            "asset URIs, and connector source/provider metadata are excluded."
+        )
+    else:
+        lines.append("No capability snapshot was retained for this investigation.")
+    lines.append("")
     if monitoring_context is not None:
         lines.extend([
             "## Continuous observation context",

@@ -89,7 +89,10 @@ Monitoring runs recurring EarthQueries and evaluates user-authored operational
 thresholds; they are not a scientific event detector. Reproducibility exports
 hash retained plans, observations, objects, reasoning, audit, and monitoring
 artifacts where available. They cannot reconstruct upstream data that the
-provider no longer serves unless that data was retained.
+provider no longer serves unless that data was retained. They also retain the
+content-verified public capability-selection snapshots used during planning
+and acquisition; raw dataset metadata, asset URIs, and connector source/provider
+payloads are excluded from those snapshots.
 
 ## Persistence and deployment
 

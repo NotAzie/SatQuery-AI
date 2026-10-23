@@ -1,9 +1,12 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from satquery.platform.capabilities import build_earth_capability_matrix
 from satquery.platform.contracts import (
     ConnectorMetadata,
     DatasetMetadata,
+    EarthCapabilitySnapshot,
     ObservationAsset,
     TemporalExtent,
 )
@@ -75,6 +78,32 @@ def test_capability_matrix_is_deterministic_and_keeps_unknowns_unknown():
     modalities = {item.modality_id: item for item in matrix.modalities}
     assert modalities["atmospheric"].status == "registered"
     assert modalities["oceanic"].status == "not_registered"
+
+    snapshot = matrix.capability_snapshot()
+    assert snapshot.revision == matrix.revision
+    assert snapshot.snapshot_sha256
+    assert snapshot.entries[0].dataset_metadata is None
+    assert snapshot.entries[0].source_metadata == {}
+    assert snapshot.entries[0].provider_metadata == {}
+    assert EarthCapabilitySnapshot.model_validate(
+        snapshot.model_dump(mode="json")
+    ) == snapshot
+    snapshot_json = str(snapshot.model_dump(mode="json"))
+    assert "https://example.test/data" not in snapshot_json
+    assert "native_collection_id" not in snapshot_json
+    changed_snapshot = snapshot.model_dump(mode="json")
+    changed_snapshot["entries"][0]["connector_name"] = "Changed declaration"
+    with pytest.raises(ValueError, match="capability snapshot digest"):
+        EarthCapabilitySnapshot.model_validate(changed_snapshot)
+    hidden_metadata_snapshot = snapshot.model_dump(mode="json")
+    hidden_metadata_snapshot["entries"][0]["dataset_metadata"] = {
+        "connector_id": "fixture-weather",
+        "dataset_id": "surface-weather",
+        "provider": "Example Institute",
+        "assets": {"data": {"uri": "https://example.test/private"}},
+    }
+    with pytest.raises(ValueError, match="excluded raw metadata"):
+        EarthCapabilitySnapshot.model_validate(hidden_metadata_snapshot)
 
 
 def test_unbound_dataset_is_visible_without_claiming_an_adapter_is_available():

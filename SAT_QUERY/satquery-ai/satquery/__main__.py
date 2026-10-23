@@ -222,6 +222,13 @@ def command_platform_connectors(args: argparse.Namespace) -> int:
         result = _platform_api_request(
             "POST", f"/api/v1/platform/connectors/{connector_id}/{suffix}"
         )
+    elif action == "stations":
+        connector_id = _api_segment(args.connector_id)
+        result = _platform_api_request(
+            "POST",
+            f"/api/v1/platform/connectors/{connector_id}/stations/search",
+            payload={"bbox": args.bbox},
+        )
     else:
         result = _platform_api_request("GET", "/api/v1/platform/connectors")
     print(json.dumps(result, indent=2))
@@ -397,6 +404,14 @@ def command_platform_investigation(args: argparse.Namespace) -> int:
         "temporal_differences": temporal_differences,
     }
     print(json.dumps(payload, indent=2))
+    return 0
+
+
+def command_platform_investigation_events(args: argparse.Namespace) -> int:
+    for event in _platform_client().investigations.stream_events(
+        args.investigation_id, after_sequence=args.after_sequence
+    ):
+        print(json.dumps(event))
     return 0
 
 
@@ -876,6 +891,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     connector_discover.add_argument("connector_id")
     connector_discover.set_defaults(func=command_platform_connectors)
+    connector_stations = connectors_sub.add_parser(
+        "stations", help="Find NOAA CO-OPS water-level station candidates in a bbox."
+    )
+    connector_stations.add_argument("connector_id")
+    connector_stations.add_argument(
+        "--bbox",
+        nargs=4,
+        type=float,
+        required=True,
+        metavar=("WEST", "SOUTH", "EAST", "NORTH"),
+        help="CRS84 longitude/latitude bounds; candidates are not selected automatically.",
+    )
+    connector_stations.set_defaults(func=command_platform_connectors)
 
     mission_cmd = sub.add_parser("mission", help="Inspect local Earth missions.")
     mission_sub = mission_cmd.add_subparsers(dest="mission_command", required=True)
@@ -974,6 +1002,12 @@ def build_parser() -> argparse.ArgumentParser:
     investigation_show = investigation_sub.add_parser("show")
     investigation_show.add_argument("investigation_id")
     investigation_show.set_defaults(func=command_platform_investigation)
+    investigation_events = investigation_sub.add_parser(
+        "events", help="Follow live execution events from the durable journal."
+    )
+    investigation_events.add_argument("investigation_id")
+    investigation_events.add_argument("--after-sequence", type=int, default=0)
+    investigation_events.set_defaults(func=command_platform_investigation_events)
     investigation_execute = investigation_sub.add_parser(
         "execute", help="Execute a ready investigation plan."
     )
@@ -1045,6 +1079,7 @@ def build_parser() -> argparse.ArgumentParser:
         "investigation", "plan", "observation", "earth_object_extraction",
         "evidence", "hypothesis",
         "scientific_method", "reproducibility_artifact", "provenance_node",
+        "capability_snapshot",
         "earth_object", "object_relationship", "earth_object_transition", "observation_stack",
         "temporal_difference", "mission", "monitoring_schedule", "monitoring_run",
         "monitoring_event", "monitoring_notification", "investigation_comparison",

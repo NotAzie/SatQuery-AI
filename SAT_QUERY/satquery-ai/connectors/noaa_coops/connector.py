@@ -21,6 +21,8 @@ from satquery.platform.contracts import (
     ConnectorMetadata,
     DatasetReference,
     EarthObjectCandidate,
+    EarthStationCandidate,
+    EarthStationSearchResult,
     EarthQuery,
     Observation,
     ObservationSearchResult,
@@ -143,8 +145,12 @@ class NoaaCoopsConnector(PerceptionConnector):
         """Expose the adapter's declared water-level product without a request."""
         return self.metadata.datasets
 
-    async def acquire(self, request: Mapping[str, Any]) -> Mapping[str, Any]:
-        """Return the raw NOAA JSON payload for a validated station request."""
+    async def acquire(
+        self, request: Mapping[str, Any]
+    ) -> Mapping[str, Any] | EarthStationSearchResult:
+        """Acquire water-level data or explicitly requested station candidates."""
+        if request.get("operation") == "station_search":
+            return await self._search_station_directory(request)
         station_id = self._station_id(request.get("station_id"))
         start = self._date_parameter(request.get("begin_date"), "begin_date")
         end = self._date_parameter(request.get("end_date"), "end_date")
@@ -167,6 +173,103 @@ class NoaaCoopsConnector(PerceptionConnector):
             "format": "json",
         }
         return await self._get_json(self.data_api_url, params, "water-level data")
+
+    async def search_stations(
+        self, bbox: tuple[float, float, float, float]
+    ) -> EarthStationSearchResult:
+        """Find NOAA water-level station candidates in an explicit CRS84 bbox."""
+        validated_bbox = self._validated_bbox(bbox)
+        result = await self.fetch(
+            {"operation": "station_search", "bbox": list(validated_bbox)}
+        )
+        if not isinstance(result, EarthStationSearchResult):
+            raise ConnectorError(
+                "NOAA CO-OPS station search returned a non-canonical result.",
+                context={"connector": self.connector_id},
+            )
+        return result
+
+    async def _search_station_directory(
+        self, request: Mapping[str, Any]
+    ) -> EarthStationSearchResult:
+        if set(request) != {"operation", "bbox"}:
+            raise ValidationError(
+                "NOAA CO-OPS station search accepts only a bbox.",
+                context={"connector": self.connector_id},
+            )
+        bbox = self._validated_bbox(request["bbox"])
+        payload = await self._get_json(
+            f"{self.metadata_api_url.rstrip('/')}/stations.json",
+            {"type": "waterlevels", "format": "json"},
+            "station directory",
+        )
+        records = payload.get("stations")
+        source_count = payload.get("count")
+        if (
+            not isinstance(records, list)
+            or isinstance(source_count, bool)
+            or not isinstance(source_count, int)
+            or source_count < len(records)
+        ):
+            raise ConnectorError(
+                "NOAA CO-OPS station directory response is malformed.",
+                context={"connector": self.connector_id},
+            )
+
+        west, south, east, north = bbox
+        stations = []
+        for record in records:
+            if not isinstance(record, Mapping):
+                raise ConnectorError(
+                    "NOAA CO-OPS station directory contains a non-object record.",
+                    context={"connector": self.connector_id},
+                )
+            station_id = record.get("id")
+            name = record.get("name")
+            latitude = self._station_coordinate(record.get("lat"), "latitude")
+            longitude = self._station_coordinate(record.get("lng"), "longitude")
+            if not isinstance(station_id, str) or not station_id.strip():
+                raise ConnectorError(
+                    "NOAA CO-OPS station directory contains a station without an ID.",
+                    context={"connector": self.connector_id},
+                )
+            if not isinstance(name, str) or not name.strip():
+                raise ConnectorError(
+                    "NOAA CO-OPS station directory contains a station without a name.",
+                    context={"connector": self.connector_id, "station_id": station_id},
+                )
+            if not (
+                -90 <= latitude <= 90
+                and -180 <= longitude <= 180
+            ):
+                raise ConnectorError(
+                    "NOAA CO-OPS station directory contains invalid coordinates.",
+                    context={"connector": self.connector_id, "station_id": station_id},
+                )
+            if west <= longitude <= east and south <= latitude <= north:
+                stations.append(
+                    EarthStationCandidate(
+                        station_id=station_id,
+                        provider="NOAA CO-OPS",
+                        name=name,
+                        longitude=longitude,
+                        latitude=latitude,
+                        modalities=("oceanic",),
+                        variables=(_VARIABLE,),
+                        source_metadata=dict(record),
+                    )
+                )
+        stations.sort(key=lambda station: (station.name.casefold(), station.station_id))
+        return EarthStationSearchResult(
+            provider="NOAA CO-OPS",
+            bbox=bbox,
+            stations=tuple(stations),
+            source_record_count=source_count,
+            limitations=(
+                "Stations are candidates selected by location, not a nearest-station choice.",
+                "Station metadata does not establish data availability, coverage, or representativeness.",
+            ),
+        )
 
     async def observe(self, query: EarthQuery) -> ObservationSearchResult:
         request = self._request_from_query(query)
@@ -555,6 +658,57 @@ class NoaaCoopsConnector(PerceptionConnector):
         except (TypeError, ValueError):
             return None
         return number if math.isfinite(number) else None
+
+    def _validated_bbox(
+        self, bbox: Any
+    ) -> tuple[float, float, float, float]:
+        if not isinstance(bbox, (tuple, list)) or len(bbox) != 4:
+            raise ValidationError(
+                "NOAA CO-OPS station search requires a four-coordinate CRS84 bbox."
+            )
+        if any(
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+            for value in bbox
+        ):
+            raise ValidationError(
+                "NOAA CO-OPS station search bbox coordinates must be finite numbers."
+            )
+        west, south, east, north = bbox
+        if (
+            not -180 <= west <= 180
+            or not -180 <= east <= 180
+            or not -90 <= south <= 90
+            or not -90 <= north <= 90
+            or west > east
+            or south > north
+        ):
+            raise ValidationError(
+                "NOAA CO-OPS station search bbox must be ordered CRS84 coordinates."
+            )
+        return (float(west), float(south), float(east), float(north))
+
+    @staticmethod
+    def _station_coordinate(value: Any, name: str) -> float:
+        if isinstance(value, bool):
+            raise ConnectorError(
+                f"NOAA CO-OPS station directory contains an invalid {name}.",
+                context={"coordinate": name},
+            )
+        try:
+            coordinate = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ConnectorError(
+                f"NOAA CO-OPS station directory contains an invalid {name}.",
+                context={"coordinate": name},
+            ) from exc
+        if not math.isfinite(coordinate):
+            raise ConnectorError(
+                f"NOAA CO-OPS station directory contains an invalid {name}.",
+                context={"coordinate": name},
+            )
+        return coordinate
 
     def _validate_configuration(self) -> None:
         if not isinstance(self.connector_id, str) or not self.connector_id.strip():

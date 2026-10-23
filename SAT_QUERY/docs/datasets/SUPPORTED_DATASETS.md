@@ -22,7 +22,7 @@ source metadata stays unknown in SatQuery.
 | Ecological | Declared STAC collections | No dedicated land-cover, vegetation, or biodiversity implementation. |
 | Geological | USGS 3DEP EPQS; declared STAC collections | EPQS returns one interpolated elevation sample per point in supported geographic coordinates. Declared elevation raster bands can be sampled at an explicit point; no terrain derivatives, local error estimate, or history are inferred. |
 | Human | OpenStreetMap / Overpass; declared STAC collections | Read-only vector features for supported point, bbox, and single-ring polygon queries. Explicit tagged-feature candidates may be materialized as source-declared Earth Objects with versioned observation lineage; this is not independent validation or remote-sensing detection. No population or census implementation. |
-| Oceanic | NOAA CO-OPS water levels; declared STAC collections | In-situ coastal water levels for explicitly selected stations and bounded time intervals. Explicit NOAA station metadata materializes as `earth:CoastalWaterLevelStation`; sample data do not infer station status or regional representativeness. No station discovery, spatial-area query, wave, current, or basin-scale ocean state implementation. |
+| Oceanic | NOAA CO-OPS water levels; declared STAC collections | In-situ coastal water levels for explicitly selected stations and bounded time intervals. NOAA station metadata can be searched by CRS84 bbox to return candidates; SatQuery does not select a nearest station. Explicit NOAA station metadata materializes as `earth:CoastalWaterLevelStation`; sample data do not infer station status or regional representativeness. No wave, current, or basin-scale ocean state implementation. |
 | Disaster | NASA LANCE FIRMS active-fire observations; declared STAC collections | Satellite thermal-anomaly records from a selected VIIRS/MODIS product, requested by 2D bbox and no more than five calendar days. Source records materialize as `earth:ThermalAnomalyDetection`; they do not establish wildfire cause, extent, or impact. |
 | Cryospheric | Declared STAC collections | No dedicated snow, glacier, or sea-ice implementation. |
 
@@ -46,6 +46,13 @@ overlaps. The engine does not resample, derive indices, or estimate
 uncertainty. Numeric/categorical semantics must come from the
 ontology, an explicit band `measurement_kind`, or a query-level
 `raster_semantics` declaration; ambiguous bands are rejected.
+
+Manifest implementations `planetary_computer`, `copernicus_data_space`, and
+`usgs_landsat` are catalog presets over the shared STAC adapter. They provide
+default endpoints and provider-identifying metadata; they do not provide
+independent provider protocols or guarantee product access. The generic `stac`
+implementation remains available for other compatible catalogs. See the
+[STAC connector guide](STAC_CONNECTOR.md) for configuration details.
 
 The [Earth Perception architecture](../architecture/Earth_Perception.md)
 documents modality planning, query matching, normalization, provenance,

@@ -643,17 +643,21 @@ class PerceptionEngine:
         )
         matrix = self.build_capability_matrix(connectors=connectors)
         if isinstance(self.selector, CapabilityConnectorSelector):
-            return self.selector.plan(
+            plan = self.selector.plan(
                 query,
                 connectors,
                 matrix.datasets,
                 capability_matrix=matrix,
             )[1]
-        selected = self.selector.select(query, connectors)
-        plan = _plan_from_selected(
-            query, selected, self.modality_registry, matrix.datasets
-        )
-        return plan.model_copy(update={"capability_matrix_revision": matrix.revision})
+        else:
+            selected = self.selector.select(query, connectors)
+            plan = _plan_from_selected(
+                query, selected, self.modality_registry, matrix.datasets
+            )
+        return plan.model_copy(update={
+            "capability_matrix_revision": matrix.revision,
+            "capability_snapshot": matrix.capability_snapshot(),
+        })
 
     def build_capability_matrix(
         self,
@@ -706,9 +710,10 @@ class PerceptionEngine:
             plan = _plan_from_selected(
                 query, connectors, self.modality_registry, datasets
             )
-            plan = plan.model_copy(
-                update={"capability_matrix_revision": matrix.revision}
-            )
+        plan = plan.model_copy(update={
+            "capability_matrix_revision": matrix.revision,
+            "capability_snapshot": matrix.capability_snapshot(),
+        })
         if not connectors:
             raise ConnectorError(
                 "No available perception connector satisfies the EarthQuery.",

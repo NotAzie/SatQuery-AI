@@ -137,3 +137,28 @@ def test_investigate_remains_plan_only_without_explicit_execute(monkeypatch, cap
     assert cli.command_platform_investigate(args) == 0
     assert json.loads(capsys.readouterr().out) == creation
     assert calls[0][:2] == ("POST", "/api/v1/platform/investigate")
+
+
+def test_investigation_events_cli_follows_stream_and_cursor(monkeypatch, capsys):
+    events = [
+        {"sequence": 4, "event_type": "task.running"},
+        {"sequence": 5, "event_type": "execution.finished"},
+    ]
+    calls = []
+
+    class InvestigationResource:
+        def stream_events(self, investigation_id, *, after_sequence):
+            calls.append((investigation_id, after_sequence))
+            return iter(events)
+
+    class Client:
+        investigations = InvestigationResource()
+
+    monkeypatch.setattr(cli, "_platform_client", lambda: Client())
+    args = cli.build_parser().parse_args(
+        ["investigation", "events", "case-1", "--after-sequence", "3"]
+    )
+
+    assert cli.command_platform_investigation_events(args) == 0
+    assert calls == [("case-1", 3)]
+    assert [json.loads(line) for line in capsys.readouterr().out.splitlines()] == events

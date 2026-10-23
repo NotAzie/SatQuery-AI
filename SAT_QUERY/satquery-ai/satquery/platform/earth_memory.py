@@ -30,6 +30,7 @@ _MAX_INDEXED_SEARCH_NGRAMS = 400
 
 MemoryArtifactType = Literal[
     "mission", "investigation", "plan", "observation", "evidence", "hypothesis",
+    "capability_snapshot",
     "scientific_method", "reproducibility_artifact", "provenance_node",
     "earth_object", "earth_object_extraction", "object_relationship",
     "earth_object_transition",

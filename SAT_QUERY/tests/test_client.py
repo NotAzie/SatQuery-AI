@@ -2,7 +2,6 @@ import json
 
 import httpx
 import pytest
-
 from satquery import CLIENT_API_VERSION, PlatformAPIError, SatQueryClient
 from satquery.__main__ import (
     build_parser,
@@ -28,6 +27,9 @@ def test_client_exposes_versioned_capability_and_earth_query_calls():
         assert client.plan_earth(
             EarthQuery(requested_variables=("air_temperature",)), explain=True
         ) == {"accepted": True}
+        assert client.platform.search_station_candidates(
+            "noaa-coops-water-level", (-123, 36, -121, 38)
+        ) == {"accepted": True}
 
     assert calls[0].method == "GET"
     assert calls[0].url.path == "/api/v1/platform/earth/capabilities"
@@ -36,6 +38,39 @@ def test_client_exposes_versioned_capability_and_earth_query_calls():
     payload = json.loads(calls[1].content)
     assert payload["requested_variables"] == ["air_temperature"]
     assert payload["crs"] == "OGC:CRS84"
+    assert calls[2].method == "POST"
+    assert calls[2].url.path.endswith(
+        "/connectors/noaa-coops-water-level/stations/search"
+    )
+    assert json.loads(calls[2].content) == {"bbox": [-123, 36, -121, 38]}
+
+
+def test_client_streams_execution_events_from_the_investigation_route():
+    requests = []
+    event = {"sequence": 7, "event_type": "execution.finished"}
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=f"retry: 3000\n\nid: 7\ndata: {json.dumps(event)}\n\n",
+        )
+
+    with SatQueryClient(
+        transport=httpx.MockTransport(respond)
+    ) as client:
+        streamed = list(
+            client.investigations.stream_events("case/one", after_sequence=6)
+        )
+
+    assert streamed == [event]
+    assert requests[0].method == "GET"
+    assert requests[0].url.raw_path.startswith(
+        b"/api/v1/platform/investigations/case%2Fone/events/stream"
+    )
+    assert requests[0].url.params["after_sequence"] == "6"
+    assert requests[0].headers["accept"] == "text/event-stream"
 
 
 def test_legacy_earth_commands_share_platform_plan_and_observe_handlers():
@@ -48,6 +83,17 @@ def test_legacy_earth_commands_share_platform_plan_and_observe_handlers():
     assert earth_plan.func is root_plan.func is command_platform_plan
     assert earth_plan.explain is False
     assert earth_observe.func is root_observe.func is command_platform_observe
+
+
+def test_memory_cli_accepts_capability_snapshot_artifact_filter():
+    args = build_parser().parse_args([
+        "memory",
+        "search",
+        "--artifact-type",
+        "capability_snapshot",
+    ])
+
+    assert args.artifact_type == ["capability_snapshot"]
 
 
 def test_client_encodes_user_supplied_resource_identifiers():
@@ -215,6 +261,27 @@ def test_existing_client_helpers_delegate_to_canonical_resource_groups():
         "/api/v1/platform/earth-memory/search",
         "/api/v1/platform/investigations/investigation-1/report",
     ]
+
+
+def test_investigation_sdk_returns_capability_snapshots_from_reproducibility_export():
+    requests = []
+    response = {
+        "capability_snapshots": [{
+            "revision": "a" * 64,
+            "snapshot_sha256": "b" * 64,
+        }]
+    }
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200, json=response)
+
+    with SatQueryClient(transport=httpx.MockTransport(respond)) as client:
+        assert client.investigations.reproducibility("investigation-1") == response
+
+    assert requests[0].url.path == (
+        "/api/v1/platform/investigations/investigation-1/reproducibility"
+    )
 
 
 @pytest.mark.parametrize(

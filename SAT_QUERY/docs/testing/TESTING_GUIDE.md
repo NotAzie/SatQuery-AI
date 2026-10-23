@@ -37,8 +37,13 @@ HTTP fixtures/mocks and assert source metadata, errors, units, and provenance.
 regressions plus the Python client, CLI, Earth Object, and monitoring tests on
 Ubuntu with Python 3.12 and the development/geospatial extras. It is not a
 full-suite gate, live provider integration, real-model acceptance, deployment
-test, or scientific validation run. Run the complete local suite when practical
-and report its exact command and outcome.
+test, or scientific validation run. The workflow includes deterministic
+capability-matrix, NASA FIRMS, NOAA CO-OPS, and persistent-history tests; they
+use controlled inputs and do not require live provider access or credentials.
+The connector CLI tests are included to cover manifest-backed connector actions
+and explicitly requested NOAA station-candidate search.
+Run the complete local suite when practical and report its exact command and
+outcome.
 Ruff is not a project dependency and is not run by the checked-in workflow.
 
 ## Scientific verification boundary
@@ -57,5 +62,5 @@ general benchmark corpus. See [benchmark status](BENCHMARKS.md).
 - Raster processing: `test_stac_raster_sampling.py`, with raster extras installed.
 - Earth Objects and memory: `test_earth_objects.py`, `test_phase2_quality.py`, `test_scientific_memory_and_readiness.py`.
 - Workflow persistence, history, monitoring, reports: `test_execution_journal.py`, `test_persistent_platform_history.py`, `test_monitoring.py`, `test_investigation_reports.py`.
-- API/CLI/workspace composition: `test_engine_and_api.py`, `test_platform_application.py`, `test_cli_memory.py`.
+- API/CLI/workspace composition: `test_engine_and_api.py`, `test_platform_application.py`, `test_cli_connectors.py`, `test_cli_investigate.py`, `test_cli_memory.py`.
 - Image adapter contract: `test_hf_practical.py` uses a structured stub model, requires the optional `vision` extra, and skips cleanly when that stack is unavailable. It does not load pretrained weights; real-image/model checks use the separate `real_acceptance` marker.

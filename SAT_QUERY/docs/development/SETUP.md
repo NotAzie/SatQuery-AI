@@ -144,6 +144,22 @@ python -m satquery platform inspect
 python -m satquery platform capabilities
 ```
 
+The optional Esri World Imagery point adapter can also be explicitly enabled
+with the `image_fetcher` manifest implementation. It writes acquired images to
+its configured local `output_dir`; the imagery provider and geocoding service
+terms and availability apply:
+
+```json
+{
+  "connectors": [
+    {
+      "implementation": "image_fetcher",
+      "configuration": {"output_dir": ".satquery/fetched-images"}
+    }
+  ]
+}
+```
+
 For disaster-modality active-fire observations, obtain a NASA FIRMS MAP_KEY and
 provide it through the environment. Add this entry to the configured connector
 manifest, omitting the credential from JSON:
@@ -182,6 +198,29 @@ python -m satquery connectors probe earth-search
 python -m satquery connectors discover earth-search
 python -m satquery datasets --query "surface temperature"
 ```
+
+For an explicitly selected NOAA CO-OPS connector, find station candidates
+inside a CRS84 bounding box without acquiring observations or choosing a
+nearest station:
+
+```powershell
+python -m satquery connectors stations noaa-coops-water-level --bbox -123 36 -121 38
+```
+
+The station candidate list reports metadata from the provider catalog. A
+station's presence does not establish that requested data are available or
+representative of the area; choose a station ID explicitly in the subsequent
+EarthQuery.
+
+While an investigation is executing, follow its durable task events from
+another terminal:
+
+```powershell
+python -m satquery investigation events <investigation-id>
+```
+
+The stream replays retained journal events and closes after the execution
+completion event. It does not start or resume execution.
 
 The workspace's Earth Object panel includes a local SVG locator view, and
 canonical GeoJSON can be exported without adding a mapping-library dependency:

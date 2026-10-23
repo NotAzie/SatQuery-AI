@@ -50,6 +50,9 @@ when task dependencies permit. Cancellation, safe retries, partial results,
 execution events, and compatible SQLite checkpoint resume are supported.
 Resume reuses only successful outputs whose workflow fingerprint and
 registered codec version match.
+The append-only journal is available through both cursor-based polling and a
+replayable Server-Sent Events endpoint consumed by the workspace, SDK, and CLI.
+Streaming does not change journal ordering, persistence, or execution semantics.
 
 ## Output and persistence
 
@@ -60,7 +63,14 @@ lifecycle, execution, audit, memory, and monitoring state. Without configured
 paths those stores are process-local. Persistence does not imply distributed
 execution, cross-host locking, or transactional access to upstream providers.
 
-Earth Memory indexes artifacts and lineage for deterministic retrieval. It
+Plans and perception results retain a content-verified snapshot of the public
+capability-selection metadata associated with the matrix revision they used.
+The snapshot omits raw dataset metadata, asset URIs, and connector
+source/provider payloads; the matrix revision remains an opaque integrity
+reference to the complete metadata used when it was built.
+
+Earth Memory indexes artifacts and lineage, including capability snapshots,
+for deterministic retrieval. It
 does not learn scientific relationships or independently validate findings.
 Monitoring schedules can rerun configured EarthQueries and create operational
 events; they do not constitute scientifically validated change detection.

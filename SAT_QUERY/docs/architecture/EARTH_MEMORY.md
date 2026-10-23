@@ -3,6 +3,13 @@
 Earth Memory stores immutable, digest-checked artifacts and their explicit
 source links. It is an index, not a learning system or scientific reasoner.
 
+Capability snapshots are indexed as `capability_snapshot` artifacts linked to
+the plan or execution that used them. They preserve the public capability
+entries and modality declarations for the recorded matrix revision and verify
+their own content digest. Raw dataset metadata, asset URIs, and connector
+source/provider payloads are excluded; the snapshot does not freeze source data
+or guarantee that a provider can reproduce an earlier response.
+
 Candidate-to-object extraction batches are indexed with links to their source
 observation artifacts. They record the pipeline version, candidate digests,
 source method identities, and reconciliation issues. Every batch with input
@@ -148,7 +155,8 @@ transforms, raster footprint indexes, vector-tile indexes, temporal nearest
 neighbor ranking, semantic search, or distributed geospatial storage. Those
 require explicit semantics and scale requirements before adoption.
 
-Investigation reproducibility bundle schema `1.3.0` retains Earth Object
+Investigation reproducibility bundle schema `1.4.0` retains capability
+selection snapshots alongside Earth Object
 revision snapshots, the selected relationship graph, source-declared extraction
 batches, explicit transition artifacts, and their audit events. Each collection
 contributes to the bundle's artifact hashes. Empty object and transition

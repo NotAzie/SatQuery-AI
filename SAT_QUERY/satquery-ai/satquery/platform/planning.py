@@ -16,11 +16,17 @@ from calendar import monthrange
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Callable, Literal, Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from ..errors import ValidationError
 from .capabilities import EarthCapabilityMatrix
-from .contracts import Contract, DatasetReference, EarthQuery, PerceptionPlan
+from .contracts import (
+    Contract,
+    DatasetReference,
+    EarthCapabilitySnapshot,
+    EarthQuery,
+    PerceptionPlan,
+)
 from .modalities import SensingModalityRegistry
 from .ontology import EARTH_VARIABLE_ONTOLOGY, EarthVariableOntology
 
@@ -186,8 +192,18 @@ class InvestigationPlan(Contract):
     status: Literal["ready", "needs_clarification", "no_capability", "invalid"]
     selected_candidate_plan_id: Optional[str] = None
     capability_matrix_revision: str
+    capability_snapshot: Optional[EarthCapabilitySnapshot] = None
     reproducibility: dict[str, Any] = Field(default_factory=dict)
     limitations: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_capability_snapshot_revision(self) -> "InvestigationPlan":
+        if (
+            self.capability_snapshot is not None
+            and self.capability_matrix_revision != self.capability_snapshot.revision
+        ):
+            raise ValueError("capability snapshot revision does not match the investigation plan")
+        return self
 
 
 class InvestigationPlanner:
@@ -419,6 +435,7 @@ class InvestigationPlanner:
             status = "ready"
 
         assumptions = (temporal_assumption,) if temporal_assumption else ()
+        capability_snapshot = matrix.capability_snapshot()
         return InvestigationPlan(
             plan_id=plan_id,
             question=question,
@@ -438,6 +455,7 @@ class InvestigationPlanner:
                 candidates[0].candidate_plan_id if status == "ready" and len(candidates) == 1 else None
             ),
             capability_matrix_revision=matrix.revision,
+            capability_snapshot=capability_snapshot,
             reproducibility={
                 "planner_id": PLANNER_ID,
                 "planner_version": PLANNER_VERSION,
@@ -446,6 +464,7 @@ class InvestigationPlanner:
                 "time_zone": "UTC",
                 "ontology_sha256": ontology_revision,
                 "capability_matrix_revision": matrix.revision,
+                "capability_snapshot_sha256": capability_snapshot.snapshot_sha256,
                 "rules": [
                     "exact-ontology-alias-match",
                     "explicit-coordinate-and-declared-region-resolution",

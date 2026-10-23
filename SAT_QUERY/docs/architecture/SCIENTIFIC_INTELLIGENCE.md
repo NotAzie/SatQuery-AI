@@ -216,17 +216,22 @@ chains are readable through the audit API. The runtime also exports a
 versioned reproducibility bundle containing retained hypotheses, plans,
 dataset references, observations, provenance, method manifests, evidence
 graph, reasoning report, uncertainty inventory, execution task trace, audit
-events, capability-matrix revision, missing-artifact list, and per-artifact
-hashes. Missing source artifacts are called out rather than reconstructed.
+events, capability-matrix revision and its safe selection snapshot,
+missing-artifact list, and per-artifact hashes. Snapshots have an independent
+content digest and omit raw dataset metadata, asset URIs, and connector
+source/provider payloads. Missing source artifacts are called out rather than
+reconstructed.
 
 Audit events can use the default in-memory trail or the configured local
 SQLite audit adapter. This is durable single-host storage, not a distributed
 transactional event service. Signed attestations, independent reviewer
-identity, complete immutable capability/data snapshots, sandbox runtime,
+identity, immutable snapshots of raw upstream data, sandbox runtime,
 range-aware dependency solver, and benchmark comparators for scientifically
-justified tolerances remain absent. The hash chain detects accidental or
-partial changes but is not a signature and cannot protect against an
-administrator rewriting the entire store.
+justified tolerances remain absent. The capability snapshot records the public
+selection view, not the source payloads or acquired data required to recreate
+an upstream response. The hash chain detects accidental or partial changes
+but is not a signature and cannot protect against an administrator rewriting
+the entire store.
 
 ## Scientific knowledge and workflow scaffolds
 

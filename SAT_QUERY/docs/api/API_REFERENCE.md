@@ -59,9 +59,10 @@ routes are called.
 | `GET` | `/api/v1/platform/connectors/health` | Read local call, failure, latency, and health-probe metrics without contacting providers. |
 | `POST` | `/api/v1/platform/connectors/{connector_id}/health-check` | Explicitly ask one adapter to run its active health probe. This may contact the provider. |
 | `POST` | `/api/v1/platform/connectors/{connector_id}/discover` | Ask one adapter to discover datasets and register their metadata. This performs a live request. |
+| `POST` | `/api/v1/platform/connectors/{connector_id}/stations/search` | For a NOAA CO-OPS connector, return provider-declared water-level station candidates inside a CRS84 `bbox`; candidates are not automatically selected or treated as observations. |
 | `GET` | `/api/v1/platform/datasets` | List currently known dataset metadata. |
 | `GET` | `/api/v1/platform/datasets/search` | Search registered dataset metadata by declared names, aliases, variables, and terms using `q`. |
-| `GET` | `/api/v1/platform/earth/capabilities` | Read the deterministic Earth capability matrix, including registered/declared domains, source variables, coverage, access, quality, and unknown fields. |
+| `GET` | `/api/v1/platform/earth/capabilities` | Read the deterministic Earth capability matrix, including registered/declared domains, source variables, coverage, access, quality, unknown fields, and a content digest for its safe public snapshot. |
 | `GET` | `/api/v1/platform/scientific-methods` | Inspect registered versioned methods/rules, domain registration status, operator manifests, uncertainty methods, and the catalog revision. |
 | `GET` | `/api/v1/platform/scientific-methods/{method_id}/{version}/governance` | Inspect verified benchmark reports and certification lifecycle for one exact method version, including whether certification can currently emit findings and any restoration failure. |
 | `POST` | `/api/v1/platform/scientific-methods/assess` | Conservatively preflight a registered method against an EarthQuery and capability-matrix snapshot; does not execute the method. |
@@ -73,8 +74,8 @@ routes are called.
 | `POST` | `/api/v1/platform/scientific-workflows/{template_id}/instantiate` | Produce an instance with supplied and unresolved configuration; never selects methods or emits conclusions. |
 | `GET` | `/api/v1/platform/investigations/{investigation_id}/audit` | Read per-aggregate hash-chained investigation and plan events with verification status; event payloads are withheld when integrity checks fail. |
 | `GET` | `/api/v1/platform/investigations/{investigation_id}/reproducibility` | Export retained artifacts, object revisions/graph, extraction batches, transitions, audit links, linked monitoring schedule/run events and comparisons when applicable, hashes, and explicit missing artifacts. Returns 409 if Earth Memory changes during paginated export. |
-| `POST` | `/api/v1/platform/earth/plan` | Plan modality, variable, implementation, and dataset coverage without acquisition. |
-| `POST` | `/api/v1/platform/earth/plan/explain` | Return the plan, matrix revision, selected declarations, and planning limitations. |
+| `POST` | `/api/v1/platform/earth/plan` | Plan modality, variable, implementation, and dataset coverage without acquisition; returns the content-verified public capability snapshot associated with its matrix revision. |
+| `POST` | `/api/v1/platform/earth/plan/explain` | Return the plan, matrix revision and snapshot, selected declarations, and planning limitations. |
 | `POST` | `/api/v1/platform/earth/observe` | Acquire canonical observations from matching registered implementations. |
 | `POST` | `/api/v1/platform/planning/investigations` | Parse a natural-language objective into a deterministic `InvestigationPlan`; does not create missions or acquire data. |
 | `GET` | `/api/v1/platform/investigation-plans/{plan_id}` | Retrieve the plan and reproducibility manifest. |
@@ -178,6 +179,7 @@ uncertainty as not propagated.
 | `GET` | `/api/v1/platform/investigations/{investigation_id}/provenance` | Return each observation's dataset, provider metadata, provenance, and reproducibility declaration. |
 | `GET` | `/api/v1/platform/executions/{execution_id}` | Retrieve task outcomes, outputs, timing, and trace ID for an execution plan ID; Earth Object extraction is a checkpointed typed task output. |
 | `GET` | `/api/v1/platform/executions/{execution_id}/events` | Poll the append-only, ordered execution journal; use `after_sequence` as the sequence cursor. |
+| `GET` | `/api/v1/platform/investigations/{investigation_id}/events/stream` | Stream the same journal as replayable Server-Sent Events while execution runs; reconnect with `Last-Event-ID` or use `after_sequence`. |
 
 The platform API is not an authenticated multi-user service. Store selection,
 connector access, and network exposure are operator configuration. Provider
@@ -225,15 +227,23 @@ Earth Object revision and an investigation audit event; the API does not infer
 object type changes or lifecycle state from observations. The transition is
 also searchable in Earth Memory as `earth_object_transition`.
 
-Reproducibility exports use bundle schema `1.1.0`. They include each matching
-Earth Object revision with its retained source/evidence records, the selected
-object relationship graph (including an empty graph when no objects exist),
-Earth Object extraction batches, and explicit transition artifacts. These
-records have individual hashes and contribute to the bundle digest. Empty
-object and transition collections mean that none were recorded; they are not
-reported as missing artifacts. Export timestamps are excluded from the stable
-bundle digest, and repeated exports of the same investigation snapshot reuse
-the same immutable Earth Memory artifact.
+Reproducibility exports use bundle schema `1.4.0`. They include the public
+capability-selection snapshots associated with investigation planning and
+acquisition, each matching Earth Object revision with its retained
+source/evidence records, the selected object relationship graph (including an
+empty graph when no objects exist), Earth Object extraction batches, and
+explicit transition artifacts. Snapshot contents and other records are hashed
+into the bundle digest. Capability snapshots omit raw dataset metadata, asset
+URIs, and connector source/provider payloads; they do not retain or recreate
+upstream data. Empty object and transition collections mean that none were
+recorded; they are not reported as missing artifacts. Export timestamps are
+excluded from the stable bundle digest, and repeated exports of the same
+investigation snapshot reuse the same immutable Earth Memory artifact.
+
+Capability snapshots are also searchable in Earth Memory with
+`--artifact-type capability_snapshot` or an `artifact_types` filter. The
+synchronous Python SDK returns these response fields as server JSON without
+local coercion.
 
 ### Mission-oriented CLI and natural-language boundary
 
@@ -270,6 +280,7 @@ for ordered polling by CLI, API clients, and the workspace.
 python -m satquery investigate "Review air temperature near this site" --query-file earth-query.json
 python -m satquery intelligence design "Measure air temperature globally last week" --query-file earth-query.json
 python -m satquery investigation execute <investigation-id>
+python -m satquery investigation events <investigation-id>
 python -m satquery investigation report <investigation-id>
 python -m satquery investigation compare <investigation-id-1> <investigation-id-2>
 python -m satquery monitor compare <schedule-id> --limit 10

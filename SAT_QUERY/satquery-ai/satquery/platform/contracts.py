@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import uuid
 from datetime import datetime, timezone
@@ -26,6 +28,86 @@ def _is_geographic_crs(crs: str) -> bool:
         "epsg:4326",
         "urn:ogc:def:crs:ogc:1.3:crs84",
     }
+
+
+def _validate_geojson_geometry(geometry: Dict[str, Any], crs: Optional[str]) -> None:
+    """Validate GeoJSON structure and finite coordinates, not topology."""
+
+    def position(value: Any) -> bool:
+        if not isinstance(value, (list, tuple)) or len(value) < 2:
+            return False
+        if any(
+            not isinstance(item, (int, float))
+            or isinstance(item, bool)
+            or not math.isfinite(item)
+            for item in value
+        ):
+            return False
+        return not (
+            crs is not None
+            and _is_geographic_crs(crs)
+            and (
+                not -180 <= value[0] <= 180
+                or not -90 <= value[1] <= 90
+            )
+        )
+
+    def ring(value: Any) -> bool:
+        return (
+            isinstance(value, (list, tuple))
+            and len(value) >= 4
+            and all(position(item) for item in value)
+            and value[0] == value[-1]
+        )
+
+    def line(value: Any) -> bool:
+        return (
+            isinstance(value, (list, tuple))
+            and len(value) >= 2
+            and all(position(item) for item in value)
+        )
+
+    geometry_type = geometry.get("type")
+    coordinates = geometry.get("coordinates")
+    valid = False
+    if geometry_type == "GeometryCollection":
+        geometries = geometry.get("geometries")
+        valid = isinstance(geometries, (list, tuple)) and all(
+            isinstance(item, dict)
+            and _validate_geojson_geometry(item, crs) is None
+            for item in geometries
+        )
+    elif geometry_type == "Point":
+        valid = position(coordinates)
+    elif geometry_type == "MultiPoint":
+        valid = isinstance(coordinates, (list, tuple)) and all(
+            position(item) for item in coordinates
+        )
+    elif geometry_type == "LineString":
+        valid = isinstance(coordinates, (list, tuple)) and (
+            not coordinates or line(coordinates)
+        )
+    elif geometry_type == "MultiLineString":
+        valid = isinstance(coordinates, (list, tuple)) and all(
+            line(item) for item in coordinates
+        )
+    elif geometry_type == "Polygon":
+        valid = isinstance(coordinates, (list, tuple)) and all(
+            ring(item) for item in coordinates
+        )
+    elif geometry_type == "MultiPolygon":
+        valid = isinstance(coordinates, (list, tuple)) and all(
+            isinstance(polygon, (list, tuple))
+            and bool(polygon)
+            and all(ring(item) for item in polygon)
+            for polygon in coordinates
+        )
+
+    if not valid:
+        raise ValueError(
+            "geometry must be a structurally valid GeoJSON geometry with finite "
+            "coordinates compatible with its declared CRS"
+        )
 
 
 class _FrozenDict(dict):
@@ -151,6 +233,29 @@ class DatasetReference(Contract):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
+class EarthStationCandidate(Contract):
+    """Provider-declared station metadata for user-directed source selection."""
+
+    station_id: str = Field(min_length=1)
+    provider: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    longitude: float = Field(ge=-180, le=180)
+    latitude: float = Field(ge=-90, le=90)
+    modalities: Tuple[str, ...] = ()
+    variables: Tuple[str, ...] = ()
+    source_metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class EarthStationSearchResult(Contract):
+    """Spatially filtered station candidates, not observations or coverage claims."""
+
+    provider: str = Field(min_length=1)
+    bbox: Tuple[float, float, float, float]
+    stations: Tuple[EarthStationCandidate, ...] = ()
+    source_record_count: int = Field(ge=0)
+    limitations: Tuple[str, ...] = ()
+
+
 class ObservationAsset(Contract):
     uri: str = Field(min_length=1)
     media_type: Optional[str] = None
@@ -238,6 +343,197 @@ class DatasetSearchPlan(Contract):
     requested_variables: Tuple[str, ...] = ()
     available_variables: Tuple[str, ...] = ()
     unavailable_variables: Tuple[str, ...] = ()
+
+
+class EarthCapabilityVariable(Contract):
+    """A dataset's source variable and its conservative ontology mapping."""
+
+    source_name: str = Field(min_length=1)
+    canonical_name: Optional[str] = None
+    concept_id: Optional[str] = None
+    ontology_uri: Optional[str] = None
+    unit: Optional[str] = None
+
+
+class EarthCapabilityEntry(Contract):
+    """Capabilities declared by one dataset or one connector implementation."""
+
+    connector_id: str = Field(min_length=1)
+    connector_name: str = Field(min_length=1)
+    connector_version: str = Field(min_length=1)
+    provider_version: Optional[str] = None
+    provider: Optional[str] = None
+    dataset_id: Optional[str] = None
+    dataset_version: Optional[str] = None
+    dataset_reference: Optional[DatasetReference] = None
+    dataset_metadata: Optional[DatasetMetadata] = Field(default=None, exclude=True)
+    scope: Literal["dataset", "implementation"]
+    implementation_capabilities: Tuple[str, ...] = ()
+    declared_dataset_references: Tuple[DatasetReference, ...] = ()
+    modalities: Tuple[str, ...] = ()
+    variables: Tuple[EarthCapabilityVariable, ...] = ()
+    capabilities: Tuple[str, ...] = ()
+    spatial_coverage: Optional[Dict[str, object]] = None
+    temporal_coverage: Optional[TemporalExtent] = None
+    connector_temporal_coverage: Optional[TemporalExtent] = None
+    historical_coverage: Optional[TemporalExtent] = None
+    forecast_coverage: Optional[TemporalExtent] = None
+    supports_historical: Optional[bool] = None
+    supports_forecast: Optional[bool] = None
+    spatial_resolution: Optional[float] = None
+    resolution_unit: Optional[str] = None
+    crs: Optional[str] = None
+    latency: Optional[str] = None
+    update_frequency: Optional[str] = None
+    quality_metadata: Dict[str, object] = Field(default_factory=dict)
+    uncertainty_metadata: Dict[str, object] = Field(default_factory=dict)
+    confidence_available: Optional[bool] = None
+    licensing: Optional[str] = None
+    access_policy: Dict[str, object] = Field(default_factory=dict)
+    access_limitations: Tuple[str, ...] = ()
+    authentication_required: Optional[bool] = None
+    authentication_schemes: Tuple[str, ...] = ()
+    asset_references_declared: bool = False
+    asset_reference_count: int = Field(default=0, ge=0)
+    supports_streaming: Optional[bool] = None
+    connector_registered: bool = False
+    connector_available: Optional[bool] = None
+    connector_health: Literal["unknown", "healthy", "degraded", "unhealthy"] = "unknown"
+    connector_priority: int = 0
+    supported_regions: Tuple[str, ...] = ()
+    supported_spatial_types: Tuple[str, ...] = ()
+    supports_temporal_query: bool = False
+    supported_query_fields: Tuple[str, ...] = ()
+    fallback_for: Tuple[str, ...] = ()
+    quota_metadata: Dict[str, object] = Field(default_factory=dict)
+    documentation_url: Optional[str] = None
+    field_provenance: Dict[str, str] = Field(default_factory=dict)
+    source_metadata: Dict[str, object] = Field(default_factory=dict, exclude=True)
+    provider_metadata: Dict[str, object] = Field(default_factory=dict, exclude=True)
+
+
+class EarthModalityCapability(Contract):
+    modality_id: str = Field(min_length=1)
+    label: Optional[str] = None
+    description: Optional[str] = None
+    status: Literal["registered", "unavailable", "declared", "not_registered"]
+    implementation_ids: Tuple[str, ...] = ()
+    dataset_ids: Tuple[str, ...] = ()
+    variables: Tuple[str, ...] = ()
+
+
+class EarthCapabilityMatrix(Contract):
+    """A point-in-time metadata view; registration is not an availability promise."""
+
+    revision: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
+    entries: Tuple[EarthCapabilityEntry, ...] = ()
+    modalities: Tuple[EarthModalityCapability, ...] = ()
+
+    @property
+    def datasets(self) -> Tuple[DatasetMetadata, ...]:
+        """Dataset records represented by this snapshot, for legacy selectors."""
+        values = {
+            (
+                entry.dataset_metadata.connector_id,
+                entry.dataset_metadata.dataset_id,
+                entry.dataset_metadata.version,
+            ): entry.dataset_metadata
+            for entry in self.entries
+            if entry.dataset_metadata is not None
+        }
+        return tuple(
+            values[key]
+            for key in sorted(values, key=lambda item: (item[0], item[1], item[2] or ""))
+        )
+
+    def capability_snapshot(self) -> "EarthCapabilitySnapshot":
+        return EarthCapabilitySnapshot.from_matrix(self)
+
+
+class EarthCapabilitySnapshot(Contract):
+    """Integrity-checked public selection metadata for one capability revision."""
+
+    schema_version: Literal["1.0.0"] = "1.0.0"
+    revision: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
+    entries: Tuple[EarthCapabilityEntry, ...] = ()
+    modalities: Tuple[EarthModalityCapability, ...] = ()
+    excluded_metadata: Tuple[str, ...] = (
+        "dataset asset URIs and raw dataset metadata",
+        "connector source metadata",
+        "connector provider metadata",
+    )
+    snapshot_sha256: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
+
+    @classmethod
+    def from_matrix(cls, matrix: EarthCapabilityMatrix) -> "EarthCapabilitySnapshot":
+        entries = tuple(
+            EarthCapabilityEntry.model_validate(item.model_dump(mode="json"))
+            for item in matrix.entries
+        )
+        modalities = tuple(
+            EarthModalityCapability.model_validate(item.model_dump(mode="json"))
+            for item in matrix.modalities
+        )
+        values = {
+            "revision": matrix.revision,
+            "entries": entries,
+            "modalities": modalities,
+        }
+        return cls(
+            **values,
+            snapshot_sha256=_earth_capability_snapshot_digest(
+                schema_version="1.0.0",
+                revision=matrix.revision,
+                entries=entries,
+                modalities=modalities,
+                excluded_metadata=(
+                    "dataset asset URIs and raw dataset metadata",
+                    "connector source metadata",
+                    "connector provider metadata",
+                ),
+            ),
+        )
+
+    @model_validator(mode="after")
+    def validate_snapshot_digest(self) -> "EarthCapabilitySnapshot":
+        if any(
+            item.dataset_metadata is not None
+            or item.source_metadata
+            or item.provider_metadata
+            for item in self.entries
+        ):
+            raise ValueError("capability snapshot contains excluded raw metadata")
+        expected = _earth_capability_snapshot_digest(
+            schema_version=self.schema_version,
+            revision=self.revision,
+            entries=self.entries,
+            modalities=self.modalities,
+            excluded_metadata=self.excluded_metadata,
+        )
+        if self.snapshot_sha256 != expected:
+            raise ValueError("capability snapshot digest does not match its content")
+        return self
+
+
+def _earth_capability_snapshot_digest(
+    *,
+    schema_version: str,
+    revision: str,
+    entries: Tuple[EarthCapabilityEntry, ...],
+    modalities: Tuple[EarthModalityCapability, ...],
+    excluded_metadata: Tuple[str, ...],
+) -> str:
+    payload = {
+        "schema_version": schema_version,
+        "revision": revision,
+        "entries": [item.model_dump(mode="json") for item in entries],
+        "modalities": [item.model_dump(mode="json") for item in modalities],
+        "excluded_metadata": list(excluded_metadata),
+    }
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 class ObservationQuality(Contract):
@@ -613,42 +909,7 @@ class EarthQuery(Contract):
                     "point must use longitude/latitude within Earth bounds"
                 )
         if self.geometry is not None:
-            geometry_type = self.geometry.get("type")
-            if not isinstance(geometry_type, str) or geometry_type not in {
-                "Point",
-                "MultiPoint",
-                "LineString",
-                "MultiLineString",
-                "Polygon",
-                "MultiPolygon",
-                "GeometryCollection",
-            }:
-                raise ValueError("geometry must contain a GeoJSON geometry type")
-            coordinate_field = (
-                "geometries" if geometry_type == "GeometryCollection" else "coordinates"
-            )
-            if not isinstance(self.geometry.get(coordinate_field), list):
-                raise ValueError(
-                    f"geometry {geometry_type} must contain {coordinate_field}"
-                )
-            if geometry_type == "Point":
-                coordinates = self.geometry[coordinate_field]
-                if len(coordinates) < 2 or any(
-                    not isinstance(value, (int, float))
-                    or isinstance(value, bool)
-                    or not math.isfinite(value)
-                    for value in coordinates[:2]
-                ):
-                    raise ValueError(
-                        "GeoJSON Point requires finite numeric coordinates"
-                    )
-                x, y = coordinates[:2]
-                if _is_geographic_crs(self.crs) and (
-                    not -180 <= x <= 180 or not -90 <= y <= 90
-                ):
-                    raise ValueError(
-                        "GeoJSON Point must use longitude/latitude within Earth bounds"
-                    )
+            _validate_geojson_geometry(self.geometry, self.crs)
         if self.temporal_start is not None and self.temporal_start.tzinfo is None:
             raise ValueError("temporal_start must include a timezone")
         if self.temporal_end is not None and self.temporal_end.tzinfo is None:
@@ -794,6 +1055,16 @@ class PerceptionPlan(Contract):
     implementation_ids: Tuple[str, ...] = ()
     dataset_ids: Tuple[str, ...] = ()
     capability_matrix_revision: Optional[str] = None
+    capability_snapshot: Optional[EarthCapabilitySnapshot] = None
+
+    @model_validator(mode="after")
+    def validate_capability_snapshot_revision(self) -> "PerceptionPlan":
+        if (
+            self.capability_snapshot is not None
+            and self.capability_matrix_revision != self.capability_snapshot.revision
+        ):
+            raise ValueError("capability snapshot revision does not match the plan")
+        return self
 
 
 class ObservationStackMember(Contract):

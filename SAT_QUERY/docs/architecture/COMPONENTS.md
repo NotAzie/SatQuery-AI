@@ -36,7 +36,9 @@ contracts do not imply that every capability is production deployed. See
 
 The connector package contains STAC, NASA Earthdata CMR, NASA POWER, NASA
 FIRMS, Open-Meteo, OpenStreetMap, USGS 3DEP, USGS Water, NOAA CO-OPS, and the
-optional Esri imagery fetcher. Each adapter has narrower product/query
+optional Esri imagery fetcher. These implementations, including the named
+STAC catalog presets, are available through explicit manifest factories; they
+are not automatically enabled. Each adapter has narrower product/query
 coverage than its provider's full catalog. Configuration and known limits are
 documented under [`../datasets/`](../datasets/SUPPORTED_DATASETS.md).
 

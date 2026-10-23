@@ -7,7 +7,8 @@ lets clients pin request/response validation to the API schema they need.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import json
+from collections.abc import Iterator, Mapping
 from typing import Any
 from urllib.parse import quote, urlsplit
 
@@ -214,6 +215,75 @@ class SatQueryClient:
         self, path: str, *, payload: Any, params: Mapping[str, Any] | None = None
     ) -> Any:
         return self.request("PATCH", path, payload=payload, params=params)
+
+    def stream_json_events(
+        self, path: str, *, params: Mapping[str, Any] | None = None
+    ) -> Iterator[Any]:
+        """Yield JSON data frames from a Server-Sent Events endpoint."""
+        parsed_path = urlsplit(path)
+        if (
+            not path.startswith("/")
+            or path.startswith("//")
+            or parsed_path.scheme
+            or parsed_path.netloc
+            or parsed_path.fragment
+        ):
+            raise ValueError(
+                "path must be an absolute API path without a host or fragment"
+            )
+        url = f"{self.base_url}{path}"
+        try:
+            with self._http.stream(
+                "GET",
+                url,
+                params=params,
+                headers={"Accept": "text/event-stream"},
+            ) as response:
+                if not response.is_success:
+                    response.read()
+                    try:
+                        body = response.json()
+                    except ValueError:
+                        body = {"detail": response.text} if response.text else None
+                    error_body = body if isinstance(body, Mapping) else {}
+                    detail = (
+                        error_body.get("detail")
+                        or error_body.get("message")
+                        or error_body.get("error")
+                        or response.reason_phrase
+                    )
+                    raise PlatformAPIError(
+                        str(detail),
+                        method="GET",
+                        url=str(response.request.url),
+                        status_code=response.status_code,
+                        payload=body,
+                        recoverable=response.status_code == 429
+                        or response.status_code >= 500,
+                    )
+                data_lines: list[str] = []
+                for line in response.iter_lines():
+                    if not line:
+                        if data_lines:
+                            yield json.loads("\n".join(data_lines))
+                            data_lines.clear()
+                    elif line.startswith(":"):
+                        continue
+                    elif line.startswith("data:"):
+                        data_lines.append(line[5:].lstrip())
+                if data_lines:
+                    yield json.loads("\n".join(data_lines))
+        except httpx.HTTPError as exc:
+            raise PlatformAPIError(
+                "The SatQuery platform event stream could not be reached.",
+                method="GET",
+                url=url,
+                remediation=[
+                    "Start the platform with `python -m satquery serve`.",
+                    "Check the API base URL and network connectivity.",
+                ],
+                recoverable=True,
+            ) from exc
 
     def _json_value(self, value: Any) -> Any:
         model_dump = getattr(value, "model_dump", None)

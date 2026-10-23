@@ -1,15 +1,15 @@
 import pytest
 from pydantic import ValidationError as PydanticValidationError
-
+from satquery.errors import ValidationError as SatQueryValidationError
 from satquery.platform.contracts import (
-    ExecutionPlan,
+    EarthQuery,
     Evidence,
+    ExecutionPlan,
     InvestigationStatus,
     Mission,
     Observation,
     Task,
 )
-from satquery.errors import ValidationError as SatQueryValidationError
 from satquery.platform.investigations import (
     InMemoryInvestigationRepository,
     InvestigationService,
@@ -54,6 +54,36 @@ def test_contract_nested_metadata_is_immutable_and_remains_json_serializable():
     copied = observation.model_copy(update={"provenance": {"copy": [3]}})
     with pytest.raises(TypeError, match="immutable"):
         copied.provenance["copy"].append(4)
+
+
+@pytest.mark.parametrize(
+    "geometry",
+    [
+        {"type": "Point", "coordinates": [float("nan"), 1]},
+        {"type": "LineString", "coordinates": [[0, 0]]},
+        {
+            "type": "Polygon",
+            "coordinates": [[[0, 0], [1, 0], [1, 1], [2, 2]]],
+        },
+        {"type": "Unknown", "coordinates": []},
+    ],
+)
+def test_earth_query_rejects_malformed_geojson_geometry(geometry):
+    with pytest.raises(PydanticValidationError, match="structurally valid GeoJSON"):
+        EarthQuery(geometry=geometry)
+
+
+def test_earth_query_applies_geographic_bounds_only_for_declared_geographic_crs():
+    EarthQuery(
+        geometry={"type": "Point", "coordinates": [500_000, 4_500_000]},
+        crs="EPSG:32631",
+    )
+
+    with pytest.raises(PydanticValidationError, match="structurally valid GeoJSON"):
+        EarthQuery(
+            geometry={"type": "Point", "coordinates": [500_000, 4_500_000]},
+            crs="OGC:CRS84",
+        )
 
 
 def test_investigation_lifecycle_tracks_evidence_results_and_report():

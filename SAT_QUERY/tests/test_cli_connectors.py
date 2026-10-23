@@ -16,8 +16,18 @@ def test_connector_cli_exposes_passive_health_and_explicit_provider_operations(
     health_args = parser.parse_args(["connectors", "health"])
     probe_args = parser.parse_args(["connectors", "probe", "provider/one"])
     discover_args = parser.parse_args(["platform", "discover", "provider-one"])
+    stations_args = parser.parse_args([
+        "connectors",
+        "stations",
+        "noaa-coops-water-level",
+        "--bbox",
+        "-123",
+        "36",
+        "-121",
+        "38",
+    ])
 
-    for args in (list_args, health_args, probe_args, discover_args):
+    for args in (list_args, health_args, probe_args, discover_args, stations_args):
         assert args.func(args) == 0
 
     assert calls == [
@@ -35,5 +45,11 @@ def test_connector_cli_exposes_passive_health_and_explicit_provider_operations(
             None,
             None,
         ),
+        (
+            "POST",
+            "/api/v1/platform/connectors/noaa-coops-water-level/stations/search",
+            {"bbox": [-123.0, 36.0, -121.0, 38.0]},
+            None,
+        ),
     ]
-    assert capsys.readouterr().out.count('"ok": true') == 4
+    assert capsys.readouterr().out.count('"ok": true') == 5

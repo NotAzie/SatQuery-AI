@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Iterable, Literal, Optional
-
-from pydantic import Field
+from typing import Iterable, Optional
 
 from .contracts import (
     ConnectorMetadata,
-    Contract,
     DatasetMetadata,
     DatasetReference,
+    EarthCapabilityEntry,
+    EarthCapabilityMatrix,
+    EarthCapabilitySnapshot,
+    EarthCapabilityVariable,
+    EarthModalityCapability,
     TemporalExtent,
 )
 from .modalities import (
@@ -21,110 +23,6 @@ from .modalities import (
     infer_modalities,
 )
 from .ontology import EARTH_VARIABLE_ONTOLOGY, EarthVariableOntology
-
-
-class EarthCapabilityVariable(Contract):
-    """A dataset's source variable and its conservative ontology mapping."""
-
-    source_name: str = Field(min_length=1)
-    canonical_name: Optional[str] = None
-    concept_id: Optional[str] = None
-    ontology_uri: Optional[str] = None
-    unit: Optional[str] = None
-
-
-class EarthCapabilityEntry(Contract):
-    """Capabilities declared by one dataset or one connector implementation."""
-
-    connector_id: str = Field(min_length=1)
-    connector_name: str = Field(min_length=1)
-    connector_version: str = Field(min_length=1)
-    provider_version: Optional[str] = None
-    provider: Optional[str] = None
-    dataset_id: Optional[str] = None
-    dataset_version: Optional[str] = None
-    dataset_reference: Optional[DatasetReference] = None
-    dataset_metadata: Optional[DatasetMetadata] = Field(default=None, exclude=True)
-    scope: Literal["dataset", "implementation"]
-    implementation_capabilities: tuple[str, ...] = ()
-    declared_dataset_references: tuple[DatasetReference, ...] = ()
-    modalities: tuple[str, ...] = ()
-    variables: tuple[EarthCapabilityVariable, ...] = ()
-    capabilities: tuple[str, ...] = ()
-    spatial_coverage: Optional[dict[str, object]] = None
-    temporal_coverage: Optional[TemporalExtent] = None
-    connector_temporal_coverage: Optional[TemporalExtent] = None
-    historical_coverage: Optional[TemporalExtent] = None
-    forecast_coverage: Optional[TemporalExtent] = None
-    supports_historical: Optional[bool] = None
-    supports_forecast: Optional[bool] = None
-    spatial_resolution: Optional[float] = None
-    resolution_unit: Optional[str] = None
-    crs: Optional[str] = None
-    latency: Optional[str] = None
-    update_frequency: Optional[str] = None
-    quality_metadata: dict[str, object] = Field(default_factory=dict)
-    uncertainty_metadata: dict[str, object] = Field(default_factory=dict)
-    confidence_available: Optional[bool] = None
-    licensing: Optional[str] = None
-    access_policy: dict[str, object] = Field(default_factory=dict)
-    access_limitations: tuple[str, ...] = ()
-    authentication_required: Optional[bool] = None
-    authentication_schemes: tuple[str, ...] = ()
-    asset_references_declared: bool = False
-    asset_reference_count: int = Field(default=0, ge=0)
-    supports_streaming: Optional[bool] = None
-    connector_registered: bool = False
-    connector_available: Optional[bool] = None
-    connector_health: Literal["unknown", "healthy", "degraded", "unhealthy"] = "unknown"
-    connector_priority: int = 0
-    supported_regions: tuple[str, ...] = ()
-    supported_spatial_types: tuple[str, ...] = ()
-    supports_temporal_query: bool = False
-    supported_query_fields: tuple[str, ...] = ()
-    fallback_for: tuple[str, ...] = ()
-    quota_metadata: dict[str, object] = Field(default_factory=dict)
-    documentation_url: Optional[str] = None
-    field_provenance: dict[str, str] = Field(default_factory=dict)
-    source_metadata: dict[str, object] = Field(default_factory=dict, exclude=True)
-    provider_metadata: dict[str, object] = Field(default_factory=dict, exclude=True)
-
-
-class EarthModalityCapability(Contract):
-    modality_id: str = Field(min_length=1)
-    label: Optional[str] = None
-    description: Optional[str] = None
-    status: Literal["registered", "unavailable", "declared", "not_registered"]
-    implementation_ids: tuple[str, ...] = ()
-    dataset_ids: tuple[str, ...] = ()
-    variables: tuple[str, ...] = ()
-
-
-class EarthCapabilityMatrix(Contract):
-    """A point-in-time metadata view; registration is not an availability promise."""
-
-    revision: str = Field(min_length=1)
-    entries: tuple[EarthCapabilityEntry, ...] = ()
-    modalities: tuple[EarthModalityCapability, ...] = ()
-
-    @property
-    def datasets(self) -> tuple[DatasetMetadata, ...]:
-        """Dataset records represented by this snapshot, for legacy selectors."""
-        values = {
-            (
-                entry.dataset_metadata.connector_id,
-                entry.dataset_metadata.dataset_id,
-                entry.dataset_metadata.version,
-            ): entry.dataset_metadata
-            for entry in self.entries
-            if entry.dataset_metadata is not None
-        }
-        return tuple(
-            values[key]
-            for key in sorted(
-                values, key=lambda item: (item[0], item[1], item[2] or "")
-            )
-        )
 
 
 def build_earth_capability_matrix(

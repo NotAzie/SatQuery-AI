@@ -4,9 +4,13 @@ from datetime import datetime, timezone
 import httpx
 import pytest
 from connectors.noaa_coops import NoaaCoopsConnector
+from fastapi.testclient import TestClient
+from satquery.api import create_app, set_engine
+from satquery.config import get_settings
 from satquery.errors import ValidationError
+from satquery.orchestrator import SatQueryEngine
 from satquery.platform.connectors import ConnectorManager
-from satquery.platform.contracts import EarthQuery
+from satquery.platform.contracts import EarthQuery, EarthStationSearchResult
 from satquery.platform.earth_objects import (
     EarthObjectExtractionPipeline,
     EarthObjectMaterializer,
@@ -165,3 +169,78 @@ def test_noaa_coops_requires_explicit_station_and_bounded_aware_interval():
                 filters={"station_id": "9414290"},
             )
         )
+
+
+def test_noaa_station_search_returns_bbox_candidates_via_platform_api(monkeypatch):
+    requests = []
+
+    async def handler(request: httpx.Request):
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "count": 3,
+                "stations": [
+                    {
+                        "id": "9414290",
+                        "name": "San Francisco",
+                        "lat": "37.8063",
+                        "lng": "-122.4659",
+                        "state": "California",
+                    },
+                    {
+                        "id": "9414291",
+                        "name": "Outside",
+                        "lat": "34.0",
+                        "lng": "-119.0",
+                        "state": "California",
+                    },
+                    {
+                        "id": "1611400",
+                        "name": "Nawiliwili",
+                        "lat": "21.9544",
+                        "lng": "-159.3561",
+                        "state": "Hawaii",
+                    },
+                ],
+            },
+            request=request,
+        )
+
+    monkeypatch.delenv("SATQUERY_CONNECTORS_CONFIG", raising=False)
+    engine = SatQueryEngine(get_settings())
+    engine.platform_runtime.register_connector(
+        NoaaCoopsConnector(transport=httpx.MockTransport(handler))
+    )
+    set_engine(engine)
+    try:
+        with TestClient(create_app(get_settings())) as client:
+            response = client.post(
+                "/api/v1/platform/connectors/noaa-coops-water-level/stations/search",
+                json={"bbox": [-123, 36, -121, 38]},
+            )
+            invalid = client.post(
+                "/api/v1/platform/connectors/noaa-coops-water-level/stations/search",
+                json={"bbox": [-121, 38, -123, 36]},
+            )
+            unsupported = client.post(
+                "/api/v1/platform/connectors/not-registered/stations/search",
+                json={"bbox": [-123, 36, -121, 38]},
+            )
+        assert response.status_code == 200
+        result = EarthStationSearchResult.model_validate(response.json())
+        assert result.source_record_count == 3
+        assert len(result.stations) == 1
+        assert result.stations[0].station_id == "9414290"
+        assert result.stations[0].longitude == -122.4659
+        assert result.stations[0].latitude == 37.8063
+        assert result.stations[0].source_metadata["state"] == "California"
+        assert "nearest-station choice" in result.limitations[0]
+        assert len(requests) == 1
+        assert requests[0].url.path.endswith("/stations.json")
+        assert requests[0].url.params["type"] == "waterlevels"
+        assert invalid.status_code == 422
+        assert unsupported.status_code == 422
+    finally:
+        set_engine(None)
+        asyncio.run(engine.close())

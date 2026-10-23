@@ -23,11 +23,16 @@ jobs:
           python -m pytest -c pyproject.toml -m "not real_acceptance"
           ../tests/test_platform_*.py
           ../tests/test_perception*.py
+          ../tests/test_capability_matrix.py
           ../tests/test_client.py
+          ../tests/test_cli_connectors.py
           ../tests/test_cli_investigate.py
           ../tests/test_cli_memory.py
           ../tests/test_earth_objects.py
+          ../tests/test_nasa_firms.py
+          ../tests/test_noaa_coops.py
           ../tests/test_monitoring.py
+          ../tests/test_persistent_platform_history.py
           ../tests/test_scientific_memory_and_readiness.py
           ../tests/test_stac_connector.py
           ../tests/test_open_meteo.py

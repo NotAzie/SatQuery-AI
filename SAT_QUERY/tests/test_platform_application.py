@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
 import pytest
 import satquery.__main__ as cli
+from connectors.stac import StacCatalogConnector
 from fastapi.testclient import TestClient
 from satquery.api import create_app, set_engine
 from satquery.config import get_settings
@@ -505,7 +508,7 @@ def test_object_candidates_flow_through_investigation_memory_and_report():
             )
             assert reproducibility.status_code == 200
             bundle = reproducibility.json()
-            assert bundle["schema_version"] == "1.3.0"
+            assert bundle["schema_version"] == "1.4.0"
             assert [item["revision"] for item in bundle["earth_objects"]] == [1, 2]
             assert bundle["earth_object_graph"]["objects"]
             assert len(bundle["earth_object_extractions"]) == 1
@@ -736,6 +739,7 @@ def test_platform_api_exposes_modalities_and_perception_planning():
             capability_matrix = client.get("/api/v1/platform/earth/capabilities")
             assert capability_matrix.status_code == 200
             assert capability_matrix.json()["revision"]
+            assert capability_matrix.json()["snapshot_sha256"]
             assert "ecological" in {
                 item["modality_id"] for item in capability_matrix.json()["modalities"]
             }
@@ -751,6 +755,9 @@ def test_platform_api_exposes_modalities_and_perception_planning():
             assert (
                 planned.json()["capability_matrix_revision"]
                 == capability_matrix.json()["revision"]
+            )
+            assert planned.json()["capability_snapshot"]["snapshot_sha256"] == (
+                capability_matrix.json()["snapshot_sha256"]
             )
             scientific_methods = client.get("/api/v1/platform/scientific-methods")
             assert scientific_methods.status_code == 200
@@ -829,8 +836,14 @@ def test_platform_earth_memory_api_accepts_spatiotemporal_filters():
             assert "/earth-objects/geojson" in workspace.text
             assert 'id="datasetSearch"' in workspace.text
             assert 'id="connectorExplorer"' in workspace.text
+            assert 'id="stationSearchBbox"' in workspace.text
+            assert 'id="searchStations"' in workspace.text
             assert "searchRegisteredDatasets" in workspace.text
+            assert "manifest.metadata || manifest" in workspace.text
+            assert "searchNoaaStationCandidates" in workspace.text
             assert "/api/v1/platform/connectors/health" in workspace.text
+            assert "/events/stream" in workspace.text
+            assert "new EventSource" in workspace.text
             assert "/api/v1/platform/datasets/search" in workspace.text
             assert "health-check" in workspace.text
             assert "runConnectorOperation('discover')" in workspace.text
@@ -1177,7 +1190,7 @@ def test_monitoring_schedule_runs_and_records_a_linked_investigation():
             )
             assert report.status_code == 200
             report_data = report.json()
-            assert report_data["schema_version"] == "1.4"
+            assert report_data["schema_version"] == "1.5"
             assert report_data["monitoring_context"]["runs"][0]["run_id"] == runs[0]["run_id"]
             assert report_data["monitoring_context"]["schedule_definitions"][0]["revision"] == 1
             assert "Continuous observation context" in report_data["markdown"]
@@ -1203,7 +1216,8 @@ def test_monitoring_schedule_runs_and_records_a_linked_investigation():
             )
             assert reproducibility.status_code == 200
             reproducibility_bundle = reproducibility.json()
-            assert reproducibility_bundle["schema_version"] == "1.3.0"
+            assert reproducibility_bundle["schema_version"] == "1.4.0"
+            assert reproducibility_bundle["capability_snapshots"]
             assert reproducibility_bundle["monitoring_runs"][0]["run_id"] == runs[0]["run_id"]
             assert reproducibility_bundle["monitoring_schedules"][0]["revision"] == 1
             assert {event["event_type"] for event in reproducibility_bundle["monitoring_events"]} >= {
@@ -1316,7 +1330,7 @@ def test_monitoring_schedule_runs_and_records_a_linked_investigation():
             )
             assert reproducibility_after_comparison.status_code == 200
             comparison_bundle = reproducibility_after_comparison.json()
-            assert comparison_bundle["schema_version"] == "1.3.0"
+            assert comparison_bundle["schema_version"] == "1.4.0"
             assert len(comparison_bundle["monitoring_comparisons"]) == 1
             assert comparison_bundle["monitoring_comparisons"][0]["artifact_type"] == "monitoring_comparison"
             assert len(comparison_bundle["investigation_comparisons"]) == 1
@@ -1486,6 +1500,34 @@ def test_failed_investigation_resumes_through_api_and_exposes_persisted_events()
                 for event in journal["events"]
             )
             assert journal["next_sequence"] == journal["events"][-1]["sequence"]
+
+            streamed = client.get(
+                f"/api/v1/platform/investigations/{investigation.investigation_id}/events/stream"
+            )
+            assert streamed.status_code == 200
+            assert streamed.headers["content-type"].startswith("text/event-stream")
+            streamed_events = [
+                json.loads(line.removeprefix("data: "))
+                for line in streamed.text.splitlines()
+                if line.startswith("data: ")
+            ]
+            assert streamed_events[-1]["event_type"] == "execution.finished"
+            assert streamed_events[-1]["sequence"] == journal["next_sequence"]
+
+            resumed_stream = client.get(
+                f"/api/v1/platform/investigations/{investigation.investigation_id}/events/stream",
+                headers={"Last-Event-ID": str(journal["next_sequence"] - 1)},
+            )
+            assert [
+                json.loads(line.removeprefix("data: "))["sequence"]
+                for line in resumed_stream.text.splitlines()
+                if line.startswith("data: ")
+            ] == [journal["next_sequence"]]
+            invalid_cursor = client.get(
+                f"/api/v1/platform/investigations/{investigation.investigation_id}/events/stream",
+                params={"after_sequence": journal["next_sequence"] + 1},
+            )
+            assert invalid_cursor.status_code == 422
     finally:
         set_engine(None)
 
@@ -1594,6 +1636,9 @@ def test_scientific_planner_creates_reviewable_plan_then_executable_investigatio
             )
             assert body["design"]["status"] == "ready_for_acquisition"
             assert len(body["investigation"]["tasks"]) == 1
+            assert body["plan"]["capability_snapshot"]["revision"] == (
+                body["plan"]["capability_matrix_revision"]
+            )
 
             investigation_id = body["investigation"]["investigation_id"]
             executed = client.post(
@@ -1735,6 +1780,35 @@ def test_scientific_planner_creates_reviewable_plan_then_executable_investigatio
             )
             assert standalone.status_code == 200
             assert standalone.json()["reasoning_id"] == reasoning["reasoning_id"]
+            report = client.get(
+                f"/api/v1/platform/investigations/{investigation_id}/report"
+            )
+            assert report.status_code == 200
+            assert report.json()["capability_snapshots"]
+            assert "Capability snapshot" in report.json()["markdown"]
+            reproducibility = client.get(
+                f"/api/v1/platform/investigations/{investigation_id}/reproducibility"
+            )
+            assert reproducibility.status_code == 200
+            bundle = reproducibility.json()
+            assert bundle["capability_snapshots"]
+            assert "capability_snapshots" in bundle["artifact_hashes"]
+            assert bundle["schema_version"] == "1.4.0"
+            snapshots_in_memory = client.post(
+                "/api/v1/platform/earth-memory/search",
+                json={
+                    "artifact_types": ["capability_snapshot"],
+                    "investigation_id": investigation_id,
+                },
+            )
+            assert snapshots_in_memory.status_code == 200
+            assert snapshots_in_memory.json()["total"] == 1
+            assert (
+                snapshots_in_memory.json()["artifacts"][0]["payload"][
+                    "snapshot_sha256"
+                ]
+                == bundle["capability_snapshots"][-1]["snapshot_sha256"]
+            )
     finally:
         set_engine(None)
 
@@ -1821,6 +1895,48 @@ def test_connector_health_api_separates_local_status_from_explicit_probes():
             )
             assert probed.status_code == 200
             assert probed.json()["connector_id"] == "fixture-atmosphere"
+    finally:
+        set_engine(None)
+
+
+def test_stac_active_health_probe_opens_connector_before_request():
+    requests = []
+
+    def handler(request: httpx.Request):
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json={"type": "Catalog", "links": [{"rel": "search", "href": "search"}]},
+            request=request,
+        )
+
+    engine = SatQueryEngine(get_settings())
+    connector = StacCatalogConnector(
+        configuration={
+            "catalog_url": "https://catalog.example/stac",
+            "collection_ids": ["sentinel-2-l2a"],
+        },
+        transport=httpx.MockTransport(handler),
+    )
+    engine.platform_runtime.register_connector(connector)
+    set_engine(engine)
+    try:
+        with TestClient(create_app(get_settings())) as client:
+            response = client.post(
+                "/api/v1/platform/connectors/stac-catalog/health-check"
+            )
+            local = client.get("/api/v1/platform/connectors/health")
+            unknown = client.post(
+                "/api/v1/platform/connectors/not-registered/health-check"
+            )
+        assert response.status_code == 200
+        assert response.json()["health"] == "healthy"
+        assert response.json()["health_probe_count"] == 1
+        assert local.status_code == 200
+        assert local.json()[0]["last_health_probe_at"] is not None
+        assert unknown.status_code == 422
+        assert len(requests) == 1
+        assert requests[0].url.path == "/stac/"
     finally:
         set_engine(None)
 
@@ -1941,3 +2057,70 @@ def test_connector_manifest_registers_adapters_without_opening_network_clients()
         EarthQuery(point=(80.15, 12.84), requested_variables=("air_temperature_2m",))
     ).selected_modalities == ("atmospheric",)
     asyncio.run(runtime.close())
+
+
+def test_manifest_connectors_load_and_are_exposed_through_api_without_network(
+    tmp_path, monkeypatch
+):
+    manifest = tmp_path / "catalogs.json"
+    manifest.write_text(
+        """
+        {
+          "connectors": [
+            {
+              "implementation": "planetary_computer",
+              "configuration": {"collection_ids": ["landsat-c2-l2"]}
+            },
+            {
+              "implementation": "copernicus_data_space",
+              "configuration": {"collection_ids": ["sentinel-2-l2a"]}
+            },
+            {
+              "implementation": "usgs_landsat",
+              "configuration": {"collection_ids": ["landsat-c2-l2"]}
+            },
+            {
+              "implementation": "image_fetcher",
+              "configuration": {}
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SATQUERY_CONNECTORS_CONFIG", raising=False)
+    engine = SatQueryEngine(get_settings())
+    try:
+        registered = load_configured_connectors(
+            engine.platform_runtime, config_path=manifest
+        )
+        assert registered == (
+            "copernicus-data-space",
+            "image-fetcher",
+            "microsoft-planetary-computer",
+            "usgs-landsat",
+        )
+        set_engine(engine)
+        with TestClient(create_app(get_settings())) as client:
+            response = client.get("/api/v1/platform/connectors")
+        assert response.status_code == 200
+        connectors = {
+            item["metadata"]["connector_id"]: item for item in response.json()
+        }
+        assert connectors["copernicus-data-space"]["metadata"]["provider_metadata"][
+            "provider"
+        ] == (
+            "Copernicus Data Space Ecosystem"
+        )
+        assert connectors["microsoft-planetary-computer"]["metadata"]["datasets"][0][
+            "dataset_id"
+        ] == "landsat-c2-l2"
+        assert connectors["usgs-landsat"]["metadata"]["provider_metadata"]["provider"] == (
+            "USGS LandsatLook"
+        )
+        assert connectors["image-fetcher"]["metadata"]["datasets"][0][
+            "dataset_id"
+        ] == "esri-world-imagery"
+    finally:
+        set_engine(None)
+        asyncio.run(engine.close())
