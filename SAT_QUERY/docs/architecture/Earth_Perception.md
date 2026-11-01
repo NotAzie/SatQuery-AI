@@ -349,10 +349,13 @@ HTTP timeouts, rate limits, service errors, and invalid source payloads remain
 explicit connector failures; the existing connector policy controls retries,
 request pacing, and timeout behavior.
 
-The Open-Meteo HTTP response is currently downloaded and decoded as one JSON
-document before its timestamps are mapped to observations. Its inherited
-observation stream yields normalized records after that acquisition; it is not
-an HTTP-level streaming parser or a multi-point batch client.
+Open-Meteo accepts a canonical GeoJSON `MultiPoint` query and batches its
+coordinates into one provider request. The provider's per-location response
+list is matched to the requested coordinate order; each normalized observation
+retains both the requested point and provider-returned grid point. Other
+connectors are not selected for a `MultiPoint` query unless they declare that
+spatial type. Each response is still downloaded and decoded before timestamps
+are mapped to observations; this is not an HTTP-level streaming parser.
 
 Weather and historical weather values are model-derived provider outputs, not
 direct instrument readings. Climate output is a downscaled climate projection
@@ -572,8 +575,8 @@ catalog crawl. The ontology currently supplies a finite variable vocabulary,
 not a universal Earth science ontology.
 
 The local cache supports connector-aware invalidation, but there is no
-scheduled refresh. Open-Meteo requests are single-point and do not batch
-multiple locations; large temporal requests are materialized in memory.
+scheduled refresh. Open-Meteo batches multiple discrete points in one request;
+large temporal responses are still materialized in memory.
 Connector request concurrency is managed by the existing perception engine,
 but the Open-Meteo adapter does not split one query into scheduled subrequests.
 Active health probing is implemented for STAC landing pages only; other

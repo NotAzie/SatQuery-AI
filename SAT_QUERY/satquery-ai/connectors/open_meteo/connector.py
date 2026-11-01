@@ -96,6 +96,22 @@ _ENDPOINTS: dict[OpenMeteoEndpoint, dict[str, Any]] = {
 }
 
 
+def _query_points(query: EarthQuery) -> tuple[tuple[float, float], ...]:
+    if query.point is not None:
+        return (query.point,)
+    if query.geometry is None:
+        return ()
+    geometry_type = query.geometry.get("type")
+    coordinates = query.geometry.get("coordinates")
+    if not isinstance(coordinates, (list, tuple)):
+        return ()
+    if geometry_type == "Point":
+        return ((coordinates[0], coordinates[1]),)
+    if geometry_type == "MultiPoint":
+        return tuple((point[0], point[1]) for point in coordinates)
+    return ()
+
+
 class OpenMeteoConnector(PerceptionConnector):
     """Configurable endpoint-specific adapter for Open-Meteo model products."""
 
@@ -152,7 +168,7 @@ class OpenMeteoConnector(PerceptionConnector):
             health="unknown",
             available=True,
             supported_regions=(),
-            supported_spatial_types=("point",),
+            supported_spatial_types=("point", "multipoint"),
             supports_temporal_query=True,
             supported_query_fields=("requested_dataset_ids",),
             supported_variables=tuple(self._spec["variables"]),
@@ -274,12 +290,39 @@ class OpenMeteoConnector(PerceptionConnector):
     async def observe(self, query: EarthQuery) -> ObservationSearchResult:
         request, requested = self._build_request(query)
         payload = await self.fetch(request)
-        if not isinstance(payload, Mapping):
+        requested_points = _query_points(query)
+        if len(requested_points) == 1 and isinstance(payload, Mapping):
+            responses = (payload,)
+        elif isinstance(payload, list) and len(payload) == len(requested_points):
+            responses = tuple(payload)
+        else:
             raise ConnectorError(
-                "Open-Meteo response must be a JSON object.",
-                context={"connector": self.metadata.connector_id},
+                "Open-Meteo response locations do not match the requested points.",
+                context={
+                    "connector": self.metadata.connector_id,
+                    "requested_location_count": len(requested_points),
+                    "response_location_count": (
+                        len(payload) if isinstance(payload, list) else None
+                    ),
+                },
             )
-        rows = self._normalize_response(payload, query, request, requested)
+        rows = []
+        for response, requested_point in zip(responses, requested_points):
+            if not isinstance(response, Mapping):
+                raise ConnectorError(
+                    "Open-Meteo location response must be a JSON object.",
+                    context={"connector": self.metadata.connector_id},
+                )
+            rows.extend(
+                self._normalize_response(
+                    response,
+                    query,
+                    request,
+                    requested,
+                    requested_point=requested_point,
+                    include_requested_point=len(requested_points) > 1,
+                )
+            )
         return ObservationSearchResult(
             observations=tuple(rows),
             matched=len(rows),
@@ -292,8 +335,16 @@ class OpenMeteoConnector(PerceptionConnector):
                 "provider": "Open-Meteo",
                 "endpoint": self.endpoint.value,
                 "request": request,
-                "response_metadata": self._response_metadata(payload),
-                "provider_response": dict(payload),
+                "response_metadata": (
+                    self._response_metadata(responses[0])
+                    if len(responses) == 1
+                    else [self._response_metadata(response) for response in responses]
+                ),
+                "provider_response": (
+                    dict(responses[0])
+                    if len(responses) == 1
+                    else [dict(response) for response in responses]
+                ),
             },
         )
 
@@ -307,9 +358,15 @@ class OpenMeteoConnector(PerceptionConnector):
             raise ValidationError(
                 "Requested dataset is not implemented by this Open-Meteo endpoint."
             )
-        if query.point is None:
+        points = _query_points(query)
+        if not points:
             raise ValidationError(
-                "Open-Meteo point endpoints require a geographic point query.",
+                "Open-Meteo point endpoints require a geographic point or multipoint query.",
+                context={"connector": self.metadata.connector_id},
+            )
+        if len(points) != len(set(points)):
+            raise ValidationError(
+                "Open-Meteo MultiPoint queries must not repeat coordinates.",
                 context={"connector": self.metadata.connector_id},
             )
         if query.crs.casefold() not in {
@@ -353,10 +410,13 @@ class OpenMeteoConnector(PerceptionConnector):
                 },
             )
         request: dict[str, Any] = {
-            "latitude": query.point[1],
-            "longitude": query.point[0],
+            "latitude": ",".join(str(point[1]) for point in points),
+            "longitude": ",".join(str(point[0]) for point in points),
             "timezone": "GMT",
         }
+        if len(points) == 1:
+            request["latitude"] = points[0][1]
+            request["longitude"] = points[0][0]
         if self.endpoint in {
             OpenMeteoEndpoint.WEATHER,
             OpenMeteoEndpoint.HISTORICAL_WEATHER,
@@ -381,6 +441,9 @@ class OpenMeteoConnector(PerceptionConnector):
         query: EarthQuery,
         request: Mapping[str, Any],
         requested: tuple[str, ...],
+        *,
+        requested_point: tuple[float, float],
+        include_requested_point: bool,
     ) -> list[Observation]:
         data_key = self._spec["key"]
         time_values = payload.get(data_key, {}).get("time")
@@ -403,8 +466,8 @@ class OpenMeteoConnector(PerceptionConnector):
                     context={"connector": self.metadata.connector_id},
                 )
             row_values[canonical] = values
-        latitude = payload.get("latitude", query.point[1] if query.point else None)
-        longitude = payload.get("longitude", query.point[0] if query.point else None)
+        latitude = payload.get("latitude", requested_point[1])
+        longitude = payload.get("longitude", requested_point[0])
         if not isinstance(latitude, (int, float)) or not isinstance(
             longitude, (int, float)
         ):
@@ -451,6 +514,11 @@ class OpenMeteoConnector(PerceptionConnector):
                 "response_metadata": self._response_metadata(payload),
                 "request": dict(request),
             }
+            source_id = f"{self._spec['dataset']}:{latitude}:{longitude}:{raw_time}"
+            if include_requested_point:
+                source_id += (
+                    f":request:{requested_point[0]}:{requested_point[1]}"
+                )
             observation_type = (
                 "weather_forecast"
                 if self.endpoint == OpenMeteoEndpoint.WEATHER
@@ -459,9 +527,7 @@ class OpenMeteoConnector(PerceptionConnector):
             quality = {"missing_values": missing} if missing else {}
             rows.append(
                 Observation(
-                    source_id=(
-                        f"{self._spec['dataset']}:{latitude}:{longitude}:{raw_time}"
-                    ),
+                    source_id=source_id,
                     dataset=DatasetReference(
                         connector_id=self.metadata.connector_id,
                         dataset_id=self._spec["dataset"],
@@ -487,7 +553,7 @@ class OpenMeteoConnector(PerceptionConnector):
                         "timezone": "GMT",
                     },
                     properties={
-                        "requested_point": list(query.point) if query.point else None,
+                        "requested_point": list(requested_point),
                         "provider_coordinates": [float(longitude), float(latitude)],
                     },
                     source_document=observations_source,

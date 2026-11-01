@@ -78,7 +78,25 @@ def _validate_geojson_geometry(geometry: Dict[str, Any], crs: Optional[str]) -> 
             for item in geometries
         )
     elif geometry_type == "Point":
-        valid = position(coordinates)
+        if not isinstance(coordinates, (list, tuple)) or len(coordinates) < 2 or any(
+            not isinstance(item, (int, float))
+            or isinstance(item, bool)
+            or not math.isfinite(item)
+            for item in coordinates
+        ):
+            raise ValueError("GeoJSON Point requires finite numeric coordinates")
+        if (
+            crs is not None
+            and _is_geographic_crs(crs)
+            and (
+                not -180 <= coordinates[0] <= 180
+                or not -90 <= coordinates[1] <= 90
+            )
+        ):
+            raise ValueError(
+                "GeoJSON Point must use longitude/latitude within Earth bounds"
+            )
+        valid = True
     elif geometry_type == "MultiPoint":
         valid = isinstance(coordinates, (list, tuple)) and all(
             position(item) for item in coordinates

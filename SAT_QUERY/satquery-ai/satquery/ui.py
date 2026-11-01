@@ -218,7 +218,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
           <div class="field">
             <label for="earthQuery">Optional structured EarthQuery override</label>
             <textarea id="earthQuery" placeholder='{"point":[80.15,12.84],"requested_variables":["air_temperature_2m"]}'></textarea>
-            <small>For explicit categorical raster masks, include <code>raster_component_extraction</code> rules in this EarthQuery. Class meanings and connectivity must be supplied; SatQuery does not classify imagery.</small>
+            <small>Open-Meteo supports batched point observations with a GeoJSON <code>MultiPoint</code> geometry. For explicit categorical raster masks, include <code>raster_component_extraction</code> rules in this EarthQuery. Class meanings and connectivity must be supplied; SatQuery does not classify imagery.</small>
           </div>
           <div class="row">
             <button class="run" id="startInvestigation" type="button">Create investigation</button>

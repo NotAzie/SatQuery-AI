@@ -10,9 +10,9 @@ from satquery.platform import (
     ConnectorPolicy,
     EarthQuery,
     PerceptionEngine,
+    SemanticNormalizer,
     SpatialFeature,
     SpatialIndex,
-    SemanticNormalizer,
     TemporalExtent,
     VariableSemantic,
     as_utc,
@@ -261,6 +261,173 @@ def test_open_meteo_is_selected_by_capability_and_returns_canonical_observations
     assert result.observations[0].provenance["satquery"]["earth_perception"][
         "connector_id"
     ] == "open-meteo.weather"
+
+
+def test_open_meteo_batches_multipoint_queries_and_preserves_location_lineage():
+    requests = []
+
+    def location(latitude, longitude, temperature):
+        return {
+            "latitude": latitude,
+            "longitude": longitude,
+            "elevation": 10,
+            "timezone": "GMT",
+            "hourly_units": {"temperature_2m": "°C"},
+            "hourly": {
+                "time": ["2024-01-01T00:00"],
+                "temperature_2m": [temperature],
+            },
+        }
+
+    async def handler(request):
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json=[
+                location(40.7, -73.8, 3.5),
+                location(34.0, -118.2, 12.0),
+            ],
+        )
+
+    async def run():
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        connector = OpenMeteoConnector(OpenMeteoEndpoint.WEATHER, client=client)
+        await connector.start()
+        try:
+            return await connector.observe(
+                EarthQuery(
+                    geometry={
+                        "type": "MultiPoint",
+                        "coordinates": [[-73.8, 40.7], [-118.2, 34.0]],
+                    },
+                    requested_variables=("air_temperature_2m",),
+                )
+            )
+        finally:
+            await connector.stop()
+            await client.aclose()
+
+    result = asyncio.run(run())
+    params = requests[0].url.params
+    observations = result.observations
+
+    assert params["latitude"] == "40.7,34.0"
+    assert params["longitude"] == "-73.8,-118.2"
+    assert len(observations) == 2
+    assert [item.properties["requested_point"] for item in observations] == [
+        [-73.8, 40.7],
+        [-118.2, 34.0],
+    ]
+    assert [item.geometry["coordinates"] for item in observations] == [
+        [-73.8, 40.7],
+        [-118.2, 34.0],
+    ]
+    assert observations[0].source_id != observations[1].source_id
+    assert result.source_document["provider_response"][1]["latitude"] == 34.0
+    assert "multipoint" in OpenMeteoConnector(
+        OpenMeteoEndpoint.WEATHER
+    ).metadata.supported_spatial_types
+
+
+def test_open_meteo_rejects_a_multipoint_response_with_missing_locations():
+    async def handler(_request):
+        return httpx.Response(
+            200,
+            json={
+                "latitude": 40.7,
+                "longitude": -73.8,
+                "hourly_units": {"temperature_2m": "°C"},
+                "hourly": {
+                    "time": ["2024-01-01T00:00"],
+                    "temperature_2m": [3.5],
+                },
+            },
+        )
+
+    async def run():
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        connector = OpenMeteoConnector(OpenMeteoEndpoint.WEATHER, client=client)
+        await connector.start()
+        try:
+            return await connector.observe(
+                EarthQuery(
+                    geometry={
+                        "type": "MultiPoint",
+                        "coordinates": [[-73.8, 40.7], [-118.2, 34.0]],
+                    }
+                )
+            )
+        finally:
+            await connector.stop()
+            await client.aclose()
+
+    with pytest.raises(ConnectorError, match="do not match the requested points"):
+        asyncio.run(run())
+
+
+def test_open_meteo_rejects_repeated_multipoint_coordinates():
+    connector = OpenMeteoConnector(OpenMeteoEndpoint.WEATHER)
+    with pytest.raises(ValidationError, match="must not repeat coordinates"):
+        connector._build_request(
+            EarthQuery(
+                geometry={
+                    "type": "MultiPoint",
+                    "coordinates": [[-73.8, 40.7], [-73.8, 40.7]],
+                }
+            )
+        )
+
+
+def test_perception_selects_open_meteo_for_a_multipoint_query():
+    async def handler(_request):
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "latitude": 40.7,
+                    "longitude": -73.8,
+                    "hourly_units": {"temperature_2m": "°C"},
+                    "hourly": {
+                        "time": ["2024-01-01T00:00"],
+                        "temperature_2m": [3.5],
+                    },
+                },
+                {
+                    "latitude": 34.0,
+                    "longitude": -118.2,
+                    "hourly_units": {"temperature_2m": "°C"},
+                    "hourly": {
+                        "time": ["2024-01-01T00:00"],
+                        "temperature_2m": [12.0],
+                    },
+                },
+            ],
+        )
+
+    async def run():
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        connector = OpenMeteoConnector(OpenMeteoEndpoint.WEATHER, client=client)
+        manager = ConnectorManager()
+        manager.register(connector)
+        try:
+            return await PerceptionEngine(manager).observe(
+                EarthQuery(
+                    geometry={
+                        "type": "MultiPoint",
+                        "coordinates": [[-73.8, 40.7], [-118.2, 34.0]],
+                    },
+                    required_capabilities=("weather",),
+                    requested_variables=("air_temperature_2m",),
+                )
+            )
+        finally:
+            await manager.stop_all()
+            await client.aclose()
+
+    result = asyncio.run(run())
+    assert result.connector_ids == ("open-meteo.weather",)
+    assert result.status == "complete"
+    assert len(result.observations) == 2
 
 
 def test_open_meteo_does_not_hide_non_recoverable_http_failures():

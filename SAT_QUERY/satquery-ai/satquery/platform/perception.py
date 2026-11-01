@@ -1496,7 +1496,12 @@ def _spatial_query_type(query: EarthQuery) -> Optional[str]:
     if query.point is not None:
         return "point"
     if query.geometry is not None:
-        return "point" if query.geometry.get("type") == "Point" else "geometry"
+        geometry_type = query.geometry.get("type")
+        if geometry_type == "Point":
+            return "point"
+        if geometry_type == "MultiPoint":
+            return "multipoint"
+        return "geometry"
     return None
 
 

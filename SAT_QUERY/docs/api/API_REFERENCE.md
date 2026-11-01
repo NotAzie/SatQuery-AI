@@ -387,6 +387,24 @@ when the explicit `POST .../health-check` route is called.
 }
 ```
 
+Open-Meteo also accepts discrete locations as GeoJSON `MultiPoint` geometry.
+This is a single batched request; each returned observation retains its
+requested location and the provider-returned grid coordinates. Other
+connectors are selected only if their capability declaration includes
+`multipoint`. The same query is accepted by the API, grouped Python SDK,
+CLI JSON-query commands, and the workspace's structured EarthQuery field.
+
+```json
+{
+  "geometry": {
+    "type": "MultiPoint",
+    "coordinates": [[80.15, 12.84], [77.21, 28.61]]
+  },
+  "requested_variables": ["air_temperature_2m"],
+  "requested_dataset_ids": ["weather-forecast"]
+}
+```
+
 For example, submit it to the planning endpoint:
 
 ```powershell

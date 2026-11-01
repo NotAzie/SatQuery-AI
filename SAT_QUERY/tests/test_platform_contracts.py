@@ -69,7 +69,10 @@ def test_contract_nested_metadata_is_immutable_and_remains_json_serializable():
     ],
 )
 def test_earth_query_rejects_malformed_geojson_geometry(geometry):
-    with pytest.raises(PydanticValidationError, match="structurally valid GeoJSON"):
+    with pytest.raises(
+        PydanticValidationError,
+        match="structurally valid GeoJSON|finite numeric",
+    ):
         EarthQuery(geometry=geometry)
 
 
@@ -79,7 +82,7 @@ def test_earth_query_applies_geographic_bounds_only_for_declared_geographic_crs(
         crs="EPSG:32631",
     )
 
-    with pytest.raises(PydanticValidationError, match="structurally valid GeoJSON"):
+    with pytest.raises(PydanticValidationError, match="longitude/latitude"):
         EarthQuery(
             geometry={"type": "Point", "coordinates": [500_000, 4_500_000]},
             crs="OGC:CRS84",
