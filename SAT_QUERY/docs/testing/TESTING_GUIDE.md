@@ -11,7 +11,9 @@ python -m pip install -e ".[dev,geospatial]"
 python -m pytest -c pyproject.toml
 ```
 
-Raster tests additionally require `python -m pip install -e ".[raster]"`.
+Raster tests additionally require `python -m pip install -e ".[raster]"` and
+skip cleanly when Rasterio is unavailable. CI installs the raster extra so the
+raster integration tests run rather than skip.
 Hugging Face acceptance tests marked `real_acceptance` are excluded from the
 default suite; they require compatible Torch/Transformers, configured models,
 weights available locally or network access, and test image assets. Do not run
@@ -35,11 +37,12 @@ HTTP fixtures/mocks and assert source metadata, errors, units, and provenance.
 
 `.github/workflows/platform-tests.yml` runs the platform and perception
 regressions plus the Python client, CLI, Earth Object, and monitoring tests on
-Ubuntu with Python 3.12 and the development/geospatial extras. It is not a
-full-suite gate, live provider integration, real-model acceptance, deployment
-test, or scientific validation run. The workflow includes deterministic
-capability-matrix, NASA FIRMS, NOAA CO-OPS, and persistent-history tests; they
-use controlled inputs and do not require live provider access or credentials.
+Ubuntu with Python 3.12 and the development, geospatial, and raster extras. It
+is not a full-suite gate, live provider integration, real-model acceptance,
+deployment test, or scientific validation run. The workflow includes
+deterministic capability-matrix, NASA FIRMS, NOAA CO-OPS, and persistent-history
+tests; they use controlled inputs and do not require live provider access or
+credentials.
 The connector CLI tests are included to cover manifest-backed connector actions
 and explicitly requested NOAA station-candidate search.
 Run the complete local suite when practical and report its exact command and

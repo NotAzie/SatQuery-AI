@@ -16,7 +16,7 @@ jobs:
           cache-dependency-path: SAT_QUERY/satquery-ai/pyproject.toml
       - name: Install platform test dependencies
         working-directory: SAT_QUERY/satquery-ai
-        run: python -m pip install -e ".[dev,geospatial]"
+        run: python -m pip install -e ".[dev,geospatial,raster]"
       - name: Run deterministic platform and perception tests
         working-directory: SAT_QUERY/satquery-ai
         run: >-

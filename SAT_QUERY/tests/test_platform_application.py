@@ -573,7 +573,7 @@ def test_categorical_raster_components_materialize_through_investigation_api():
     import tempfile
 
     import numpy as np
-    import rasterio
+    rasterio = pytest.importorskip("rasterio")
     from rasterio.transform import from_origin
 
     with tempfile.NamedTemporaryFile(
