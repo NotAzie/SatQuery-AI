@@ -57,6 +57,30 @@ def test_earth_memory_cli_forwards_structured_filters(monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["total"] == 0
 
 
+def test_earth_memory_cli_loads_exact_geojson_filter(tmp_path, monkeypatch, capsys):
+    geometry = {"type": "Point", "coordinates": [12.5, 48.1]}
+    geometry_path = tmp_path / "search-geometry.json"
+    geometry_path.write_text(json.dumps(geometry), encoding="utf-8")
+    captured = {}
+
+    def request(method, path, *, payload=None, params=None):
+        captured.update(method=method, path=path, payload=payload, params=params)
+        return {"artifacts": [], "total": 0}
+
+    monkeypatch.setattr(cli, "_platform_api_request", request)
+    args = cli.build_parser().parse_args(
+        [
+            "memory", "search", "--geometry-file", str(geometry_path),
+            "--crs", "OGC:CRS84",
+        ]
+    )
+
+    assert cli.command_platform_earth_memory(args) == 0
+    assert captured["payload"]["spatial_geometry"] == geometry
+    assert captured["payload"]["spatial_crs"] == "OGC:CRS84"
+    assert json.loads(capsys.readouterr().out)["total"] == 0
+
+
 def test_earth_object_transition_cli_posts_explicit_revision(monkeypatch, capsys):
     captured = {}
     transition = {

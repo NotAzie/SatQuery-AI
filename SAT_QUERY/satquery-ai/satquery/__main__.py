@@ -490,6 +490,30 @@ def command_platform_investigation_cancel(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_platform_agent(args: argparse.Namespace) -> int:
+    client = _platform_client()
+    if args.agent_command == "create":
+        result = client.agents.create_session()
+        print(json.dumps(result, indent=2))
+    elif args.agent_command == "show":
+        result = client.agents.get_session(args.session_id)
+        print(json.dumps(result, indent=2))
+    elif args.agent_command == "turn":
+        for event in client.agents.stream_turn(
+            args.session_id,
+            message=args.message,
+            model_id=args.model_id,
+            execution_authorized=args.authorize_execution,
+        ):
+            print(json.dumps(event, separators=(",", ":"), ensure_ascii=False))
+    elif args.agent_command == "cancel":
+        result = client.agents.cancel_turn(args.session_id)
+        print(json.dumps(result, indent=2))
+    else:
+        raise ValueError(f"Unknown agent command {args.agent_command!r}")
+    return 0
+
+
 def command_platform_investigation_resume(args: argparse.Namespace) -> int:
     result = _platform_api_request(
         "POST", f"/api/v1/platform/investigations/{_api_segment(args.investigation_id)}/resume"
@@ -575,6 +599,27 @@ def command_platform_earth_memory(args: argparse.Namespace) -> int:
     }
     if args.bbox is not None:
         payload_body["spatial_bbox"] = args.bbox
+        payload_body["spatial_crs"] = args.crs
+    elif args.geometry_file is not None:
+        try:
+            spatial_geometry = json.loads(
+                Path(args.geometry_file).read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            raise QueryError(
+                f"Could not load Earth Memory search geometry: {exc}",
+                remediation=[
+                    "Provide a GeoJSON geometry object in the declared CRS."
+                ],
+            ) from exc
+        if not isinstance(spatial_geometry, dict):
+            raise QueryError(
+                "Earth Memory search geometry must be a GeoJSON geometry object.",
+                remediation=[
+                    "Provide a GeoJSON geometry object in the declared CRS."
+                ],
+            )
+        payload_body["spatial_geometry"] = spatial_geometry
         payload_body["spatial_crs"] = args.crs
     if args.start is not None or args.end is not None:
         payload_body["temporal_start"] = args.start
@@ -993,6 +1038,34 @@ def build_parser() -> argparse.ArgumentParser:
     monitor_ack.add_argument("notification_id")
     monitor_ack.set_defaults(func=command_platform_monitor)
 
+    agent_cmd = sub.add_parser(
+        "agent", help="Create and operate conversational SatQuery agent sessions."
+    )
+    agent_sub = agent_cmd.add_subparsers(dest="agent_command", required=True)
+    agent_sub.add_parser("create", help="Create a new agent conversation.").set_defaults(
+        func=command_platform_agent
+    )
+    agent_show = agent_sub.add_parser("show", help="Show a saved agent conversation.")
+    agent_show.add_argument("session_id")
+    agent_show.set_defaults(func=command_platform_agent)
+    agent_turn = agent_sub.add_parser(
+        "turn", help="Send a message and print streamed agent SSE events."
+    )
+    agent_turn.add_argument("session_id")
+    agent_turn.add_argument("--message", required=True)
+    agent_turn.add_argument("--model-id", required=True)
+    agent_turn.add_argument(
+        "--authorize-execution",
+        action="store_true",
+        help="Allow the model to request investigation execution for this turn.",
+    )
+    agent_turn.set_defaults(func=command_platform_agent)
+    agent_cancel = agent_sub.add_parser(
+        "cancel", help="Request cancellation of the active turn in a session."
+    )
+    agent_cancel.add_argument("session_id")
+    agent_cancel.set_defaults(func=command_platform_agent)
+
     investigation_cmd = sub.add_parser(
         "investigation", help="Inspect an investigation and executions."
     )
@@ -1098,7 +1171,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     memory_search.add_argument("--limit", type=int, default=100)
     memory_search.add_argument("--bbox", nargs=4, type=float, metavar=("MIN_X", "MIN_Y", "MAX_X", "MAX_Y"))
-    memory_search.add_argument("--crs", help="CRS identifier required with --bbox.")
+    memory_search.add_argument(
+        "--geometry-file",
+        help="Path to a GeoJSON geometry object for exact same-CRS intersection search.",
+    )
+    memory_search.add_argument(
+        "--crs", help="Explicit CRS identifier required with --bbox or --geometry-file."
+    )
     memory_search.add_argument("--start", help="Timezone-aware ISO-8601 interval start; requires --end.")
     memory_search.add_argument("--end", help="Timezone-aware ISO-8601 interval end; requires --start.")
     memory_search.set_defaults(func=command_platform_earth_memory)

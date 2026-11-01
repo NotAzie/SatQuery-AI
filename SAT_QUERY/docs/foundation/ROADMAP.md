@@ -49,7 +49,7 @@ None of these phases are isolated products.
 
 Together they become one continuously evolving Earth Intelligence Operating System.
 
-## Current implementation snapshot (2026-10-23)
+## Current implementation snapshot (2026-11-01)
 
 The phase descriptions below define long-term capability goals. This snapshot
 separates those goals from code that currently runs; detailed evidence and
@@ -57,13 +57,13 @@ limitations are in [implementation status](../IMPLEMENTATION_STATUS.md).
 
 | Phase | Current repository state |
 |---|---|
-| 0 — Core Foundation | Local typed contracts, registries, configuration, connector lifecycle, bounded DAG execution, diagnostics, tests, CI, and optional single-host SQLite stores exist. Distributed execution, sandboxing, production security/deployment, and cross-subsystem transactions do not. |
+| 0 — Core Foundation | Local typed contracts (including a 64-container-level nesting guard), registries, configuration, connector lifecycle, bounded DAG execution, diagnostics, tests, CI, and optional single-host SQLite stores exist. Distributed execution, sandboxing, production security/deployment, and cross-subsystem transactions do not. |
 | 1 — Earth Perception | Several configured real-source adapters, modality/capability selection, canonical observations, provenance, fusion, streaming, cache, and bounded raster operations exist. Plans retain integrity-checked snapshots of the safe public capability-selection metadata. Domain coverage, automatic asset processing, harmonization, reprojection, and uncertainty propagation remain limited. |
 | 2 — Earth Understanding | Explicit source/caller-declared candidates can produce canonical Earth Objects with lineage, revisions, relationships, and memory/report integration. General segmentation, object detection, unconstrained entity resolution, and validated lifecycle inference are absent. |
 | 3 — Investigation Engine | Deterministic planning/design, mission lifecycle, compiled execution DAG, local scheduler, cancellation, safe retry, checkpoint resume, reports, comparison, and monitoring-linked investigations exist. Plan and acquisition capability snapshots are retained in Earth Memory, reports, and reproducibility exports. Planning-language coverage, remote scheduling, and autonomous investigation adaptation remain bounded or absent. |
 | 4 — Earth Reasoning Engine | Hypotheses, evidence coverage, sufficiency/preflight, rules/operators, cited knowledge records, uncertainty inventory, and governance scaffolds exist. No bundled method is certified for general scientific conclusions; general probabilistic, causal, and calibrated inference is not active. |
-| 5 — Multi-Agent Intelligence | No multi-agent runtime, communication, delegation, agent policy, or collaboration UI is implemented. Existing task and plugin registries are not agents. |
-| 6 — Earth Memory | Deterministic artifact and lineage search with in-memory and optional SQLite stores, capability snapshot artifacts, spatial-envelope/time filters, and cursor paging exists. It is local, non-semantic, same-CRS, and does not learn or provide planet-scale distributed retrieval. |
+| 5 — Multi-Agent Intelligence | A model-neutral, single-agent conversation/tool interface delegates to the existing deterministic engine. No multi-agent runtime, inter-agent communication/delegation, collaboration UI, or independent agent execution is implemented. Existing task and plugin registries are not agents. |
+| 6 — Earth Memory | Deterministic artifact and lineage search with in-memory and optional SQLite stores, capability snapshot artifacts, same-CRS spatial-envelope and exact GeoJSON-intersection filters, and cursor paging exists. It is local, non-semantic, and does not learn or provide planet-scale distributed retrieval. |
 | 7 — Continuous Earth Observation | Mission-linked recurring queries, local scheduling/recovery, trigger policies, events, notifications, comparisons, and history integration exist. Operational triggers are not validated change detection; external notifications and distributed scheduling are absent. |
 | 8 — Earth Intelligence Platform | Local FastAPI/OpenAPI, CLI, browser workspace, and grouped synchronous Python SDK cover local platform workflows. The workspace includes an interactive locator view for supported Earth Object geometries and GeoJSON export is available through API, CLI, and SDK. A full GIS/map workspace, authentication, organizations, cloud deployment, and production operations remain absent. |
 | 9 — Earth Intelligence Ecosystem | Local extension/connector/method interfaces and registration exist. There is no public package ecosystem, marketplace, institutional governance network, or contribution/compatibility service. |
@@ -473,6 +473,15 @@ Every conclusion must be traceable to evidence.
 
 # Phase 5 — Multi-Agent Intelligence
 
+## Current implementation boundary
+
+SatQuery now has a lightweight, model-neutral Agent Interface for translating
+conversation into validated calls to existing SatQuery capabilities. It is not
+a multi-agent runtime. The deterministic investigation planner, workflow
+compiler, scheduler, execution runtime, evidence services, scientific
+reasoning, and Earth Memory remain the authorities for their respective work.
+Do not implement shadow agents for those responsibilities.
+
 ## Goal
 
 Distribute scientific reasoning across specialized agents.
@@ -592,14 +601,18 @@ Build a searchable planetary memory.
 Earth Memory indexes immutable investigation artifacts, including safe
 capability-selection snapshots, with deterministic literal search, explicit
 source links, and optional SQLite durability. Its
-spatiotemporal retrieval accepts explicit CRS-scoped bounding boxes and
-timezone-aware intervals. Spatial filtering is inclusive envelope overlap in
-the same CRS; it performs no reprojection or exact geometry predicate. SQLite
-schema version 6 keeps derived extent indexes separate from immutable
-source payloads and migrates prior index schemas transactionally. Unknown extents remain
-unmatched for constrained searches. Semantic retrieval, exact geometry search,
-planet-scale distributed indexing, and continuous change memory remain open
-work.
+spatiotemporal retrieval accepts explicit CRS-scoped bounding boxes, GeoJSON
+geometries, and timezone-aware intervals. Bounding-box filtering is inclusive
+envelope overlap; geometry filtering uses exact `intersects` predicates over
+valid source geometries. Both require matching declared CRS identifiers and
+perform no reprojection or geometry repair. Exact geometry filtering requires
+the optional geospatial dependencies; malformed query geometry is rejected and
+malformed candidate geometry is surfaced as an error rather than silently
+treated as a match. SQLite schema version 7 keeps derived extent and geometry
+envelope indexes separate from immutable source payloads. Unknown extents and
+artifacts without source geometry remain unmatched for constrained searches.
+Semantic retrieval, planet-scale distributed indexing, and continuous change
+memory remain open work.
 
 Capability snapshots retain the public, source-neutral selection metadata
 associated with a matrix revision and carry a separately verified content

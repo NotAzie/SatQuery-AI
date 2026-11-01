@@ -487,7 +487,7 @@ limits and parameter mappings.
 Diagnostics are part of `PerceptionResult`, indexed in Earth Memory with their
 exact CRS-scoped spatial support and source time interval, and exposed through
 the investigation API, CLI inspection, and workspace. Current Earth Memory
-SQLite schema version is 6; migrations rebuild derived indexes from immutable
+SQLite schema version is 7; migrations rebuild derived indexes from immutable
 canonical payloads. These records are descriptive arithmetic, not validated
 trend or change methods.
 

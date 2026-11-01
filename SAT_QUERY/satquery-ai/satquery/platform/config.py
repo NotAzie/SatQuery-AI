@@ -19,7 +19,9 @@ _PROFILE_DEFAULTS = {
     "testing": {"logging": {"level": "WARNING"}},
     "production": {"logging": {"level": "INFO"}},
 }
-_SECTIONS = {"execution", "connector", "cache", "logging", "storage", "monitoring"}
+_SECTIONS = {
+    "execution", "connector", "cache", "logging", "storage", "monitoring", "agent"
+}
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,7 @@ class StorageConfig:
     execution_path: str | None = None
     audit_path: str | None = None
     monitoring_path: str | None = None
+    agent_sessions_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,11 @@ class MonitoringConfig:
 
 
 @dataclass(frozen=True)
+class AgentConfig:
+    model_timeout_seconds: float = 120.0
+
+
+@dataclass(frozen=True)
 class PlatformConfig:
     """Immutable snapshot merged from defaults, profile, file, and environment."""
 
@@ -78,6 +86,7 @@ class PlatformConfig:
     logging: LoggingConfig
     storage: StorageConfig
     monitoring: MonitoringConfig
+    agent: AgentConfig
 
     @classmethod
     def load(
@@ -132,6 +141,7 @@ class PlatformConfig:
             "logging": {},
             "storage": {},
             "monitoring": {},
+            "agent": {},
         }
         effective["cache"]["max_entries"] = 128
         _merge(effective, _PROFILE_DEFAULTS[selected_profile])
@@ -196,6 +206,14 @@ class PlatformConfig:
                 or storage.lifecycle_path
                 or storage.execution_path
             ),
+            "agent_sessions": (
+                storage.agent_sessions_path
+                or storage.earth_memory_path
+                or storage.monitoring_path
+                or storage.lifecycle_path
+                or storage.execution_path
+                or storage.audit_path
+            ),
         }
 
     def create_earth_memory(self):
@@ -233,6 +251,12 @@ class PlatformConfig:
 
         path = self.effective_storage_paths()["monitoring"]
         return SQLiteMonitoringRepository(path) if path is not None else InMemoryMonitoringRepository()
+
+    def create_agent_session_store(self):
+        from ..agent import InMemoryAgentSessionStore, SQLiteAgentSessionStore
+
+        path = self.effective_storage_paths()["agent_sessions"]
+        return SQLiteAgentSessionStore(path) if path is not None else InMemoryAgentSessionStore()
 
 
 def _environment_overrides(
@@ -303,12 +327,13 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
         "logging": {"level"},
         "storage": {
             "earth_memory_path", "lifecycle_path", "execution_path", "audit_path",
-            "monitoring_path",
+            "monitoring_path", "agent_sessions_path",
         },
         "monitoring": {
             "enabled", "poll_interval_seconds", "max_runs_per_tick",
             "max_triggered_investigations_per_tick", "max_concurrency", "lease_seconds",
         },
+        "agent": {"model_timeout_seconds"},
     }
     for section, fields in allowed_fields.items():
         section_values = values.get(section, {})
@@ -327,6 +352,7 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
     logging_values = values["logging"]
     storage = values["storage"]
     monitoring = values["monitoring"]
+    agent = values["agent"]
 
     concurrency = execution.get("max_concurrency")
     if type(concurrency) is not int or concurrency < 1:
@@ -363,12 +389,14 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
     execution_path = storage.get("execution_path")
     audit_path = storage.get("audit_path")
     monitoring_path = storage.get("monitoring_path")
+    agent_sessions_path = storage.get("agent_sessions_path")
     for name, value in (
         ("storage.earth_memory_path", earth_memory_path),
         ("storage.lifecycle_path", lifecycle_path),
         ("storage.execution_path", execution_path),
         ("storage.audit_path", audit_path),
         ("storage.monitoring_path", monitoring_path),
+        ("storage.agent_sessions_path", agent_sessions_path),
     ):
         if value is not None and (
             not isinstance(value, str) or not value.strip() or value.strip() == ":memory:"
@@ -399,6 +427,12 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
     monitoring_lease_seconds = _optional_positive(
         monitoring.get("lease_seconds", 120.0), "monitoring.lease_seconds"
     )
+    agent_model_timeout = _optional_positive(
+        agent.get("model_timeout_seconds", 120.0),
+        "agent.model_timeout_seconds",
+    )
+    if agent_model_timeout is None:
+        raise ConfigurationError("agent.model_timeout_seconds must be finite and positive.")
     if (
         monitoring_enabled
         and values["profile"] == "production"
@@ -429,6 +463,7 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
             execution_path=execution_path,
             audit_path=audit_path,
             monitoring_path=monitoring_path,
+            agent_sessions_path=agent_sessions_path,
         ),
         monitoring=MonitoringConfig(
             enabled=monitoring_enabled,
@@ -438,6 +473,7 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
             max_concurrency=monitoring_concurrency,
             lease_seconds=monitoring_lease_seconds,
         ),
+        agent=AgentConfig(model_timeout_seconds=agent_model_timeout),
     )
 
 

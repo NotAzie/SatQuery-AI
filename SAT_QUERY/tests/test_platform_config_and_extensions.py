@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 from satquery.errors import ConfigurationError, ExtensionError
 from satquery.platform.config import PlatformConfig
+from satquery.agent import InMemoryAgentSessionStore, SQLiteAgentSessionStore
 from satquery.platform.earth_memory import InMemoryEarthMemory, SQLiteEarthMemory
 from satquery.platform.execution_journal import SQLiteExecutionJournal
 from satquery.platform.registry import (
@@ -58,6 +59,23 @@ def test_invalid_profile_or_setting_fails_loudly():
         )
 
 
+def test_agent_model_timeout_is_configurable_and_must_be_finite_positive():
+    config = PlatformConfig.load(
+        environ={
+            "SATQUERY_PLATFORM__AGENT__MODEL_TIMEOUT_SECONDS": "45.5",
+        }
+    )
+    assert config.agent.model_timeout_seconds == 45.5
+
+    for invalid in ("0", "-1", "NaN", "Infinity", "null"):
+        with pytest.raises(ConfigurationError):
+            PlatformConfig.load(
+                environ={
+                    "SATQUERY_PLATFORM__AGENT__MODEL_TIMEOUT_SECONDS": invalid,
+                }
+            )
+
+
 def test_earth_memory_storage_is_opt_in_and_configurable():
     default_config = PlatformConfig.load(environ={})
     assert isinstance(default_config.create_earth_memory(), InMemoryEarthMemory)
@@ -78,6 +96,21 @@ def test_earth_memory_storage_is_opt_in_and_configurable():
             candidate = Path(f"{database_path}{suffix}")
             if candidate.exists():
                 candidate.unlink()
+
+
+def test_agent_session_store_uses_explicit_path_or_memory_default(tmp_path):
+    default_config = PlatformConfig.load(environ={})
+    assert isinstance(default_config.create_agent_session_store(), InMemoryAgentSessionStore)
+
+    database_path = tmp_path / "agent-sessions.sqlite"
+    config = PlatformConfig.load(
+        environ={
+            "SATQUERY_PLATFORM__STORAGE__AGENT_SESSIONS_PATH": str(database_path),
+        }
+    )
+    store = config.create_agent_session_store()
+    assert isinstance(store, SQLiteAgentSessionStore)
+    assert store.path == database_path.resolve()
 
 
 @pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity"])

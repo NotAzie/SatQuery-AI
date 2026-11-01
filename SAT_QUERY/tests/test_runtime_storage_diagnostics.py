@@ -32,6 +32,7 @@ def test_runtime_health_reports_shared_monitoring_storage_as_durable():
             "execution",
             "audit",
             "monitoring",
+            "agent_sessions",
         }
         assert all(
             item == {"backend": "sqlite", "durable": True}

@@ -22,6 +22,7 @@ from .contracts import (
     ExecutionResult,
     ExecutionStatus,
     Investigation,
+    Mission,
     Observation,
     ObservationSearchResult,
     ObservationStack,
@@ -808,6 +809,97 @@ class PlatformRuntime:
             aggregate_id=design.plan_id, event_type="workflow_change", actor="satquery.intelligence-design",
             payload={"design_id": design.design_id, "design_sha256": hashlib.sha256(design.model_dump_json().encode()).hexdigest()},
         )
+
+    def start_investigation(
+        self,
+        question: str,
+        *,
+        earth_query: EarthQuery | None = None,
+        mission_id: str | None = None,
+        mission_name: str | None = None,
+    ) -> dict[str, object]:
+        """Plan and record an investigation using the canonical engine path."""
+        normalized_question = question.strip()
+        if not normalized_question:
+            raise ValidationError("The investigation question must not be empty.")
+        plan = self.investigation_planner.plan(
+            normalized_question,
+            earth_query=earth_query,
+        )
+        design = self.investigation_intelligence.design(plan)
+        self.record_investigation_plan(plan)
+        self.record_investigation_design(design)
+        if mission_id:
+            mission = self.mission_service.get(mission_id)
+        else:
+            mission = self.mission_service.create(
+                Mission(
+                    name=(mission_name or normalized_question[:120]),
+                    objective=normalized_question,
+                    metadata={
+                        "entrypoint": "earth-investigate",
+                        "question": normalized_question,
+                    },
+                )
+            )
+        tasks: tuple[Task, ...] = ()
+        selected = None
+        if (
+            plan.status == "ready"
+            and design.status == "ready_for_acquisition"
+            and plan.selected_candidate_plan_id
+        ):
+            selected = next(
+                item
+                for item in plan.candidate_plans
+                if item.candidate_plan_id == plan.selected_candidate_plan_id
+            )
+            selected_strategy = next(
+                item
+                for item in design.candidate_strategies
+                if item.candidate_plan_id == selected.candidate_plan_id
+            )
+            if selected_strategy.status != "ready_for_acquisition":
+                selected = None
+        if selected is not None:
+            tasks = tuple(
+                Task(
+                    handler="earth.observe",
+                    description=step.description,
+                    parameters={
+                        "earth_query": step.earth_query.model_dump(mode="json"),
+                        "investigation_plan_id": plan.plan_id,
+                        "investigation_design_id": design.design_id,
+                        "candidate_plan_id": selected.candidate_plan_id,
+                        "planner_step_id": step.step_id,
+                        "natural_language_objective": normalized_question,
+                    },
+                )
+                for step in selected.steps
+            )
+        investigation = self.mission_service.create_investigation(
+            mission.mission_id,
+            tasks,
+            investigation_plan_id=plan.plan_id,
+            investigation_design_id=design.design_id,
+        )
+        self.index_investigation(investigation)
+        response_state = (
+            plan.status if tasks or plan.status != "ready" else design.status
+        )
+        return {
+            "mission": mission,
+            "investigation": investigation,
+            "plan": plan,
+            "design": design,
+            "state": response_state,
+            "design_state": design.status,
+            "next_step": (
+                "Review the plan, then execute the investigation explicitly."
+                if design.status == "ready_for_acquisition"
+                else "Resolve the listed missing information and submit the revised objective or EarthQuery."
+            ),
+        }
 
     def get_investigation_design(self, design_id: str) -> InvestigationDesign:
         from ..errors import ValidationError

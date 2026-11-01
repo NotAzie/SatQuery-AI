@@ -1,31 +1,143 @@
-# Agent system status
+# SatQuery Agent Interface
 
-SatQuery does not currently contain a multi-agent execution runtime. The
-roadmap describes agent collaboration as a future capability; it must not be
-read as an existing product feature.
+SatQuery's agent is a provider-neutral conversational bridge to the existing
+Earth Intelligence engine. It reasons about user intent, selects from an
+explicit Earth-specific tool allowlist, validates model-requested arguments,
+dispatches to `PlatformRuntime`, returns observations to the model, and streams
+user-facing progress. It does not plan workflows, schedule work, acquire data,
+assess evidence, or perform scientific reasoning itself.
 
-## What exists today
+## Architecture
 
-The platform has a deterministic planner, investigation design and workflow
-DAG, component registries, replaceable task handlers, scientific operator and
-method registries, and an execution trace. A single `PlatformRuntime`
-composes and runs the investigation. These are useful foundations for future
-orchestration but are not agents: they do not independently set goals,
-negotiate, delegate, critique one another, or exchange messages.
+```text
+User
+  -> Agent API and session service
+  -> Registered streaming reasoning adapter
+  -> Validated SatQuery tool request
+  -> Existing PlatformRuntime services
+  -> Existing connectors, workflow compiler, scheduler, and execution journal
+  -> Tool observation and evidence-backed response
+```
 
-Model adapter contracts exist, and the legacy image question-answering path
-can load Hugging Face models with optional dependencies. The scientific
-reasoning path does not call a general-purpose model to generate scientific
-conclusions.
+The loop lives in `satquery.agent.AgentTurnService`. The model adapter implements
+the `AgentModel` protocol and translates its provider's message, tool-call, and
+stream formats to `AgentMessage`, `AgentToolCall`, and `AgentModelEvent`. It
+receives the fixed SatQuery system prompt, the current bounded conversation
+context, the schemas for the currently allowed tools, and a cooperative
+cancellation event. Provider-specific formats do not enter the engine or the
+HTTP API. The normalized `text_delta` event is user-visible output only;
+adapters must not forward private reasoning or hidden model tokens.
 
-## Not implemented
+Adapters are registered under a stable identifier in
+`SatQueryEngine.platform_registries.reasoners`. The registry identity must
+match the adapter's `model_id`. An adapter must stream normalized events and
+honor cancellation; SatQuery owns validation, dispatch, context persistence,
+event sequencing, and the maximum tool-round limit. No provider SDK is a core
+dependency. Each model streaming round has a finite deadline controlled by
+`agent.model_timeout_seconds` (120 seconds by default); timeout is reported as
+an explicit `reasoning_model_timeout` event. Adapters must cooperate with
+async task cancellation as well as the supplied cancellation event so an
+expired request can release its resources promptly.
 
-- Agent identity, role policy, or independent context/state.
-- Inter-agent communication, delegation, consensus, or conflict arbitration.
-- Agent scheduling, budgets, sandboxing, or trust isolation.
-- Autonomous modification of plans based on model-generated scientific claims.
-- Multi-agent evaluation or benchmark assets.
+## Tool boundary
 
-Any future agent runtime must operate on explicit platform contracts, retain
-the same provenance/audit trail, and keep model-generated proposals separate
-from validated evidence and conclusions. See the [roadmap](../foundation/ROADMAP.md#phase-5--multi-agent-intelligence).
+The default tool registry is a strict, explicit allowlist:
+
+| Tool | Engine responsibility used |
+|---|---|
+| `platform.capabilities` | Read the existing perception capability matrix. |
+| `investigation.start` | `PlatformRuntime.start_investigation`, the same planner/design/lifecycle path used by the existing investigation API. Planning does not acquire data. |
+| `investigation.execute` | Existing investigation execution, workflow compiler, scheduler, and journal. Offered to the model only for a turn with explicit execution authorization. |
+| `investigation.inspect` | Existing investigation report, evidence assessment, and scientific reasoning records. |
+| `earth-memory.search` | Existing deterministic Earth Memory query service. |
+| `investigation.cancel` | Existing cooperative investigation cancellation service. |
+
+Tool arguments use typed Pydantic contracts with extra fields forbidden.
+Unknown tools and invalid arguments become explicit tool-failure observations;
+they are never treated as successful execution. Tool implementations can be
+extended by supplying an `AgentToolRegistry`, without changing the engine or
+the reasoning adapter.
+
+The `execution_authorized` turn field is an explicit per-turn user consent
+gate, not an identity or access-control system. This deployment has no
+multi-user authentication or authorization layer; production deployments must
+place the API behind their own identity and access-control boundary.
+
+## Events, cancellation, and persistence
+
+Agent SSE events have a stable event kind, session ID, turn ID, per-turn
+sequence, timestamp, and typed payload. They distinguish assistant output,
+tool lifecycle, execution-journal progress, completion, cancellation, and
+errors. Private model reasoning is not exposed as an event. Investigation
+progress is projected from the existing append-only execution journal; the
+agent does not create a parallel scheduler or progress journal.
+
+Cancelling an agent turn signals the provider adapter. If the turn is executing
+an investigation, the service also requests cancellation from the existing
+runtime. Closing or disconnecting the SSE stream explicitly closes the
+underlying turn iterator; an active investigation task is signalled to cancel
+and joined before the iterator releases its session state. Cancellation is
+cooperative; already completed upstream requests cannot be rolled back. If a
+process stops before all requested tools have persisted observations, the next
+turn adds explicit interruption observations for unmatched tool-call IDs.
+They state that the outcome may be unknown and require inspection before
+retry; SatQuery does not silently replay a tool.
+
+Session state persists normalized user, assistant, and tool messages and
+investigation references. The default repository is in-memory. If a platform
+storage path is configured, agent sessions use a versioned SQLite table with
+optimistic revision checks and a content-integrity digest. SQLite is a
+single-host persistence adapter, not distributed session storage. Session
+messages are conversational state; Earth Memory remains the separate
+long-lived domain/evidence store.
+
+Assistant text deltas are persisted as a partial assistant message if a model
+stream fails, times out, or is cancelled after emitting text. Incomplete tool
+requests are not persisted as completed assistant messages; interrupted calls
+are handled by the explicit recovery observations above. This keeps resumed
+conversation context aligned with text already delivered to the client without
+implying that a failed model response was complete.
+
+## HTTP interface
+
+- `POST /api/v1/agent/sessions` creates a conversation.
+- `GET /api/v1/agent/sessions/{session_id}` reads persisted conversation state.
+- `POST /api/v1/agent/sessions/{session_id}/turns` accepts `message`,
+  `model_id`, and optional `execution_authorized` (default `false`), and
+  streams Server-Sent Events.
+- `POST /api/v1/agent/sessions/{session_id}/cancel` cooperatively cancels the
+  active turn.
+
+The synchronous Python client exposes the same operations through
+`client.agents.create_session()`, `get_session(session_id)`,
+`stream_turn(session_id, message=..., model_id=...,
+execution_authorized=False)`, and `cancel_turn(session_id)`. The CLI exposes
+`satquery agent create`, `show`, `turn`, and `cancel`. Its turn command writes
+one JSON object per SSE event to stdout; execution consent is opt-in with
+`--authorize-execution`. Both interfaces use the REST endpoints as their
+single transport contract, preserve the event JSON payload, and propagate
+HTTP failures through the shared client error type.
+
+Register at least one compatible reasoner before submitting a turn. An
+unregistered or incompatible model is rejected before the event stream starts.
+There is deliberately no built-in provider selection, credentials handling,
+user identity, autonomous background agent, or multi-agent collaboration.
+
+## Architectural inspiration
+
+The design uses only broadly applicable patterns: normalized model/tool
+contracts and tool-call IDs (OpenHands SDK), a model-request/application-owned
+tool execution loop (Cursor and Claude Agent SDK documentation), explicit
+thread state (LangGraph persistence), and typed observable events (OpenHands
+and LangGraph streaming). Provider-specific SDK behavior and product-domain
+tools are intentionally not adopted.
+
+## Boundaries and future work
+
+The interface does not add agent collaboration, consensus, independent
+scientific authority, scheduling, long-term learned memory, or autonomous
+changes to plans based on model claims. Model output is a proposal; evidence,
+execution state, and scientific assessments remain owned by SatQuery's
+deterministic services. Production authentication, distributed storage,
+provider adapters, and deployment infrastructure remain external integration
+work.

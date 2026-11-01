@@ -85,12 +85,17 @@ are opaque continuation data, not authorization tokens or cryptographic proofs.
 The API returns 409 for a stale snapshot cursor and 422 for a malformed cursor
 or one reused with different filters.
 
-Spatial filters use a four-coordinate bounding box plus an explicit CRS. The
-match is inclusive envelope overlap in the same CRS; the system does not
-reproject, infer a CRS, or claim exact geometry intersection. Geometry-backed
-bounds are indexed only for canonical observations, Earth Objects, exact-support
-observation stacks, and temporal differences that explicitly carry a CRS.
-Six-coordinate observation bounds are interpreted as the standard
+Spatial filters accept either a four-coordinate bounding box or a GeoJSON
+geometry, plus an explicit CRS. Bounding boxes match inclusive envelope
+overlap; GeoJSON geometries match the exact `intersects` predicate, including
+boundary contact. Both require an exact match to the artifact's declared CRS
+identifier. The system does not reproject, infer a CRS, or repair geometry.
+Exact geometry search requires the optional `geospatial` dependencies and
+valid, non-empty source geometry; malformed candidate geometry causes an
+explicit search error. Geometry-backed artifacts without an explicit CRS or
+geometry remain unmatched. Geometry extraction is limited to canonical
+observations, Earth Objects, exact-support observation stacks, and temporal
+differences. Six-coordinate observation bounds are interpreted as the standard
 min-x/min-y/min-z/max-x/max-y/max-z shape.
 
 Temporal filters require an aware start and end timestamp. They match inclusive
@@ -100,14 +105,16 @@ observation stack, or the two source times of a temporal difference. Open-ended
 and absent temporal extents remain unknown and do not match a constrained
 query.
 
-SQLite schema version 6 stores derived spatial-temporal, canonical-variable,
-and case-folded trigram search indexes plus a revision accumulator separately
-from immutable artifact payloads. Existing version 1–5
+SQLite schema version 7 stores derived spatial-temporal and geometry-envelope,
+canonical-variable, and case-folded trigram search indexes plus a revision
+accumulator separately from immutable artifact payloads. Existing version 1–6
 stores are migrated transactionally by rebuilding the indexes from canonical
 payloads, including exact-support stack and temporal-difference extents.
 Payloads and artifact IDs are not rewritten. SQLite applies artifact-type,
 mission, investigation, method, source-link, canonical-variable, cursor, and
-explicit spatial-temporal constraints before loading candidate payloads. For
+bounding-box spatial-temporal constraints before loading candidate payloads.
+Exact geometry searches use the derived CRS/envelope index before evaluating
+verified payload geometries with the exact predicate. For
 terms with at least three case-folded characters, a trigram index narrows the
 candidate set; short terms and unusually large query gram sets use a full
 metadata-filtered scan. Exact substring checks remain authoritative and match
@@ -146,14 +153,18 @@ same filters with `satquery memory search TERMS --variable water_level
 --artifact-type observation --mission-id MISSION_ID --investigation-id
 INVESTIGATION_ID --method-id METHOD_ID --source-artifact-id ARTIFACT_ID --bbox
 MIN_X MIN_Y MAX_X MAX_Y --crs OGC:CRS84 --start ISO_TIMESTAMP --end
-ISO_TIMESTAMP --limit 100`. Reuse the returned `next_cursor` with `--cursor`
-to fetch another page. A bounding box and CRS must be supplied together;
-temporal bounds must be supplied together.
+ISO_TIMESTAMP --limit 100`. Replace `--bbox ...` with
+`--geometry-file geometry.json --crs OGC:CRS84` to use an exact GeoJSON
+intersection. Reuse the returned `next_cursor` with `--cursor` to fetch
+another page. Supply exactly one spatial filter with its CRS; temporal bounds
+must be supplied together.
 
-This retrieval layer does not yet provide exact spatial predicates, coordinate
-transforms, raster footprint indexes, vector-tile indexes, temporal nearest
-neighbor ranking, semantic search, or distributed geospatial storage. Those
-require explicit semantics and scale requirements before adoption.
+For exact geometry queries, SQLite narrows candidates by the declared CRS and
+geometry envelope, then adapters apply the exact predicate to verified source
+payloads. This retrieval layer does not provide coordinate transforms, raster
+footprint indexes, vector-tile indexes, temporal nearest-neighbor ranking,
+semantic search, or distributed geospatial storage. Those require explicit
+semantics and scale requirements before adoption.
 
 Investigation reproducibility bundle schema `1.4.0` retains capability
 selection snapshots alongside Earth Object

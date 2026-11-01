@@ -820,6 +820,20 @@ def test_platform_earth_memory_api_accepts_spatiotemporal_filters():
         artifact_id="observation:memory-api-observation", artifact_type="observation",
         payload=observation, indexed_at=observed_at.isoformat(),
     ))
+    engine.platform_runtime.earth_memory.upsert(artifact_from_payload(
+        artifact_id="earth-object:memory-api-object",
+        artifact_type="earth_object",
+        payload={
+            "crs": "OGC:CRS84",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                    [70, 10], [72, 10], [72, 12], [70, 12], [70, 10],
+                ]],
+            },
+        },
+        indexed_at=observed_at.isoformat(),
+    ))
     for artifact_id in ("evidence:memory-api-a", "evidence:memory-api-b"):
         engine.platform_runtime.earth_memory.upsert(artifact_from_payload(
             artifact_id=artifact_id, artifact_type="evidence",
@@ -881,6 +895,41 @@ def test_platform_earth_memory_api_accepts_spatiotemporal_filters():
             assert response.json()["spatial_semantics"] == "inclusive_same_crs_bbox_overlap"
             assert response.json()["temporal_semantics"] == "inclusive_interval_overlap"
             assert response.json()["artifacts"][0]["artifact_id"] == "observation:memory-api-observation"
+            exact_geometry = client.post(
+                "/api/v1/platform/earth-memory/search",
+                json={
+                    "spatial_geometry": {
+                        "type": "Point",
+                        "coordinates": [71, 11],
+                    },
+                    "spatial_crs": "OGC:CRS84",
+                    "artifact_types": ["earth_object"],
+                },
+            )
+            assert exact_geometry.status_code == 200
+            assert exact_geometry.json()["total"] == 1
+            assert (
+                exact_geometry.json()["spatial_semantics"]
+                == "exact_same_crs_geometry_intersects"
+            )
+            assert (
+                exact_geometry.json()["artifacts"][0]["artifact_id"]
+                == "earth-object:memory-api-object"
+            )
+            invalid_geometry = client.post(
+                "/api/v1/platform/earth-memory/search",
+                json={
+                    "spatial_geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[
+                            [0, 0], [2, 2], [0, 2], [2, 0], [0, 0],
+                        ]],
+                    },
+                    "spatial_crs": "OGC:CRS84",
+                },
+            )
+            assert invalid_geometry.status_code == 422
+            assert "topologically valid" in invalid_geometry.json()["detail"]
             paged = client.post(
                 "/api/v1/platform/earth-memory/search",
                 json={"artifact_types": ["evidence"], "limit": 1},

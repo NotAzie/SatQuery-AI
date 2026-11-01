@@ -69,7 +69,7 @@ routes are called.
 | `GET` | `/api/v1/platform/scientific-knowledge/methods` | List cited method knowledge records, including explicit benchmark and implementation readiness. Optional `domain` filter. |
 | `GET` | `/api/v1/platform/scientific-knowledge/domains` | Show seeded method-record coverage separately from executable certified coverage. |
 | `POST` | `/api/v1/platform/investigations/{investigation_id}/scientific-methods/{method_id}/{version}/sufficiency` | Assess recorded observations against a cited method record and return deterministic acquisition recommendations without executing them. |
-| `POST` | `/api/v1/platform/earth-memory/search` | Deterministic literal and exact canonical-variable filtering plus explicit CRS-scoped bounding-box/time filtering across indexed Earth artifacts. Supports query-bound, revision-bound cursor pagination; stale cursors return 409 and incompatible cursors return 422. Spatial matches are envelope overlaps, not exact geometry intersections or reprojections. |
+| `POST` | `/api/v1/platform/earth-memory/search` | Deterministic literal and exact canonical-variable filtering plus explicit CRS-scoped bounding-box, GeoJSON intersection, and time filters across indexed Earth artifacts. Spatial filters are same-CRS only; no reprojection or geometry repair is performed. Exact geometry filtering requires the optional geospatial dependencies. Supports query-bound, revision-bound cursor pagination; stale cursors return 409 and incompatible cursors return 422. |
 | `GET` | `/api/v1/platform/scientific-workflows` | List structure-only Earth investigation templates. |
 | `POST` | `/api/v1/platform/scientific-workflows/{template_id}/instantiate` | Produce an instance with supplied and unresolved configuration; never selects methods or emits conclusions. |
 | `GET` | `/api/v1/platform/investigations/{investigation_id}/audit` | Read per-aggregate hash-chained investigation and plan events with verification status; event payloads are withheld when integrity checks fail. |
@@ -82,6 +82,10 @@ routes are called.
 | `POST` | `/api/v1/platform/intelligence/design` | Return a deterministic plan plus evidence strategies and requirement-to-step traceability; does not acquire observations. |
 | `GET` | `/api/v1/platform/intelligence/designs/{design_id}` | Retrieve a stored investigation design. |
 | `POST` | `/api/v1/platform/investigate` | Plan and design a natural-language investigation, create mission/investigation records, and attach tasks only when both plan and evidence strategy are ready. |
+| `POST` | `/api/v1/agent/sessions` | Create an in-memory or configured durable conversational session. Python SDK: `client.agents.create_session()`; CLI: `satquery agent create`. |
+| `GET` | `/api/v1/agent/sessions/{session_id}` | Read persisted user, assistant, and tool messages and linked investigation IDs. Python SDK: `client.agents.get_session(id)`; CLI: `satquery agent show ID`. |
+| `POST` | `/api/v1/agent/sessions/{session_id}/turns` | Stream a model-driven agent turn as SSE. Body: `message`, registered `model_id`, and optional `execution_authorized` (default `false`). Python SDK: `client.agents.stream_turn(...)`; CLI: `satquery agent turn ID --message TEXT --model-id MODEL`. |
+| `POST` | `/api/v1/agent/sessions/{session_id}/cancel` | Cooperatively cancel the active model turn and, when applicable, request cancellation through the existing investigation runtime. Python SDK: `client.agents.cancel_turn(id)`; CLI: `satquery agent cancel ID`. |
 | `POST` | `/api/v1/platform/missions` | Create a local mission. |
 | `GET` | `/api/v1/platform/missions` | List local missions. |
 | `GET` | `/api/v1/platform/missions/{mission_id}` | Read a mission. |
@@ -112,6 +116,15 @@ changes, claims, completion states, and lease recovery. Schedules declare an
 `overlap_policy`: `skip_while_running` coalesces the due slot while a prior run
 is active, while `allow` permits overlapping investigations. Notifications are
 local inbox records; external email, SMS, and webhook delivery are not implied.
+
+The agent API is a conversational interface only. Register compatible
+streaming adapters in `SatQueryEngine.platform_registries.reasoners`; provider
+SDKs are not core dependencies. Its Earth-specific tools delegate to the
+existing platform runtime rather than creating a second planner or scheduler.
+The per-turn `execution_authorized` flag is explicit user consent, not API
+authentication. See the [agent architecture](../architecture/AGENT_SYSTEM.md)
+for the model protocol, tool boundary, event contract, persistence limits, and
+SDK/CLI usage.
 CLI schedule edits use a JSON document with `expected_revision` and one or more
 of `name`, `earth_query`, `interval_seconds`, `priority`, `overlap_policy`, and
 `trigger_policies` via
@@ -178,13 +191,16 @@ uncertainty as not propagated.
 | `POST` | `/api/v1/platform/earth-objects/relationships` | Record a relationship assertion only when it cites source observations or evidence associated with its endpoint objects. |
 | `GET` | `/api/v1/platform/investigations/{investigation_id}/provenance` | Return each observation's dataset, provider metadata, provenance, and reproducibility declaration. |
 | `GET` | `/api/v1/platform/executions/{execution_id}` | Retrieve task outcomes, outputs, timing, and trace ID for an execution plan ID; Earth Object extraction is a checkpointed typed task output. |
-| `GET` | `/api/v1/platform/executions/{execution_id}/events` | Poll the append-only, ordered execution journal; use `after_sequence` as the sequence cursor. |
-| `GET` | `/api/v1/platform/investigations/{investigation_id}/events/stream` | Stream the same journal as replayable Server-Sent Events while execution runs; reconnect with `Last-Event-ID` or use `after_sequence`. |
+| `GET` | `/api/v1/platform/executions/{execution_id}/events` | Poll the append-only, ordered execution journal; use `after_sequence` as the sequence cursor. A zero cursor verifies the full chain; a nonzero cursor reads and verifies the returned tail against its immediately preceding stored event. |
+| `GET` | `/api/v1/platform/investigations/{investigation_id}/events/stream` | Stream the same journal as replayable Server-Sent Events while execution runs; reconnect with `Last-Event-ID` or use `after_sequence`. Initial full-chain validation is performed when starting at zero; resumed reads validate the anchor and returned tail. |
 
 The platform API is not an authenticated multi-user service. Store selection,
 connector access, and network exposure are operator configuration. Provider
 discovery, active health checks, and acquisition may make external requests;
 passive inspection routes report local declarations and call history only.
+Structured contract inputs are limited to 64 nested container levels and
+circular Python object graphs are rejected, preventing malformed nested values
+from reaching recursive validation or serialization.
 
 Categorical raster extraction can be requested with an explicit EarthQuery,
 for example:
@@ -282,6 +298,10 @@ python -m satquery intelligence design "Measure air temperature globally last we
 python -m satquery investigation execute <investigation-id>
 python -m satquery investigation events <investigation-id>
 python -m satquery investigation report <investigation-id>
+python -m satquery agent create
+python -m satquery agent show <session-id>
+python -m satquery agent turn <session-id> --message "Summarize this investigation" --model-id <registered-model-id>
+python -m satquery agent cancel <session-id>
 python -m satquery investigation compare <investigation-id-1> <investigation-id-2>
 python -m satquery monitor compare <schedule-id> --limit 10
 python -m satquery reasoning show <investigation-id>

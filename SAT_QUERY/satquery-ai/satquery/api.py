@@ -14,11 +14,12 @@ from connectors.noaa_coops import NoaaCoopsConnector
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StrictBool, model_validator
 
+from .agent import AgentEvent
 from .config import Settings, get_settings
 from .connector_bootstrap import load_configured_connectors
-from .errors import ExtensionError, QueryError, SatQueryError
+from .errors import ExtensionError, QueryError, SatQueryError, ValidationError
 from .orchestrator import SatQueryEngine
 from .platform.comparisons import InvestigationComparisonRequest
 from .platform.contracts import (
@@ -31,8 +32,11 @@ from .platform.contracts import (
     Task,
 )
 from .platform.earth_memory import (
+    EarthMemoryArtifactGeometryError,
     EarthMemoryCursorError,
     EarthMemoryQuery,
+    EarthMemorySpatialDependencyError,
+    EarthMemorySpatialError,
     StaleEarthMemoryCursorError,
 )
 from .platform.earth_objects import (
@@ -80,6 +84,12 @@ class EarthInvestigationRequest(BaseModel):
     earth_query: Optional[EarthQuery] = None
     mission_id: Optional[str] = None
     mission_name: Optional[str] = None
+
+
+class AgentTurnRequest(BaseModel):
+    message: str = Field(min_length=1)
+    model_id: str = Field(min_length=1)
+    execution_authorized: StrictBool = False
 
 
 class StationSearchRequest(BaseModel):
@@ -920,6 +930,13 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         except EarthMemoryCursorError as exc:
             status_code = 422
             raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+        except EarthMemorySpatialError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except EarthMemorySpatialDependencyError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except EarthMemoryArtifactGeometryError as exc:
+            logger.exception("Earth Memory exact geometry search failed on an indexed artifact")
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
         # The canonical search index text duplicates the full payload and is an
         # internal implementation detail; return the artifact payload once.
         public_result = result.model_dump(
@@ -1086,89 +1103,99 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         request: EarthInvestigationRequest,
     ) -> JSONResponse:
         runtime = get_engine().platform_runtime
-        question = request.question.strip()
-        if not question:
+        if not request.question.strip():
             raise QueryError("The investigation question must not be empty.")
-        plan = runtime.investigation_planner.plan(
-            question,
+        result = runtime.start_investigation(
+            request.question,
             earth_query=request.earth_query,
-        )
-        design = runtime.investigation_intelligence.design(plan)
-        runtime.record_investigation_plan(plan)
-        runtime.record_investigation_design(design)
-        if request.mission_id:
-            mission = runtime.mission_service.get(request.mission_id)
-        else:
-            mission = runtime.mission_service.create(
-                Mission(
-                    name=(request.mission_name or question[:120]),
-                    objective=question,
-                    metadata={"entrypoint": "earth-investigate", "question": question},
-                )
-            )
-        tasks = ()
-        selected = None
-        if (
-            plan.status == "ready"
-            and design.status == "ready_for_acquisition"
-            and plan.selected_candidate_plan_id
-        ):
-            selected = next(
-                item
-                for item in plan.candidate_plans
-                if item.candidate_plan_id == plan.selected_candidate_plan_id
-            )
-            selected_strategy = next(
-                item
-                for item in design.candidate_strategies
-                if item.candidate_plan_id == selected.candidate_plan_id
-            )
-            if selected_strategy.status != "ready_for_acquisition":
-                selected = None
-        if selected is not None:
-            tasks = tuple(
-                Task(
-                    handler="earth.observe",
-                    description=step.description,
-                    parameters={
-                        "earth_query": step.earth_query.model_dump(mode="json"),
-                        "investigation_plan_id": plan.plan_id,
-                        "investigation_design_id": design.design_id,
-                        "candidate_plan_id": selected.candidate_plan_id,
-                        "planner_step_id": step.step_id,
-                        "natural_language_objective": question,
-                    },
-                )
-                for step in selected.steps
-            )
-        investigation = runtime.mission_service.create_investigation(
-            mission.mission_id,
-            tasks,
-            investigation_plan_id=plan.plan_id,
-            investigation_design_id=design.design_id,
-        )
-        runtime.index_investigation(investigation)
-        response_state = (
-            plan.status if tasks or plan.status != "ready" else design.status
+            mission_id=request.mission_id,
+            mission_name=request.mission_name,
         )
         return JSONResponse(
-            jsonable_encoder(
-                {
-                    "mission": mission,
-                    "investigation": investigation,
-                    "plan": plan,
-                    "design": design,
-                    "state": response_state,
-                    "design_state": design.status,
-                    "next_step": (
-                        "Review the plan, then execute the investigation explicitly."
-                        if design.status == "ready_for_acquisition"
-                        else "Resolve the listed missing information and submit the revised objective or EarthQuery."
-                    ),
-                }
-            ),
+            jsonable_encoder(result),
             status_code=201,
         )
+
+    @app.post(
+        "/api/v1/agent/sessions",
+        summary="Create a persistent SatQuery agent conversation",
+    )
+    async def create_agent_session() -> JSONResponse:
+        session = get_engine().agent_turn_service.create_session()
+        return JSONResponse(jsonable_encoder(session), status_code=201)
+
+    @app.get(
+        "/api/v1/agent/sessions/{session_id}",
+        summary="Read a SatQuery agent conversation",
+    )
+    async def get_agent_session(session_id: str) -> JSONResponse:
+        try:
+            session = get_engine().agent_turn_service.get_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return JSONResponse(jsonable_encoder(session))
+
+    @app.post(
+        "/api/v1/agent/sessions/{session_id}/turns",
+        summary="Stream a model-driven SatQuery conversation turn",
+    )
+    async def stream_agent_turn(
+        session_id: str,
+        request: AgentTurnRequest,
+    ) -> StreamingResponse:
+        service = get_engine().agent_turn_service
+        try:
+            service.get_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if not request.message.strip():
+            raise ValidationError("agent user message must not be empty")
+        service.validate_model(request.model_id)
+
+        async def stream():
+            turn_stream = service.stream_turn(
+                session_id,
+                request.message,
+                model_id=request.model_id,
+                execution_authorized=request.execution_authorized,
+            )
+            try:
+                async for event in turn_stream:
+                    payload = json.dumps(
+                        event.model_dump(mode="json"),
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                        allow_nan=False,
+                    )
+                    yield f"id: {event.turn_id}:{event.sequence}\nevent: {event.kind}\ndata: {payload}\n\n"
+            finally:
+                await turn_stream.aclose()
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @app.post(
+        "/api/v1/agent/sessions/{session_id}/cancel",
+        summary="Cancel the active reasoning turn for an agent session",
+    )
+    async def cancel_agent_turn(session_id: str) -> JSONResponse:
+        service = get_engine().agent_turn_service
+        try:
+            service.get_session(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        try:
+            service.cancel(session_id)
+        except ValidationError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return JSONResponse({"session_id": session_id, "status": "cancellation_requested"}, status_code=202)
 
     @app.post(
         "/api/v1/platform/missions", summary="Create an Earth intelligence mission"

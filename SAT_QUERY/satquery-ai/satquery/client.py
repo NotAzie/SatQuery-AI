@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator, Mapping
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote, urlsplit
 
 import httpx
@@ -103,6 +103,7 @@ class SatQueryClient:
         # transport, path validation, JSON handling, and error contract rather
         # than maintaining a second implementation of platform behavior.
         from .client_resources import (
+            AgentResource,
             EarthMemoryResource,
             EarthObjectsResource,
             EarthResource,
@@ -121,6 +122,7 @@ class SatQueryClient:
         self.objects = EarthObjectsResource(self)
         self.memory = EarthMemoryResource(self)
         self.science = ScientificResource(self)
+        self.agents = AgentResource(self)
 
     def close(self) -> None:
         """Close the underlying transport when this client created it."""
@@ -217,9 +219,17 @@ class SatQueryClient:
         return self.request("PATCH", path, payload=payload, params=params)
 
     def stream_json_events(
-        self, path: str, *, params: Mapping[str, Any] | None = None
+        self,
+        path: str,
+        *,
+        params: Mapping[str, Any] | None = None,
+        method: Literal["GET", "POST"] = "GET",
+        payload: Any = None,
     ) -> Iterator[Any]:
         """Yield JSON data frames from a Server-Sent Events endpoint."""
+        method = method.upper()
+        if method not in {"GET", "POST"}:
+            raise ValueError("stream method must be GET or POST")
         parsed_path = urlsplit(path)
         if (
             not path.startswith("/")
@@ -234,8 +244,9 @@ class SatQueryClient:
         url = f"{self.base_url}{path}"
         try:
             with self._http.stream(
-                "GET",
+                method,
                 url,
+                json=payload,
                 params=params,
                 headers={"Accept": "text/event-stream"},
             ) as response:
@@ -254,7 +265,7 @@ class SatQueryClient:
                     )
                     raise PlatformAPIError(
                         str(detail),
-                        method="GET",
+                        method=method,
                         url=str(response.request.url),
                         status_code=response.status_code,
                         payload=body,
@@ -276,7 +287,7 @@ class SatQueryClient:
         except httpx.HTTPError as exc:
             raise PlatformAPIError(
                 "The SatQuery platform event stream could not be reached.",
-                method="GET",
+                method=method,
                 url=url,
                 remediation=[
                     "Start the platform with `python -m satquery serve`.",

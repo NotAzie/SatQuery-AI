@@ -6,11 +6,14 @@ import hashlib
 import json
 import math
 import uuid
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, ClassVar, Dict, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+_MAX_CONTRACT_NESTING_DEPTH = 64
 
 
 def utc_now() -> datetime:
@@ -19,6 +22,30 @@ def utc_now() -> datetime:
 
 def _new_id() -> str:
     return uuid.uuid4().hex
+
+
+def _validate_contract_nesting(value: Any, contract_name: str) -> None:
+    stack: list[tuple[Any, int, bool]] = [(value, 0, False)]
+    active_containers: set[int] = set()
+    while stack:
+        item, depth, exiting = stack.pop()
+        if not isinstance(item, (Mapping, list, tuple)):
+            continue
+        identity = id(item)
+        if exiting:
+            active_containers.remove(identity)
+            continue
+        if depth > _MAX_CONTRACT_NESTING_DEPTH:
+            raise ValueError(
+                f"{contract_name} data exceeds the maximum nesting depth "
+                f"of {_MAX_CONTRACT_NESTING_DEPTH}"
+            )
+        if identity in active_containers:
+            raise ValueError(f"{contract_name} data must not contain circular references")
+        active_containers.add(identity)
+        stack.append((item, depth, True))
+        children = item.values() if isinstance(item, Mapping) else item
+        stack.extend((child, depth + 1, False) for child in children)
 
 
 def _is_geographic_crs(crs: str) -> bool:
@@ -186,6 +213,12 @@ def _freeze_contract_data(value: Any) -> Any:
 class Contract(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     contract_version: ClassVar[int] = 1
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_input_nesting(cls, value: Any) -> Any:
+        _validate_contract_nesting(value, cls.__name__)
+        return value
 
     def model_post_init(self, _context: Any) -> None:
         self._freeze_fields()

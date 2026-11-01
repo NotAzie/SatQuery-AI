@@ -17,6 +17,9 @@ from satquery.platform.contracts import (
     ObservationStackMember,
 )
 from satquery.platform.earth_memory import (
+    EarthMemoryArtifactGeometryError,
+    EarthMemoryCursorError,
+    EarthMemorySpatialError,
     EarthMemoryQuery,
     InMemoryEarthMemory,
     SQLiteEarthMemory,
@@ -414,6 +417,175 @@ def test_earth_memory_filters_are_spatiotemporal_deterministic_and_crs_scoped(sq
     assert persistent.verify_integrity().status == "healthy"
 
 
+def test_earth_memory_exact_geometry_search_is_same_crs_and_adapter_consistent(
+    sqlite_database_path,
+):
+    indexed_at = datetime(2025, 3, 1, tzinfo=timezone.utc).isoformat()
+    donut = artifact_from_payload(
+        artifact_id="earth-object:donut",
+        artifact_type="earth_object",
+        payload={
+            "crs": "OGC:CRS84",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [0, 0], [10, 0], [10, 10], [0, 10], [0, 0],
+                    ],
+                    [
+                        [4, 4], [6, 4], [6, 6], [4, 6], [4, 4],
+                    ],
+                ],
+            },
+        },
+        indexed_at=indexed_at,
+    )
+    hole_fill = artifact_from_payload(
+        artifact_id="earth-object:hole-fill",
+        artifact_type="earth_object",
+        payload={
+            "crs": "OGC:CRS84",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                    [4.5, 4.5], [5.5, 4.5], [5.5, 5.5],
+                    [4.5, 5.5], [4.5, 4.5],
+                ]],
+            },
+        },
+        indexed_at=indexed_at,
+    )
+    bbox_only = artifact_from_payload(
+        artifact_id="observation:bbox-only",
+        artifact_type="observation",
+        payload={"bbox": [0, 0, 10, 10], "crs": "OGC:CRS84"},
+        indexed_at=indexed_at,
+    )
+    artifacts = (donut, hole_fill, bbox_only)
+    memory = InMemoryEarthMemory(artifacts)
+    persistent = SQLiteEarthMemory(sqlite_database_path)
+    for artifact in artifacts:
+        persistent.upsert(artifact)
+
+    point_in_hole = EarthMemoryQuery(
+        spatial_geometry={"type": "Point", "coordinates": [5, 5]},
+        spatial_crs="OGC:CRS84",
+    )
+    result = memory.search(point_in_hole)
+    assert tuple(item.artifact_id for item in result.artifacts) == (
+        "earth-object:hole-fill",
+    )
+    assert result.spatial_semantics == "exact_same_crs_geometry_intersects"
+    assert persistent.search(point_in_hole) == result
+    assert persistent.verify_integrity().status == "healthy"
+
+    boundary_point = point_in_hole.model_copy(
+        update={"spatial_geometry": {"type": "Point", "coordinates": [4, 5]}}
+    )
+    assert tuple(
+        item.artifact_id for item in memory.search(boundary_point).artifacts
+    ) == ("earth-object:donut",)
+    assert persistent.search(boundary_point) == memory.search(boundary_point)
+    assert memory.search(
+        point_in_hole.model_copy(update={"spatial_crs": "EPSG:3857"})
+    ).total == 0
+    wide_query = EarthMemoryQuery(
+        spatial_geometry={
+            "type": "Polygon",
+            "coordinates": [[
+                [0, 0], [10, 0], [10, 10], [0, 10], [0, 0],
+            ]],
+        },
+        spatial_crs="OGC:CRS84",
+        limit=1,
+    )
+    first_page = memory.search(wide_query)
+    assert first_page.total == 2 and first_page.next_cursor
+    with pytest.raises(EarthMemoryCursorError, match="does not match this search query"):
+        memory.search(wide_query.model_copy(update={
+            "spatial_geometry": {"type": "Point", "coordinates": [5, 5]},
+            "cursor": first_page.next_cursor,
+        }))
+
+
+def test_earth_memory_rejects_invalid_exact_geometry_queries():
+    with pytest.raises(ValueError, match="exactly one spatial filter"):
+        EarthMemoryQuery(
+            spatial_geometry={"type": "Point", "coordinates": [0, 0]}
+        )
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        EarthMemoryQuery(
+            spatial_bbox=(0, 0, 1, 1),
+            spatial_geometry={"type": "Point", "coordinates": [0, 0]},
+            spatial_crs="OGC:CRS84",
+        )
+    memory = InMemoryEarthMemory()
+    with pytest.raises(EarthMemorySpatialError, match="topologically valid"):
+        memory.search(EarthMemoryQuery(
+            spatial_geometry={
+                "type": "Polygon",
+                "coordinates": [[
+                    [0, 0], [2, 2], [0, 2], [2, 0], [0, 0],
+                ]],
+            },
+            spatial_crs="OGC:CRS84",
+        ))
+    invalid_source = artifact_from_payload(
+        artifact_id="earth-object:invalid-geometry",
+        artifact_type="earth_object",
+        payload={
+            "crs": "OGC:CRS84",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                    [0, 0], [2, 2], [0, 2], [2, 0], [0, 0],
+                ]],
+            },
+        },
+        indexed_at=datetime(2025, 3, 1, tzinfo=timezone.utc).isoformat(),
+    )
+    memory.upsert(invalid_source)
+    with pytest.raises(EarthMemoryArtifactGeometryError, match="invalid geometry"):
+        memory.search(EarthMemoryQuery(
+            spatial_geometry={"type": "Point", "coordinates": [0.5, 0.5]},
+            spatial_crs="OGC:CRS84",
+        ))
+
+
+def test_sqlite_earth_memory_migrates_v6_geometry_index(sqlite_database_path):
+    artifact = artifact_from_payload(
+        artifact_id="earth-object:migrate-geometry-index",
+        artifact_type="earth_object",
+        payload={
+            "crs": "OGC:CRS84",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                    [0, 0], [3, 0], [3, 3], [0, 3], [0, 0],
+                ]],
+            },
+        },
+        indexed_at=datetime(2025, 3, 1, tzinfo=timezone.utc).isoformat(),
+    )
+    previous = SQLiteEarthMemory(sqlite_database_path)
+    previous.upsert(artifact)
+    connection = sqlite3.connect(sqlite_database_path)
+    try:
+        connection.execute("UPDATE earth_memory_schema SET version = 6 WHERE singleton = 1")
+        connection.execute("DROP TABLE earth_memory_geometry")
+        connection.commit()
+    finally:
+        connection.close()
+
+    migrated = SQLiteEarthMemory(sqlite_database_path)
+    result = migrated.search(EarthMemoryQuery(
+        spatial_geometry={"type": "Point", "coordinates": [1, 1]},
+        spatial_crs="OGC:CRS84",
+    ))
+    assert tuple(item.artifact_id for item in result.artifacts) == (artifact.artifact_id,)
+    assert migrated.verify_integrity().status == "healthy"
+
+
 def test_earth_memory_spatiotemporal_query_requires_explicit_complete_bounds():
     with pytest.raises(ValueError, match="supplied together"):
         EarthMemoryQuery(spatial_bbox=(0, 0, 1, 1))
@@ -537,6 +709,37 @@ def test_sqlite_earth_memory_detects_corrupt_spatiotemporal_index(sqlite_databas
     report = memory.verify_integrity()
     assert report.status == "corrupt"
     assert any("spatiotemporal index" in error for error in report.errors)
+
+
+def test_sqlite_earth_memory_detects_corrupt_geometry_index(sqlite_database_path):
+    artifact = artifact_from_payload(
+        artifact_id="earth-object:geometry-integrity",
+        artifact_type="earth_object",
+        payload={
+            "crs": "OGC:CRS84",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                    [1, 2], [3, 2], [3, 4], [1, 4], [1, 2],
+                ]],
+            },
+        },
+        indexed_at=datetime(2025, 7, 1, tzinfo=timezone.utc).isoformat(),
+    )
+    memory = SQLiteEarthMemory(sqlite_database_path)
+    memory.upsert(artifact)
+    connection = sqlite3.connect(memory.path)
+    try:
+        connection.execute(
+            "UPDATE earth_memory_geometry SET max_x = 99 WHERE artifact_id = ?",
+            (artifact.artifact_id,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = memory.verify_integrity()
+    assert report.status == "corrupt"
+    assert any("geometry index" in error for error in report.errors)
 
 
 def test_temporal_stack_and_difference_are_searchable_by_declared_space_and_time(sqlite_database_path):

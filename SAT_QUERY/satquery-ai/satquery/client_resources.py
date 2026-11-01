@@ -464,6 +464,43 @@ class ScientificResource(_Resource):
         )
 
 
+class AgentResource(_Resource):
+    """Conversational session and streaming-turn access to the agent API."""
+
+    def create_session(self) -> Any:
+        return self._post("/api/v1/agent/sessions")
+
+    def get_session(self, session_id: str) -> Any:
+        return self._get(f"/api/v1/agent/sessions/{self._id(session_id)}")
+
+    def stream_turn(
+        self,
+        session_id: str,
+        *,
+        message: str,
+        model_id: str,
+        execution_authorized: bool = False,
+    ) -> Iterator[Any]:
+        if not isinstance(message, str) or not message.strip():
+            raise ValueError("agent message must not be empty")
+        if not isinstance(model_id, str) or not model_id.strip():
+            raise ValueError("agent model_id must not be empty")
+        if type(execution_authorized) is not bool:
+            raise TypeError("execution_authorized must be a boolean")
+        return self._client.stream_json_events(
+            f"/api/v1/agent/sessions/{self._id(session_id)}/turns",
+            method="POST",
+            payload={
+                "message": message,
+                "model_id": model_id,
+                "execution_authorized": execution_authorized,
+            },
+        )
+
+    def cancel_turn(self, session_id: str) -> Any:
+        return self._post(f"/api/v1/agent/sessions/{self._id(session_id)}/cancel")
+
+
 def _is_contract(value: Any) -> bool:
     return callable(getattr(value, "model_dump", None))
 

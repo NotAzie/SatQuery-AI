@@ -17,6 +17,7 @@ from collections.abc import Iterable
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from enum import Enum
+from importlib import import_module
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
@@ -85,6 +86,7 @@ class EarthMemoryQuery(Contract):
     method_id: str | None = None
     source_artifact_id: str | None = None
     spatial_bbox: tuple[float, float, float, float] | None = None
+    spatial_geometry: dict[str, Any] | None = None
     spatial_crs: str | None = None
     temporal_start: datetime | None = None
     temporal_end: datetime | None = None
@@ -93,16 +95,27 @@ class EarthMemoryQuery(Contract):
 
     @model_validator(mode="after")
     def validate_spatiotemporal_query(self) -> EarthMemoryQuery:
-        if (self.spatial_bbox is None) != (self.spatial_crs is None):
-            raise ValueError("spatial_bbox and spatial_crs must be supplied together")
+        if self.spatial_bbox is not None and self.spatial_geometry is not None:
+            raise ValueError("spatial_bbox and spatial_geometry are mutually exclusive")
+        has_spatial_filter = (
+            self.spatial_bbox is not None or self.spatial_geometry is not None
+        )
+        if has_spatial_filter != (self.spatial_crs is not None):
+            raise ValueError(
+                "spatial_crs must be supplied together with exactly one spatial filter"
+            )
         if self.spatial_bbox is not None:
             min_x, min_y, max_x, max_y = self.spatial_bbox
             if not all(math.isfinite(value) for value in self.spatial_bbox):
                 raise ValueError("spatial_bbox coordinates must be finite")
             if min_x > max_x or min_y > max_y:
                 raise ValueError("spatial_bbox bounds must be ordered")
-            if not self.spatial_crs or not self.spatial_crs.strip():
-                raise ValueError("spatial_crs must be non-empty")
+        if self.spatial_geometry is not None and not isinstance(
+            self.spatial_geometry, dict
+        ):
+            raise ValueError("spatial_geometry must be a GeoJSON geometry object")
+        if self.spatial_crs is not None and not self.spatial_crs.strip():
+            raise ValueError("spatial_crs must be non-empty")
         if (self.temporal_start is None) != (self.temporal_end is None):
             raise ValueError("temporal_start and temporal_end must be supplied together")
         if self.temporal_start is not None:
@@ -121,7 +134,10 @@ class EarthMemorySearchResult(Contract):
         "sha256_counted_sha512_sum_v1"
     )
     semantics: Literal["deterministic_literal_search"] = "deterministic_literal_search"
-    spatial_semantics: Literal["inclusive_same_crs_bbox_overlap"] | None = None
+    spatial_semantics: Literal[
+        "inclusive_same_crs_bbox_overlap",
+        "exact_same_crs_geometry_intersects",
+    ] | None = None
     temporal_semantics: Literal["inclusive_interval_overlap"] | None = None
     next_cursor: str | None = None
 
@@ -136,6 +152,18 @@ class EarthMemoryIntegrityReport(Contract):
 
 class EarthMemoryCursorError(ValueError):
     """A continuation cursor is malformed or incompatible with its query."""
+
+
+class EarthMemorySpatialError(ValueError):
+    """A requested exact geometry filter is invalid."""
+
+
+class EarthMemorySpatialDependencyError(RuntimeError):
+    """An optional dependency required by exact geometry search is unavailable."""
+
+
+class EarthMemoryArtifactGeometryError(RuntimeError):
+    """An indexed artifact has unusable geometry for an exact spatial query."""
 
 
 class StaleEarthMemoryCursorError(EarthMemoryCursorError):
@@ -189,6 +217,7 @@ class InMemoryEarthMemory:
         terms = tuple(
             token.casefold() for token in (query.text or "").split() if token
         )
+        query_geometry = _query_spatial_geometry(query)
         with self._lock:
             values = tuple(self._artifacts[key] for key in sorted(self._artifacts))
             revision = _revision_from_state(
@@ -213,7 +242,7 @@ class InMemoryEarthMemory:
                 continue
             if query.source_artifact_id and query.source_artifact_id not in item.source_artifact_ids:
                 continue
-            if not _matches_spatiotemporal_query(item, query):
+            if not _matches_spatiotemporal_query(item, query, query_geometry):
                 continue
             haystack = _search_haystack(item)
             if terms and not all(term in haystack for term in terms):
@@ -228,7 +257,7 @@ class InMemoryEarthMemory:
             artifacts=tuple(page), total=len(matched),
             index_revision=revision,
             spatial_semantics=(
-                "inclusive_same_crs_bbox_overlap" if query.spatial_bbox is not None else None
+                _spatial_semantics(query)
             ),
             temporal_semantics=(
                 "inclusive_interval_overlap" if query.temporal_start is not None else None
@@ -246,7 +275,7 @@ class SQLiteEarthMemory:
     adapter; no SQLite tokenizer or relevance ranking changes search meaning.
     """
 
-    SCHEMA_VERSION = 6
+    SCHEMA_VERSION = 7
 
     def __init__(self, path: str | Path, *, busy_timeout_seconds: float = 5.0) -> None:
         if busy_timeout_seconds <= 0 or not math.isfinite(busy_timeout_seconds):
@@ -332,6 +361,16 @@ class SQLiteEarthMemory:
                     "ON earth_memory_spatiotemporal(spatial_crs, min_x, max_x, min_y, max_y)"
                 )
                 connection.execute(
+                    "CREATE TABLE IF NOT EXISTS earth_memory_geometry ("
+                    "artifact_id TEXT PRIMARY KEY, spatial_crs TEXT NOT NULL, "
+                    "min_x REAL, min_y REAL, max_x REAL, max_y REAL, "
+                    "FOREIGN KEY (artifact_id) REFERENCES earth_memory_artifacts(artifact_id) ON DELETE CASCADE)"
+                )
+                connection.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_earth_memory_geometry "
+                    "ON earth_memory_geometry(spatial_crs, min_x, max_x, min_y, max_y)"
+                )
+                connection.execute(
                     "CREATE INDEX IF NOT EXISTS idx_earth_memory_temporal "
                     "ON earth_memory_spatiotemporal(temporal_start, temporal_end)"
                 )
@@ -369,11 +408,13 @@ class SQLiteEarthMemory:
                         (self.SCHEMA_VERSION,),
                     )
                     self._rebuild_spatiotemporal_index(connection)
+                    self._rebuild_geometry_index(connection)
                     self._rebuild_canonical_variable_index(connection)
                     self._rebuild_search_ngram_index(connection)
                     self._rebuild_revision_state(connection)
-                elif row["version"] in {1, 2, 3, 4, 5}:
+                elif row["version"] in {1, 2, 3, 4, 5, 6}:
                     self._rebuild_spatiotemporal_index(connection)
+                    self._rebuild_geometry_index(connection)
                     self._rebuild_canonical_variable_index(connection)
                     self._rebuild_search_ngram_index(connection)
                     self._rebuild_revision_state(connection)
@@ -404,6 +445,15 @@ class SQLiteEarthMemory:
         ).fetchall()
         for row in rows:
             _write_spatiotemporal_index(connection, _decode_artifact(row["artifact_json"]))
+
+    @staticmethod
+    def _rebuild_geometry_index(connection: sqlite3.Connection) -> None:
+        connection.execute("DELETE FROM earth_memory_geometry")
+        rows = connection.execute(
+            "SELECT artifact_id, artifact_json FROM earth_memory_artifacts ORDER BY artifact_id"
+        ).fetchall()
+        for row in rows:
+            _write_geometry_index(connection, _decode_artifact(row["artifact_json"]))
 
     @staticmethod
     def _rebuild_canonical_variable_index(connection: sqlite3.Connection) -> None:
@@ -483,6 +533,7 @@ class SQLiteEarthMemory:
                         ((artifact.artifact_id, item) for item in artifact.source_artifact_ids),
                     )
                     _write_spatiotemporal_index(connection, artifact)
+                    _write_geometry_index(connection, artifact)
                     _write_canonical_variable_index(connection, artifact)
                     _write_search_ngram_index(connection, artifact)
                     state = connection.execute(
@@ -523,6 +574,7 @@ class SQLiteEarthMemory:
 
     def search(self, query: EarthMemoryQuery) -> EarthMemorySearchResult:
         terms = tuple(token.casefold() for token in (query.text or "").split() if token)
+        query_geometry = _query_spatial_geometry(query)
         with self._connection() as connection:
             connection.execute("BEGIN")
             revision_state = connection.execute(
@@ -566,6 +618,19 @@ class SQLiteEarthMemory:
                 conditions.extend((
                     "s.spatial_crs = ?", "s.min_x <= ?", "s.max_x >= ?",
                     "s.min_y <= ?", "s.max_y >= ?",
+                ))
+                parameters.extend((query.spatial_crs, max_x, min_x, max_y, min_y))
+            elif query.spatial_geometry is not None:
+                if query_geometry is None:
+                    raise ValueError("validated spatial geometry is missing")
+                min_x, min_y, max_x, max_y = query_geometry.bounds
+                joins.append(
+                    "JOIN earth_memory_geometry g ON g.artifact_id = a.artifact_id"
+                )
+                conditions.extend((
+                    "g.spatial_crs = ?",
+                    "(g.min_x IS NULL OR (g.min_x <= ? AND g.max_x >= ? "
+                    "AND g.min_y <= ? AND g.max_y >= ?))",
                 ))
                 parameters.extend((query.spatial_crs, max_x, min_x, max_y, min_y))
             if query.temporal_start is not None:
@@ -628,7 +693,9 @@ class SQLiteEarthMemory:
                         and query.source_artifact_id not in artifact.source_artifact_ids
                     ):
                         continue
-                    if not _matches_spatiotemporal_query(artifact, query):
+                    if not _matches_spatiotemporal_query(
+                        artifact, query, query_geometry
+                    ):
                         continue
                     haystack = _search_haystack(artifact)
                     if terms and not all(term in haystack for term in terms):
@@ -646,7 +713,7 @@ class SQLiteEarthMemory:
             artifacts=tuple(page), total=total,
             index_revision=revision,
             spatial_semantics=(
-                "inclusive_same_crs_bbox_overlap" if query.spatial_bbox is not None else None
+                _spatial_semantics(query)
             ),
             temporal_semantics=(
                 "inclusive_interval_overlap" if query.temporal_start is not None else None
@@ -675,6 +742,10 @@ class SQLiteEarthMemory:
             extent_rows = connection.execute(
                 "SELECT artifact_id, spatial_crs, min_x, min_y, max_x, max_y, temporal_start, temporal_end "
                 "FROM earth_memory_spatiotemporal ORDER BY artifact_id"
+            ).fetchall()
+            geometry_rows = connection.execute(
+                "SELECT artifact_id, spatial_crs, min_x, min_y, max_x, max_y "
+                "FROM earth_memory_geometry ORDER BY artifact_id"
             ).fetchall()
             revision_state = connection.execute(
                 "SELECT artifact_count, accumulator FROM earth_memory_revision_state "
@@ -717,6 +788,24 @@ class SQLiteEarthMemory:
         ]
         if expected_extents != actual_extents:
             errors.append("spatiotemporal index does not match immutable artifact payloads")
+        expected_geometries = []
+        for row in rows:
+            try:
+                artifact = _verified_row_artifact(row)
+            except (ValueError, TypeError):
+                continue
+            geometry_index = _geometry_index_values(artifact)
+            if geometry_index is not None:
+                expected_geometries.append((artifact.artifact_id, *geometry_index))
+        actual_geometries = [
+            (
+                row["artifact_id"], row["spatial_crs"], row["min_x"],
+                row["min_y"], row["max_x"], row["max_y"],
+            )
+            for row in geometry_rows
+        ]
+        if expected_geometries != actual_geometries:
+            errors.append("geometry index does not match immutable artifact payloads")
         expected_variables = []
         for row in rows:
             try:
@@ -898,6 +987,15 @@ def _geometry_bounds(geometry: Any) -> tuple[float, float, float, float] | None:
     points: list[tuple[float, float]] = []
 
     def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            coordinates = value.get("coordinates")
+            if coordinates is not None:
+                visit(coordinates)
+            children = value.get("geometries", ())
+            if isinstance(children, (tuple, list)):
+                for child in children:
+                    visit(child)
+            return
         if not isinstance(value, (tuple, list)):
             return
         if len(value) >= 2 and all(
@@ -908,7 +1006,7 @@ def _geometry_bounds(geometry: Any) -> tuple[float, float, float, float] | None:
         for child in value:
             visit(child)
 
-    visit(geometry.get("coordinates"))
+    visit(geometry)
     if not points:
         return None
     xs, ys = zip(*points)
@@ -925,8 +1023,121 @@ def _canonical_timestamp(value: Any) -> str | None:
     return parsed.astimezone(timezone.utc).isoformat()
 
 
+def _query_spatial_geometry(query: EarthMemoryQuery) -> Any | None:
+    if query.spatial_geometry is None:
+        return None
+    try:
+        geometry = _shape_geometry(query.spatial_geometry)
+    except (TypeError, ValueError) as exc:
+        raise EarthMemorySpatialError(
+            f"spatial_geometry is not a valid, non-empty GeoJSON geometry: {exc}"
+        ) from exc
+    if geometry.is_empty or not geometry.is_valid:
+        raise EarthMemorySpatialError(
+            "spatial_geometry must be non-empty and topologically valid"
+        )
+    if not all(math.isfinite(value) for value in geometry.bounds):
+        raise EarthMemorySpatialError("spatial_geometry coordinates must be finite")
+    return geometry
+
+
+def _shape_geometry(geometry: dict[str, Any]) -> Any:
+    try:
+        shapely_geometry = import_module("shapely.geometry")
+        geos_exception = import_module("shapely.errors").GEOSException
+    except ImportError as exc:
+        raise EarthMemorySpatialDependencyError(
+            "Exact Earth Memory geometry search requires the optional "
+            "'geospatial' dependencies."
+        ) from exc
+    try:
+        return shapely_geometry.shape(geometry)
+    except (TypeError, ValueError, geos_exception) as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def _artifact_spatial_geometry(
+    artifact: EarthMemoryArtifact,
+) -> tuple[dict[str, Any] | None, str | None]:
+    payload = artifact.payload
+    if artifact.artifact_type in {"observation", "earth_object"}:
+        geometry = payload.get("geometry")
+        crs = payload.get("crs")
+        return (
+            geometry if isinstance(geometry, dict) else None,
+            crs if isinstance(crs, str) else None,
+        )
+    if artifact.artifact_type in {"observation_stack", "temporal_difference"}:
+        geometry = payload.get("spatial_support_geometry")
+        crs = payload.get("spatial_support_crs")
+        return (
+            geometry if isinstance(geometry, dict) else None,
+            crs if isinstance(crs, str) else None,
+        )
+    return None, None
+
+
+def _artifact_intersects_query_geometry(
+    artifact: EarthMemoryArtifact,
+    query: EarthMemoryQuery,
+    query_geometry: Any,
+) -> bool:
+    artifact_geometry, artifact_crs = _artifact_spatial_geometry(artifact)
+    if (
+        artifact_geometry is None
+        or artifact_crs != query.spatial_crs
+        or query_geometry is None
+    ):
+        return False
+    bounds = _geometry_index_values(artifact)
+    if bounds is None:
+        return False
+    _, min_x, min_y, max_x, max_y = bounds
+    query_min_x, query_min_y, query_max_x, query_max_y = query_geometry.bounds
+    if min_x is not None and (
+        min_x > query_max_x
+        or max_x < query_min_x
+        or min_y > query_max_y
+        or max_y < query_min_y
+    ):
+        return False
+    try:
+        shape = _shape_geometry(artifact_geometry)
+    except (TypeError, ValueError) as exc:
+        raise EarthMemoryArtifactGeometryError(
+            f"Earth Memory artifact {artifact.artifact_id!r} has invalid geometry "
+            f"for exact spatial search: {exc}"
+        ) from exc
+    if shape.is_empty or not shape.is_valid:
+        raise EarthMemoryArtifactGeometryError(
+            f"Earth Memory artifact {artifact.artifact_id!r} has empty or "
+            "topologically invalid geometry for exact spatial search"
+        )
+    if not all(math.isfinite(value) for value in shape.bounds):
+        raise EarthMemoryArtifactGeometryError(
+            f"Earth Memory artifact {artifact.artifact_id!r} has non-finite "
+            "geometry coordinates for exact spatial search"
+        )
+    return bool(shape.intersects(query_geometry))
+
+
+def _spatial_semantics(
+    query: EarthMemoryQuery,
+) -> Literal[
+    "inclusive_same_crs_bbox_overlap",
+    "exact_same_crs_geometry_intersects",
+] | None:
+    if query.spatial_bbox is not None:
+        return "inclusive_same_crs_bbox_overlap"
+    if query.spatial_geometry is not None:
+        return "exact_same_crs_geometry_intersects"
+    return None
+
+
 def _matches_spatiotemporal_query(
-    artifact: EarthMemoryArtifact, query: EarthMemoryQuery
+    artifact: EarthMemoryArtifact,
+    query: EarthMemoryQuery,
+    query_geometry: Any | None = None,
 ) -> bool:
     spatial_crs, min_x, min_y, max_x, max_y, start, end = _spatiotemporal_values(artifact)
     if query.spatial_bbox is not None:
@@ -935,6 +1146,10 @@ def _matches_spatiotemporal_query(
         query_min_x, query_min_y, query_max_x, query_max_y = query.spatial_bbox
         if min_x > query_max_x or max_x < query_min_x or min_y > query_max_y or max_y < query_min_y:
             return False
+    if query.spatial_geometry is not None and not _artifact_intersects_query_geometry(
+        artifact, query, query_geometry
+    ):
+        return False
     if query.temporal_start is not None:
         if start is None or end is None:
             return False
@@ -950,6 +1165,31 @@ def _write_spatiotemporal_index(
         "INSERT INTO earth_memory_spatiotemporal(artifact_id, spatial_crs, min_x, min_y, max_x, max_y, temporal_start, temporal_end) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (artifact.artifact_id, *_spatiotemporal_values(artifact)),
+    )
+
+
+def _geometry_index_values(
+    artifact: EarthMemoryArtifact,
+) -> tuple[str, float | None, float | None, float | None, float | None] | None:
+    geometry, crs = _artifact_spatial_geometry(artifact)
+    if geometry is None or not crs:
+        return None
+    bounds = _geometry_bounds(geometry)
+    if bounds is None:
+        return (crs, None, None, None, None)
+    return (crs, *bounds)
+
+
+def _write_geometry_index(
+    connection: sqlite3.Connection, artifact: EarthMemoryArtifact
+) -> None:
+    values = _geometry_index_values(artifact)
+    if values is None:
+        return
+    connection.execute(
+        "INSERT INTO earth_memory_geometry(artifact_id, spatial_crs, min_x, min_y, max_x, max_y) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (artifact.artifact_id, *values),
     )
 
 

@@ -439,16 +439,56 @@ class SQLiteExecutionJournal:
 
     def events(self, plan_id: str, *, after_sequence: int = 0) -> tuple[dict[str, Any], ...]:
         with self._connection() as connection:
-            rows = connection.execute("SELECT sequence, plan_id, event_type, timestamp, payload_json, previous_event_sha256, event_sha256 FROM satquery_execution_events WHERE plan_id=? ORDER BY sequence", (plan_id,)).fetchall()
-        events = tuple({
-            "sequence": row["sequence"], "plan_id": row["plan_id"],
-            "event_type": row["event_type"], "timestamp": row["timestamp"],
-            "payload": json.loads(row["payload_json"]),
-            "previous_event_sha256": row["previous_event_sha256"],
-            "event_sha256": row["event_sha256"],
-        } for row in rows)
-        _verify_event_chain(events)
-        return tuple(event for event in events if event["sequence"] > after_sequence)
+            if after_sequence > 0:
+                anchor_row = connection.execute(
+                    "SELECT sequence, plan_id, event_type, timestamp, payload_json, "
+                    "previous_event_sha256, event_sha256 "
+                    "FROM satquery_execution_events "
+                    "WHERE plan_id = ? AND sequence <= ? "
+                    "ORDER BY sequence DESC LIMIT 1",
+                    (plan_id, after_sequence),
+                ).fetchone()
+                anchor = _event_from_row(anchor_row) if anchor_row is not None else None
+                if anchor is not None and _event_digest(anchor) != anchor["event_sha256"]:
+                    raise ValidationError(
+                        "Execution event integrity verification failed.",
+                        context={"sequence": anchor["sequence"]},
+                    )
+                rows = connection.execute(
+                    "SELECT sequence, plan_id, event_type, timestamp, payload_json, "
+                    "previous_event_sha256, event_sha256 "
+                    "FROM satquery_execution_events "
+                    "WHERE plan_id = ? AND sequence > ? ORDER BY sequence",
+                    (plan_id, after_sequence),
+                ).fetchall()
+            else:
+                anchor = None
+                rows = connection.execute(
+                    "SELECT sequence, plan_id, event_type, timestamp, payload_json, "
+                    "previous_event_sha256, event_sha256 "
+                    "FROM satquery_execution_events WHERE plan_id = ? ORDER BY sequence",
+                    (plan_id,),
+                ).fetchall()
+        events = tuple(_event_from_row(row) for row in rows)
+        _verify_event_chain(
+            events,
+            initial_previous_hash=(
+                anchor["event_sha256"] if anchor is not None else None
+            ),
+        )
+        return events
+
+
+def _event_from_row(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "sequence": row["sequence"],
+        "plan_id": row["plan_id"],
+        "event_type": row["event_type"],
+        "timestamp": row["timestamp"],
+        "payload": json.loads(row["payload_json"]),
+        "previous_event_sha256": row["previous_event_sha256"],
+        "event_sha256": row["event_sha256"],
+    }
 
 
 def _restore_checkpoint(value: tuple[str, str, Any, dict[str, Any]], codecs: TaskOutputCodecRegistry) -> TaskExecution:
@@ -474,10 +514,17 @@ def _event_digest(event: Mapping[str, Any]) -> str:
     }))
 
 
-def _verify_event_chain(events: tuple[dict[str, Any], ...]) -> None:
+def _verify_event_chain(
+    events: tuple[dict[str, Any], ...],
+    *,
+    initial_previous_hash: str | None = None,
+) -> None:
     previous_by_plan: dict[str, str] = {}
     for event in events:
-        expected_previous = previous_by_plan.get(event["plan_id"], "0" * 64)
+        expected_previous = previous_by_plan.get(
+            event["plan_id"],
+            initial_previous_hash if initial_previous_hash is not None else "0" * 64,
+        )
         if event["previous_event_sha256"] != expected_previous:
             raise ValidationError(
                 "Execution event chain is discontinuous.",

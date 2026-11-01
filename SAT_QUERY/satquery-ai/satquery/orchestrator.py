@@ -24,6 +24,7 @@ from .backends.base import VisionSuite
 from .backends.hf_practical import PracticalVisionFactory
 from .backends.rsvlm import RSVLMVision
 from .backends.geochat import GeoChatVision
+from .agent import AgentTurnService
 from .config import Settings, get_settings
 from .errors import (
     QueryError,
@@ -114,6 +115,14 @@ class SatQueryEngine:
         register_legacy_tools(self.platform_registries.tools, self.tools)
         self.platform_runtime = PlatformRuntime(
             registries=self.platform_registries,
+        )
+        self.agent_turn_service = AgentTurnService(
+            self.platform_runtime,
+            self.platform_registries.reasoners,
+            self.platform_runtime.config.create_agent_session_store(),
+            model_timeout_seconds=(
+                self.platform_runtime.config.agent.model_timeout_seconds
+            ),
         )
         self.connector_manager = self.platform_runtime.connector_manager
         self._practical = PracticalVisionFactory(self.registry, self.settings)

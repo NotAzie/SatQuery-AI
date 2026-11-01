@@ -435,6 +435,20 @@ investigation and observation payloads, so choose its location and filesystem
 access controls accordingly. Leaving the setting unset keeps the in-memory
 repository used by tests and ephemeral local sessions.
 
+Agent conversations use the in-memory store by default. To retain sessions
+across service restarts, set `storage.agent_sessions_path` in the platform
+configuration (or `SATQUERY_PLATFORM__STORAGE__AGENT_SESSIONS_PATH`); if unset,
+the configured Earth Memory path is used as the shared local SQLite database.
+Session persistence is single-host and does not supply authentication,
+encryption, or distributed coordination.
+
+Reasoning-model streaming uses a 120-second per-round deadline by default.
+Set `agent.model_timeout_seconds` (or
+`SATQUERY_PLATFORM__AGENT__MODEL_TIMEOUT_SECONDS`) to a finite positive value
+appropriate for the registered provider and local hardware. Adapters must
+honor asynchronous cancellation so a timed-out request releases provider-side
+and local resources.
+
 When the platform audit store is configured, hypothesis lifecycle transitions
 are also recorded there with the complete versioned hypothesis and transition
 event. The runtime verifies the audit chain and replays those events after a

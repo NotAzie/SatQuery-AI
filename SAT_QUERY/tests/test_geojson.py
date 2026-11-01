@@ -1,9 +1,11 @@
+import pytest
+from pydantic import ValidationError
 from fastapi.testclient import TestClient
 
 from satquery.api import create_app, set_engine
 from satquery.config import get_settings
 from satquery.orchestrator import SatQueryEngine
-from satquery.platform.contracts import EarthObject
+from satquery.platform.contracts import EarthObject, EarthQuery
 from satquery.platform.geojson import earth_objects_to_geojson
 
 
@@ -43,6 +45,32 @@ def test_geojson_exports_only_valid_declared_wgs84_geometry():
     ]
 
 
+def test_excessively_nested_geojson_is_rejected_as_contract_validation_error():
+    geometry = {"type": "Point", "coordinates": [12, 34]}
+    for _ in range(40):
+        geometry = {"type": "GeometryCollection", "geometries": [geometry]}
+
+    with pytest.raises(ValidationError, match="maximum nesting depth"):
+        EarthQuery(geometry=geometry, crs="EPSG:4326")
+
+
+def test_contract_nesting_check_accepts_normal_geometry_collections():
+    geometry = {
+        "type": "GeometryCollection",
+        "geometries": [
+            {"type": "Point", "coordinates": [12, 34]},
+            {
+                "type": "GeometryCollection",
+                "geometries": [
+                    {"type": "LineString", "coordinates": [[0, 0], [1, 1]]}
+                ],
+            },
+        ],
+    }
+
+    assert EarthQuery(geometry=geometry, crs="EPSG:4326").geometry == geometry
+
+
 def test_geojson_export_is_exposed_through_api_with_geojson_media_type():
     engine = SatQueryEngine(get_settings())
     engine.platform_runtime.earth_objects.put(
@@ -57,4 +85,3 @@ def test_geojson_export_is_exposed_through_api_with_geojson_media_type():
             assert response.json()["features"][0]["id"] == "api-point"
     finally:
         set_engine(None)
-

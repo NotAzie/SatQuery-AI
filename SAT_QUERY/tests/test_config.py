@@ -73,6 +73,7 @@ def test_effective_storage_paths_are_the_same_paths_used_by_store_factories():
         "execution": execution_path,
         "audit": execution_path,
         "monitoring": execution_path,
+        "agent_sessions": execution_path,
     }
 
 

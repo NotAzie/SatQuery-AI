@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
 
@@ -95,6 +96,73 @@ def test_sqlite_journal_resumes_successful_tasks_after_engine_recreation(executi
     assert any(item["event_type"] == "task.checkpointed" for item in events)
     assert events[0]["previous_event_sha256"] == "0" * 64
     assert all(item["event_sha256"] for item in events)
+
+
+def test_sqlite_event_cursor_reads_and_verifies_only_the_unread_tail(
+    execution_database, monkeypatch
+):
+    journal = SQLiteExecutionJournal(execution_database)
+    plan = ExecutionPlan(
+        plan_id="event-tail",
+        tasks=(Task(task_id="task", handler="fixture"),),
+    )
+    journal.begin(plan, resume=False)
+    journal.record_event(plan.plan_id, "fixture.one", {"value": 1})
+    journal.record_event(plan.plan_id, "fixture.two", {"value": 2})
+    journal.record_event(plan.plan_id, "fixture.three", {"value": 3})
+
+    all_events = journal.events(plan.plan_id)
+    cursor = all_events[-2]["sequence"]
+    statements = []
+    original_connection = journal._connection
+
+    @contextmanager
+    def traced_connection():
+        with original_connection() as connection:
+            connection.set_trace_callback(statements.append)
+            try:
+                yield connection
+            finally:
+                connection.set_trace_callback(None)
+
+    monkeypatch.setattr(journal, "_connection", traced_connection)
+    tail = journal.events(plan.plan_id, after_sequence=cursor)
+
+    assert tail == (all_events[-1],)
+    normalized_statements = [" ".join(statement.upper().split()) for statement in statements]
+    assert any(
+        "WHERE PLAN_ID = 'EVENT-TAIL' AND SEQUENCE >" in statement
+        for statement in normalized_statements
+    )
+    assert not any(
+        "FROM SATQUERY_EXECUTION_EVENTS WHERE PLAN_ID = 'EVENT-TAIL' ORDER BY SEQUENCE"
+        in statement
+        and "SEQUENCE <=" not in statement
+        for statement in normalized_statements
+    )
+
+
+def test_sqlite_event_cursor_detects_tampering_in_returned_tail(execution_database):
+    journal = SQLiteExecutionJournal(execution_database)
+    plan = ExecutionPlan(
+        plan_id="tampered-event-tail",
+        tasks=(Task(task_id="task", handler="fixture"),),
+    )
+    journal.begin(plan, resume=False)
+    journal.record_event(plan.plan_id, "fixture.event", {"value": "original"})
+    events = journal.events(plan.plan_id)
+    cursor = events[0]["sequence"]
+    tail = events[-1]
+
+    with journal._connection() as connection:
+        connection.execute("DROP TRIGGER satquery_execution_events_immutable_update")
+        connection.execute(
+            "UPDATE satquery_execution_events SET payload_json = ? WHERE sequence = ?",
+            ('{"value":"tampered"}', tail["sequence"]),
+        )
+
+    with pytest.raises(ValidationError, match="integrity verification failed"):
+        journal.events(plan.plan_id, after_sequence=cursor)
 
 
 def test_resume_refuses_to_replay_uncertain_non_retry_safe_side_effect(execution_database):

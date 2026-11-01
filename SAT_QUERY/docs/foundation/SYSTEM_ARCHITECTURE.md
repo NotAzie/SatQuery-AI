@@ -42,7 +42,9 @@ Pydantic contracts in `satquery.platform.contracts` define EarthQuery,
 observations, measurements, assets, provenance, quality, Earth Objects,
 evidence, workflows, and investigation state. Modality, dataset, ontology,
 and capability modules determine which configured implementations declare
-support. The planner preserves unresolved information rather than guessing.
+support. Structured contract inputs reject nesting deeper than 64 container
+levels and circular Python object graphs before recursive validation or
+freezing. The planner preserves unresolved information rather than guessing.
 
 ### Perception
 

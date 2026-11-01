@@ -2,9 +2,11 @@ import json
 
 import httpx
 import pytest
+import satquery.__main__ as cli
 from satquery import CLIENT_API_VERSION, PlatformAPIError, SatQueryClient
 from satquery.__main__ import (
     build_parser,
+    command_platform_agent,
     command_platform_earth_objects,
     command_platform_observe,
     command_platform_plan,
@@ -73,6 +75,85 @@ def test_client_streams_execution_events_from_the_investigation_route():
     assert requests[0].headers["accept"] == "text/event-stream"
 
 
+def test_agent_sdk_covers_session_lifecycle_and_post_sse_turns():
+    requests = []
+    event = {
+        "kind": "assistant.delta",
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "sequence": 2,
+        "payload": {"text": "Evidence summary"},
+    }
+
+    def respond(request):
+        requests.append(request)
+        if request.url.path.endswith("/turns"):
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                text=f"id: turn-1:2\nevent: assistant.delta\ndata: {json.dumps(event)}\n\n",
+            )
+        return httpx.Response(200, json={"accepted": True})
+
+    with SatQueryClient(
+        transport=httpx.MockTransport(respond)
+    ) as client:
+        assert client.agents.create_session() == {"accepted": True}
+        assert client.agents.get_session("session/one") == {"accepted": True}
+        streamed = list(client.agents.stream_turn(
+            "session/one",
+            message="Summarize evidence",
+            model_id="fixture.reasoner",
+            execution_authorized=True,
+        ))
+        assert client.agents.cancel_turn("session/one") == {"accepted": True}
+
+    assert streamed == [event]
+    assert [request.method for request in requests] == [
+        "POST",
+        "GET",
+        "POST",
+        "POST",
+    ]
+    assert requests[0].url.path == "/api/v1/agent/sessions"
+    assert requests[1].url.raw_path.endswith(b"/sessions/session%2Fone")
+    assert requests[2].url.raw_path.endswith(
+        b"/sessions/session%2Fone/turns"
+    )
+    assert json.loads(requests[2].content) == {
+        "message": "Summarize evidence",
+        "model_id": "fixture.reasoner",
+        "execution_authorized": True,
+    }
+    assert requests[2].headers["accept"] == "text/event-stream"
+    assert requests[3].url.raw_path.endswith(
+        b"/sessions/session%2Fone/cancel"
+    )
+
+
+@pytest.mark.parametrize(
+    "values, error",
+    [
+        ({"message": "  ", "model_id": "fixture"}, ValueError),
+        ({"message": "Hello", "model_id": " "}, ValueError),
+        (
+            {
+                "message": "Hello",
+                "model_id": "fixture",
+                "execution_authorized": 1,
+            },
+            TypeError,
+        ),
+    ],
+)
+def test_agent_sdk_matches_rest_turn_input_validation(values, error):
+    with SatQueryClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(500)
+    )) as client:
+        with pytest.raises(error):
+            list(client.agents.stream_turn("session-1", **values))
+
+
 def test_legacy_earth_commands_share_platform_plan_and_observe_handlers():
     parser = build_parser()
     earth_plan = parser.parse_args(["earth", "plan", "query.json"])
@@ -83,6 +164,80 @@ def test_legacy_earth_commands_share_platform_plan_and_observe_handlers():
     assert earth_plan.func is root_plan.func is command_platform_plan
     assert earth_plan.explain is False
     assert earth_observe.func is root_observe.func is command_platform_observe
+
+
+def test_agent_cli_commands_share_session_and_turn_contract(monkeypatch, capsys):
+    calls = []
+
+    class AgentResource:
+        def create_session(self):
+            calls.append(("create",))
+            return {"session_id": "session-1"}
+
+        def get_session(self, session_id):
+            calls.append(("get", session_id))
+            return {"session_id": session_id}
+
+        def stream_turn(
+            self,
+            session_id,
+            *,
+            message,
+            model_id,
+            execution_authorized=False,
+        ):
+            calls.append(
+                ("turn", session_id, message, model_id, execution_authorized)
+            )
+            return iter(({"kind": "assistant.delta", "sequence": 1},))
+
+        def cancel_turn(self, session_id):
+            calls.append(("cancel", session_id))
+            return {"status": "cancellation_requested"}
+
+    class Client:
+        agents = AgentResource()
+
+    monkeypatch.setattr(cli, "_platform_client", lambda: Client())
+    parser = build_parser()
+    create_args = parser.parse_args(["agent", "create"])
+    show_args = parser.parse_args(["agent", "show", "session-1"])
+    turn_args = parser.parse_args([
+        "agent",
+        "turn",
+        "session-1",
+        "--message",
+        "Check observations",
+        "--model-id",
+        "fixture.reasoner",
+        "--authorize-execution",
+    ])
+    cancel_args = parser.parse_args(["agent", "cancel", "session-1"])
+
+    assert command_platform_agent(create_args) == 0
+    assert command_platform_agent(show_args) == 0
+    assert command_platform_agent(turn_args) == 0
+    assert command_platform_agent(cancel_args) == 0
+
+    assert calls == [
+        ("create",),
+        ("get", "session-1"),
+        (
+            "turn",
+            "session-1",
+            "Check observations",
+            "fixture.reasoner",
+            True,
+        ),
+        ("cancel", "session-1"),
+    ]
+    output = capsys.readouterr().out
+    event_line = next(
+        line for line in output.splitlines() if line.startswith('{"kind"')
+    )
+    assert '"session_id": "session-1"' in output
+    assert json.loads(event_line) == {"kind": "assistant.delta", "sequence": 1}
+    assert '"status": "cancellation_requested"' in output
 
 
 def test_memory_cli_accepts_capability_snapshot_artifact_filter():
