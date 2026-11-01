@@ -1,0 +1,43 @@
+# Defaults shared by every environment. Layering order is documented in docs/configuration.md.
+app_name: Earth Intelligence Platform
+
+server:
+  host: 127.0.0.1
+  port: 8000
+
+engine:
+  # "unconfigured" until the SatQuery Engine HTTP Agent API is selected.
+  kind: unconfigured
+  timeout_s: 30
+
+agent:
+  # Must identify a reasoning model registered with SatQuery Engine.
+  model_id: null
+
+llm:
+  default_provider: null
+  default_model: null
+
+vision:
+  max_image_bytes: 20971520
+  max_images_per_message: 8
+  max_message_bytes: 41943040
+  store_path: ./var/images
+
+sessions:
+  store_kind: sqlite
+  dsn: ./var/platform.sqlite3
+
+streaming:
+  bus_kind: memory
+  heartbeat_interval_s: 15
+  replay_window_events: 2000
+
+plugins:
+  enabled: true
+  search_paths: []
+  disabled: []
+
+logging:
+  level: INFO
+  json_format: false

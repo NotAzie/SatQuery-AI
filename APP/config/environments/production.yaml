@@ -1,0 +1,9 @@
+debug: false
+server:
+  host: 0.0.0.0
+  cors_origins: []          # set explicitly: EARTH_SERVER__CORS_ORIGINS='["https://earth.example.org"]'
+sessions:
+  store_kind: sqlite        # use one API worker until a shared store and event broker are deployed
+logging:
+  level: INFO
+  json_format: true

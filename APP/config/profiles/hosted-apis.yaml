@@ -1,0 +1,12 @@
+# Hosted providers; each needs its API key in the environment. Enable with EARTH_PROFILES=hosted-apis.
+# Choose provider/model: EARTH_LLM__DEFAULT_PROVIDER=... EARTH_LLM__DEFAULT_MODEL=...
+llm:
+  providers:
+    openai:
+      enabled: true
+    anthropic:
+      enabled: true
+    google:
+      enabled: true
+    openrouter:
+      enabled: true

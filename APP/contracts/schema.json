@@ -1,0 +1,4052 @@
+{
+  "$defs": {
+    "ActiveTask": {
+      "description": "A long-running unit of work (agent run, engine investigation, monitoring job)\nwhose lifetime can exceed a single HTTP request or browser connection.",
+      "properties": {
+        "engine_call_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine Call Id"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finished At"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Progress"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "status": {
+          "default": "queued",
+          "enum": [
+            "queued",
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "engine_call_id",
+        "error",
+        "finished_at",
+        "id",
+        "kind",
+        "progress",
+        "run_id",
+        "session_id",
+        "started_at",
+        "status"
+      ],
+      "title": "ActiveTask",
+      "type": "object"
+    },
+    "AddOverlay": {
+      "properties": {
+        "evidence_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Id"
+        },
+        "geometry": {
+          "additionalProperties": true,
+          "title": "Geometry",
+          "type": "object"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "overlay_id": {
+          "title": "Overlay Id",
+          "type": "string"
+        },
+        "style": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "title": "Style",
+          "type": "object"
+        },
+        "type": {
+          "const": "add_overlay",
+          "default": "add_overlay",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "geometry",
+        "label",
+        "overlay_id",
+        "style",
+        "type"
+      ],
+      "title": "AddOverlay",
+      "type": "object"
+    },
+    "AgentTurnRequest": {
+      "properties": {
+        "asset_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Asset Ids",
+          "type": "array"
+        },
+        "earth_context": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EarthContext"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "execution_authorized": {
+          "default": false,
+          "title": "Execution Authorized",
+          "type": "boolean"
+        },
+        "message": {
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "model_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Id"
+        },
+        "vision_context": {
+          "$ref": "#/$defs/VisionContext"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "AgentTurnRequest",
+      "type": "object"
+    },
+    "BoundingBox": {
+      "description": "WGS84 degrees. west > east means the box crosses the antimeridian.",
+      "properties": {
+        "east": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "East",
+          "type": "number"
+        },
+        "north": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "North",
+          "type": "number"
+        },
+        "south": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "South",
+          "type": "number"
+        },
+        "west": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "West",
+          "type": "number"
+        }
+      },
+      "required": [
+        "east",
+        "north",
+        "south",
+        "west"
+      ],
+      "title": "BoundingBox",
+      "type": "object"
+    },
+    "CameraState": {
+      "properties": {
+        "heading_deg": {
+          "default": 0,
+          "title": "Heading Deg",
+          "type": "number"
+        },
+        "height_m": {
+          "title": "Height M",
+          "type": "number"
+        },
+        "pitch_deg": {
+          "default": -90,
+          "title": "Pitch Deg",
+          "type": "number"
+        },
+        "position": {
+          "$ref": "#/$defs/LngLat"
+        },
+        "roll_deg": {
+          "default": 0,
+          "title": "Roll Deg",
+          "type": "number"
+        },
+        "view_rect": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "heading_deg",
+        "height_m",
+        "pitch_deg",
+        "position",
+        "roll_deg",
+        "view_rect"
+      ],
+      "title": "CameraState",
+      "type": "object"
+    },
+    "Cancel": {
+      "properties": {
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "cancel",
+          "default": "cancel",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "type"
+      ],
+      "title": "Cancel",
+      "type": "object"
+    },
+    "ClearOverlays": {
+      "properties": {
+        "overlay_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Overlay Ids"
+        },
+        "type": {
+          "const": "clear_overlays",
+          "default": "clear_overlays",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "overlay_ids",
+        "type"
+      ],
+      "title": "ClearOverlays",
+      "type": "object"
+    },
+    "Conversation": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "messages": {
+          "items": {
+            "$ref": "#/$defs/Message"
+          },
+          "title": "Messages",
+          "type": "array"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        }
+      },
+      "required": [
+        "created_at",
+        "id",
+        "messages",
+        "session_id",
+        "title"
+      ],
+      "title": "Conversation",
+      "type": "object"
+    },
+    "EarthBookmark": {
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/EarthContext"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "context",
+        "created_at",
+        "id",
+        "name",
+        "updated_at"
+      ],
+      "title": "EarthBookmark",
+      "type": "object"
+    },
+    "EarthBookmarkRef": {
+      "properties": {
+        "camera": {
+          "$ref": "#/$defs/CameraState"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "instant": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instant"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "time": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "camera",
+        "id",
+        "instant",
+        "name",
+        "time"
+      ],
+      "title": "EarthBookmarkRef",
+      "type": "object"
+    },
+    "EarthCameraHistory": {
+      "properties": {
+        "future": {
+          "items": {
+            "$ref": "#/$defs/CameraState"
+          },
+          "maxItems": 100,
+          "title": "Future",
+          "type": "array"
+        },
+        "past": {
+          "items": {
+            "$ref": "#/$defs/CameraState"
+          },
+          "maxItems": 100,
+          "title": "Past",
+          "type": "array"
+        },
+        "present": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "future",
+        "past",
+        "present"
+      ],
+      "title": "EarthCameraHistory",
+      "type": "object"
+    },
+    "EarthCaptureMetadata": {
+      "properties": {
+        "asset_id": {
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "camera": {
+          "$ref": "#/$defs/CameraState"
+        },
+        "captured_at": {
+          "format": "date-time",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "pixel_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PixelRegion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "enum": [
+            "viewport",
+            "region"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "viewport_height_px": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Viewport Height Px"
+        },
+        "viewport_width_px": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Viewport Width Px"
+        }
+      },
+      "required": [
+        "asset_id",
+        "camera",
+        "captured_at",
+        "id",
+        "pixel_region",
+        "region",
+        "source",
+        "viewport_height_px",
+        "viewport_width_px"
+      ],
+      "title": "EarthCaptureMetadata",
+      "type": "object"
+    },
+    "EarthCommandIssued": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "command": {
+          "discriminator": {
+            "mapping": {
+              "add_overlay": "#/$defs/AddOverlay",
+              "clear_overlays": "#/$defs/ClearOverlays",
+              "fly_to": "#/$defs/FlyTo",
+              "highlight_evidence": "#/$defs/HighlightEvidence",
+              "set_layer_visibility": "#/$defs/SetLayerVisibility",
+              "set_time": "#/$defs/SetTime",
+              "show_investigation": "#/$defs/ShowInvestigation"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FlyTo"
+            },
+            {
+              "$ref": "#/$defs/SetTime"
+            },
+            {
+              "$ref": "#/$defs/SetLayerVisibility"
+            },
+            {
+              "$ref": "#/$defs/AddOverlay"
+            },
+            {
+              "$ref": "#/$defs/ClearOverlays"
+            },
+            {
+              "$ref": "#/$defs/HighlightEvidence"
+            },
+            {
+              "$ref": "#/$defs/ShowInvestigation"
+            }
+          ],
+          "title": "Command"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "earth.command",
+          "default": "earth.command",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "command",
+        "conversation_id",
+        "id",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "type"
+      ],
+      "title": "EarthCommandIssued",
+      "type": "object"
+    },
+    "EarthContext": {
+      "properties": {
+        "bookmarks": {
+          "items": {
+            "$ref": "#/$defs/EarthBookmarkRef"
+          },
+          "title": "Bookmarks",
+          "type": "array"
+        },
+        "camera": {
+          "$ref": "#/$defs/CameraState"
+        },
+        "camera_history": {
+          "$ref": "#/$defs/EarthCameraHistory"
+        },
+        "captures": {
+          "items": {
+            "$ref": "#/$defs/EarthCaptureMetadata"
+          },
+          "title": "Captures",
+          "type": "array"
+        },
+        "drawings": {
+          "items": {
+            "$ref": "#/$defs/EarthDrawing"
+          },
+          "title": "Drawings",
+          "type": "array"
+        },
+        "instant": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instant"
+        },
+        "layers": {
+          "items": {
+            "$ref": "#/$defs/LayerState"
+          },
+          "title": "Layers",
+          "type": "array"
+        },
+        "measurement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EarthMeasurement"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "selected_evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Selected Evidence Ids",
+          "type": "array"
+        },
+        "selection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EarthSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "split_view": {
+          "$ref": "#/$defs/EarthSplitView"
+        },
+        "time": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "bookmarks",
+        "camera",
+        "camera_history",
+        "captures",
+        "drawings",
+        "instant",
+        "layers",
+        "measurement",
+        "selected_evidence_ids",
+        "selection",
+        "split_view",
+        "time"
+      ],
+      "title": "EarthContext",
+      "type": "object"
+    },
+    "EarthDrawing": {
+      "properties": {
+        "geometry": {
+          "additionalProperties": true,
+          "title": "Geometry",
+          "type": "object"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "point",
+            "line",
+            "polygon",
+            "rectangle",
+            "circle"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "geometry",
+        "id",
+        "kind",
+        "name"
+      ],
+      "title": "EarthDrawing",
+      "type": "object"
+    },
+    "EarthMeasurement": {
+      "properties": {
+        "kind": {
+          "enum": [
+            "distance",
+            "area",
+            "coordinates",
+            "elevation"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "position": {
+          "$ref": "#/$defs/LngLat"
+        },
+        "unit": {
+          "enum": [
+            "m",
+            "km",
+            "m2",
+            "km2",
+            "degrees",
+            "m elevation"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "kind",
+        "position",
+        "unit",
+        "value"
+      ],
+      "title": "EarthMeasurement",
+      "type": "object"
+    },
+    "EarthSelection": {
+      "properties": {
+        "entity_id": {
+          "title": "Entity Id",
+          "type": "string"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LngLat"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "properties": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Properties",
+          "type": "object"
+        }
+      },
+      "required": [
+        "entity_id",
+        "position",
+        "properties"
+      ],
+      "title": "EarthSelection",
+      "type": "object"
+    },
+    "EarthSplitView": {
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "sync_cameras": {
+          "default": false,
+          "title": "Sync Cameras",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "sync_cameras"
+      ],
+      "title": "EarthSplitView",
+      "type": "object"
+    },
+    "EarthWorkspaceState": {
+      "properties": {
+        "bookmarks": {
+          "items": {
+            "$ref": "#/$defs/EarthBookmark"
+          },
+          "title": "Bookmarks",
+          "type": "array"
+        },
+        "camera_history": {
+          "$ref": "#/$defs/EarthCameraHistory"
+        },
+        "captures": {
+          "items": {
+            "$ref": "#/$defs/EarthCaptureMetadata"
+          },
+          "title": "Captures",
+          "type": "array"
+        }
+      },
+      "required": [
+        "bookmarks",
+        "camera_history",
+        "captures"
+      ],
+      "title": "EarthWorkspaceState",
+      "type": "object"
+    },
+    "EngineAgentMessage": {
+      "properties": {
+        "content": {
+          "default": "",
+          "title": "Content",
+          "type": "string"
+        },
+        "model_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Id"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant",
+            "tool"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "tool_call_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Call Id"
+        },
+        "tool_calls": {
+          "items": {
+            "$ref": "#/$defs/EngineAgentToolCall"
+          },
+          "title": "Tool Calls",
+          "type": "array"
+        },
+        "tool_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Name"
+        },
+        "turn_id": {
+          "title": "Turn Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "model_id",
+        "role",
+        "tool_call_id",
+        "tool_calls",
+        "tool_name",
+        "turn_id"
+      ],
+      "title": "EngineAgentMessage",
+      "type": "object"
+    },
+    "EngineAgentSession": {
+      "description": "Conversation state returned by the Engine Agent Interface.",
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "investigation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Investigation Ids",
+          "type": "array"
+        },
+        "messages": {
+          "items": {
+            "$ref": "#/$defs/EngineAgentMessage"
+          },
+          "title": "Messages",
+          "type": "array"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "created_at",
+        "investigation_ids",
+        "messages",
+        "revision",
+        "session_id",
+        "updated_at"
+      ],
+      "title": "EngineAgentSession",
+      "type": "object"
+    },
+    "EngineAgentToolCall": {
+      "properties": {
+        "arguments": {
+          "additionalProperties": true,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "tool_id": {
+          "title": "Tool Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "arguments",
+        "call_id",
+        "tool_id"
+      ],
+      "title": "EngineAgentToolCall",
+      "type": "object"
+    },
+    "EngineEventReceived": {
+      "description": "Unmodified Engine Agent event carried inside the Platform event envelope.",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "engine_kind": {
+          "title": "Engine Kind",
+          "type": "string"
+        },
+        "engine_sequence": {
+          "title": "Engine Sequence",
+          "type": "integer"
+        },
+        "engine_session_id": {
+          "title": "Engine Session Id",
+          "type": "string"
+        },
+        "engine_timestamp": {
+          "format": "date-time",
+          "title": "Engine Timestamp",
+          "type": "string"
+        },
+        "engine_turn_id": {
+          "title": "Engine Turn Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "engine.event",
+          "default": "engine.event",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "conversation_id",
+        "engine_kind",
+        "engine_sequence",
+        "engine_session_id",
+        "engine_timestamp",
+        "engine_turn_id",
+        "id",
+        "payload",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "type"
+      ],
+      "title": "EngineEventReceived",
+      "type": "object"
+    },
+    "EngineHealth": {
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "degraded",
+            "unavailable",
+            "unconfigured"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "detail",
+        "status",
+        "version"
+      ],
+      "title": "EngineHealth",
+      "type": "object"
+    },
+    "EvidenceRef": {
+      "description": "Pointer to evidence held by the Engine. The Platform never recomputes or edits it.",
+      "properties": {
+        "geometry": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Geometry"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "time_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "geometry",
+        "id",
+        "kind",
+        "time_range",
+        "title",
+        "uri"
+      ],
+      "title": "EvidenceRef",
+      "type": "object"
+    },
+    "FlyTo": {
+      "properties": {
+        "duration_s": {
+          "default": 2.0,
+          "title": "Duration S",
+          "type": "number"
+        },
+        "height_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height M"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "$ref": "#/$defs/LngLat"
+            }
+          ],
+          "title": "Target"
+        },
+        "type": {
+          "const": "fly_to",
+          "default": "fly_to",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "duration_s",
+        "height_m",
+        "target",
+        "type"
+      ],
+      "title": "FlyTo",
+      "type": "object"
+    },
+    "GeoReference": {
+      "description": "Best-known placement of an image on Earth when it is known (e.g. an Earth capture or a\nGeoTIFF). Absent for ordinary photos; locating those is an investigation, not metadata.",
+      "properties": {
+        "bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "center": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LngLat"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "crs": {
+          "default": "EPSG:4326",
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Crs",
+          "type": "string"
+        },
+        "orientation_deg": {
+          "default": 0,
+          "title": "Orientation Deg",
+          "type": "number"
+        },
+        "pixel_resolution_m": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pixel Resolution M"
+        }
+      },
+      "required": [
+        "bounds",
+        "center",
+        "crs",
+        "orientation_deg",
+        "pixel_resolution_m"
+      ],
+      "title": "GeoReference",
+      "type": "object"
+    },
+    "Hello": {
+      "properties": {
+        "latest_seq": {
+          "title": "Latest Seq",
+          "type": "integer"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "hello",
+          "default": "hello",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "latest_seq",
+        "schema_version",
+        "session_id",
+        "type"
+      ],
+      "title": "Hello",
+      "type": "object"
+    },
+    "HighlightEvidence": {
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "type": {
+          "const": "highlight_evidence",
+          "default": "highlight_evidence",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_ids",
+        "type"
+      ],
+      "title": "HighlightEvidence",
+      "type": "object"
+    },
+    "ImageAsset": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "filename": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "georef": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GeoReference"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "height": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "mime_type": {
+          "title": "Mime Type",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "upload",
+            "drag_drop",
+            "clipboard",
+            "screen_capture",
+            "earth_capture",
+            "url"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "source_metadata": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Source Metadata",
+          "type": "object"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width"
+        }
+      },
+      "required": [
+        "created_at",
+        "filename",
+        "georef",
+        "height",
+        "id",
+        "mime_type",
+        "origin",
+        "session_id",
+        "sha256",
+        "size_bytes",
+        "source_metadata",
+        "width"
+      ],
+      "title": "ImageAsset",
+      "type": "object"
+    },
+    "ImagePart": {
+      "properties": {
+        "alt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alt"
+        },
+        "asset_id": {
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "mime_type": {
+          "title": "Mime Type",
+          "type": "string"
+        },
+        "type": {
+          "const": "image",
+          "default": "image",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "alt",
+        "asset_id",
+        "mime_type",
+        "type"
+      ],
+      "title": "ImagePart",
+      "type": "object"
+    },
+    "InvestigationContext": {
+      "description": "The working focus of a session. References only; evidence lives in the Engine.",
+      "properties": {
+        "active_investigation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Active Investigation Ids",
+          "type": "array"
+        },
+        "focus_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "focus_time": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "notes": {
+          "additionalProperties": true,
+          "title": "Notes",
+          "type": "object"
+        },
+        "pinned_evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Pinned Evidence Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "active_investigation_ids",
+        "focus_region",
+        "focus_time",
+        "notes",
+        "pinned_evidence_ids"
+      ],
+      "title": "InvestigationContext",
+      "type": "object"
+    },
+    "InvestigationUpdated": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "fraction": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fraction"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "investigation_id": {
+          "title": "Investigation Id",
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "type": {
+          "const": "investigation.updated",
+          "default": "investigation.updated",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "conversation_id",
+        "fraction",
+        "id",
+        "investigation_id",
+        "message",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "status",
+        "type"
+      ],
+      "title": "InvestigationUpdated",
+      "type": "object"
+    },
+    "LayerSpec": {
+      "properties": {
+        "attribution": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribution"
+        },
+        "available_time": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "default_visible": {
+          "default": false,
+          "title": "Default Visible",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "source": {
+          "additionalProperties": true,
+          "title": "Source",
+          "type": "object"
+        },
+        "style": {
+          "additionalProperties": true,
+          "title": "Style",
+          "type": "object"
+        },
+        "time_dynamic": {
+          "default": false,
+          "title": "Time Dynamic",
+          "type": "boolean"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "z_order": {
+          "default": 0,
+          "title": "Z Order",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "attribution",
+        "available_time",
+        "default_visible",
+        "id",
+        "kind",
+        "source",
+        "style",
+        "time_dynamic",
+        "title",
+        "z_order"
+      ],
+      "title": "LayerSpec",
+      "type": "object"
+    },
+    "LayerState": {
+      "properties": {
+        "layer_id": {
+          "title": "Layer Id",
+          "type": "string"
+        },
+        "opacity": {
+          "default": 1.0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Opacity",
+          "type": "number"
+        },
+        "visible": {
+          "default": true,
+          "title": "Visible",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "layer_id",
+        "opacity",
+        "visible"
+      ],
+      "title": "LayerState",
+      "type": "object"
+    },
+    "LngLat": {
+      "properties": {
+        "lat": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Lat",
+          "type": "number"
+        },
+        "lng": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Lng",
+          "type": "number"
+        }
+      },
+      "required": [
+        "lat",
+        "lng"
+      ],
+      "title": "LngLat",
+      "type": "object"
+    },
+    "Message": {
+      "properties": {
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "image": "#/$defs/ImagePart",
+                "reasoning": "#/$defs/ReasoningPart",
+                "text": "#/$defs/TextPart",
+                "tool_call": "#/$defs/ToolCallPart",
+                "tool_result": "#/$defs/ToolResultPart"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/TextPart"
+              },
+              {
+                "$ref": "#/$defs/ReasoningPart"
+              },
+              {
+                "$ref": "#/$defs/ImagePart"
+              },
+              {
+                "$ref": "#/$defs/ToolCallPart"
+              },
+              {
+                "$ref": "#/$defs/ToolResultPart"
+              }
+            ]
+          },
+          "title": "Content",
+          "type": "array"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        },
+        "role": {
+          "enum": [
+            "system",
+            "user",
+            "assistant",
+            "tool"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "content",
+        "created_at",
+        "id",
+        "metadata",
+        "role"
+      ],
+      "title": "Message",
+      "type": "object"
+    },
+    "MessageCompleted": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "message": {
+          "$ref": "#/$defs/Message"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "message.completed",
+          "default": "message.completed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "conversation_id",
+        "id",
+        "message",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "type"
+      ],
+      "title": "MessageCompleted",
+      "type": "object"
+    },
+    "MessageDelta": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "message_id": {
+          "title": "Message Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "message.delta",
+          "default": "message.delta",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "conversation_id",
+        "id",
+        "message_id",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "text",
+        "type"
+      ],
+      "title": "MessageDelta",
+      "type": "object"
+    },
+    "ModelCapabilities": {
+      "properties": {
+        "max_context_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Context Tokens"
+        },
+        "max_output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Output Tokens"
+        },
+        "reasoning": {
+          "default": false,
+          "title": "Reasoning",
+          "type": "boolean"
+        },
+        "streaming": {
+          "default": true,
+          "title": "Streaming",
+          "type": "boolean"
+        },
+        "structured_output": {
+          "default": false,
+          "title": "Structured Output",
+          "type": "boolean"
+        },
+        "tool_calling": {
+          "default": false,
+          "title": "Tool Calling",
+          "type": "boolean"
+        },
+        "vision": {
+          "default": false,
+          "title": "Vision",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "max_context_tokens",
+        "max_output_tokens",
+        "reasoning",
+        "streaming",
+        "structured_output",
+        "tool_calling",
+        "vision"
+      ],
+      "title": "ModelCapabilities",
+      "type": "object"
+    },
+    "ModelInfo": {
+      "properties": {
+        "capabilities": {
+          "$ref": "#/$defs/ModelCapabilities"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "local": {
+          "default": false,
+          "title": "Local",
+          "type": "boolean"
+        },
+        "ref": {
+          "$ref": "#/$defs/ModelRef"
+        }
+      },
+      "required": [
+        "capabilities",
+        "display_name",
+        "local",
+        "ref"
+      ],
+      "title": "ModelInfo",
+      "type": "object"
+    },
+    "ModelRef": {
+      "properties": {
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "provider_id"
+      ],
+      "title": "ModelRef",
+      "type": "object"
+    },
+    "PanelContribution": {
+      "description": "Declares a UI panel; its component is exported by the plugin's ``frontend_entry`` module\nunder ``component``.",
+      "properties": {
+        "component": {
+          "title": "Component",
+          "type": "string"
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Icon"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "order": {
+          "default": 100,
+          "title": "Order",
+          "type": "integer"
+        },
+        "slot": {
+          "enum": [
+            "left",
+            "right",
+            "bottom",
+            "overlay",
+            "settings"
+          ],
+          "title": "Slot",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component",
+        "icon",
+        "id",
+        "order",
+        "slot",
+        "title"
+      ],
+      "title": "PanelContribution",
+      "type": "object"
+    },
+    "Ping": {
+      "properties": {
+        "type": {
+          "const": "ping",
+          "default": "ping",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Ping",
+      "type": "object"
+    },
+    "PixelRegion": {
+      "properties": {
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "left": {
+          "minimum": 0,
+          "title": "Left",
+          "type": "integer"
+        },
+        "top": {
+          "minimum": 0,
+          "title": "Top",
+          "type": "integer"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "height",
+        "left",
+        "top",
+        "width"
+      ],
+      "title": "PixelRegion",
+      "type": "object"
+    },
+    "PluginManifest": {
+      "properties": {
+        "api_version": {
+          "default": 1,
+          "title": "Api Version",
+          "type": "integer"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "frontend_entry": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frontend Entry"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "provides": {
+          "items": {
+            "enum": [
+              "llm_provider",
+              "tool_source",
+              "ui_panel",
+              "earth_layer"
+            ],
+            "type": "string"
+          },
+          "title": "Provides",
+          "type": "array"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "api_version",
+        "description",
+        "frontend_entry",
+        "id",
+        "name",
+        "provides",
+        "version"
+      ],
+      "title": "PluginManifest",
+      "type": "object"
+    },
+    "Pong": {
+      "properties": {
+        "type": {
+          "const": "pong",
+          "default": "pong",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Pong",
+      "type": "object"
+    },
+    "PrepareVisionRequest": {
+      "properties": {
+        "asset_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Asset Ids",
+          "type": "array"
+        },
+        "context": {
+          "$ref": "#/$defs/VisionContext"
+        }
+      },
+      "required": [
+        "asset_ids",
+        "context"
+      ],
+      "title": "PrepareVisionRequest",
+      "type": "object"
+    },
+    "PreparedVisionAsset": {
+      "properties": {
+        "asset": {
+          "$ref": "#/$defs/ImageAsset"
+        },
+        "data_base64": {
+          "title": "Data Base64",
+          "type": "string"
+        }
+      },
+      "required": [
+        "asset",
+        "data_base64"
+      ],
+      "title": "PreparedVisionAsset",
+      "type": "object"
+    },
+    "PreparedVisionPayload": {
+      "description": "Provider-neutral binary and metadata payload, not a provider request format.",
+      "properties": {
+        "assets": {
+          "items": {
+            "$ref": "#/$defs/PreparedVisionAsset"
+          },
+          "title": "Assets",
+          "type": "array"
+        },
+        "context": {
+          "$ref": "#/$defs/VisionContext"
+        },
+        "version": {
+          "default": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "assets",
+        "context",
+        "version"
+      ],
+      "title": "PreparedVisionPayload",
+      "type": "object"
+    },
+    "ReasoningDeltaEvent": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "message_id": {
+          "title": "Message Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "reasoning.delta",
+          "default": "reasoning.delta",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "conversation_id",
+        "id",
+        "message_id",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "text",
+        "type"
+      ],
+      "title": "ReasoningDeltaEvent",
+      "type": "object"
+    },
+    "ReasoningPart": {
+      "properties": {
+        "signature": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Signature"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "reasoning",
+          "default": "reasoning",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "signature",
+        "text",
+        "type"
+      ],
+      "title": "ReasoningPart",
+      "type": "object"
+    },
+    "RunCompleted": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "finish_reason": {
+          "default": "stop",
+          "enum": [
+            "stop",
+            "length",
+            "tool_calls",
+            "content_filter",
+            "error"
+          ],
+          "title": "Finish Reason",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "run.completed",
+          "default": "run.completed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "conversation_id",
+        "finish_reason",
+        "id",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "type"
+      ],
+      "title": "RunCompleted",
+      "type": "object"
+    },
+    "RunFailed": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "run.failed",
+          "default": "run.failed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "code",
+        "conversation_id",
+        "id",
+        "message",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "type"
+      ],
+      "title": "RunFailed",
+      "type": "object"
+    },
+    "RunStarted": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "model": {
+          "$ref": "#/$defs/ModelRef"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "run.started",
+          "default": "run.started",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "conversation_id",
+        "id",
+        "model",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "type"
+      ],
+      "title": "RunStarted",
+      "type": "object"
+    },
+    "Session": {
+      "properties": {
+        "archived": {
+          "default": false,
+          "title": "Archived",
+          "type": "boolean"
+        },
+        "context": {
+          "$ref": "#/$defs/InvestigationContext"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "earth_context_snapshots": {
+          "items": {
+            "$ref": "#/$defs/EarthContext"
+          },
+          "maxItems": 20,
+          "title": "Earth Context Snapshots",
+          "type": "array"
+        },
+        "earth_workspace": {
+          "$ref": "#/$defs/EarthWorkspaceState"
+        },
+        "engine_agent_session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine Agent Session Id"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "archived",
+        "context",
+        "created_at",
+        "earth_context_snapshots",
+        "earth_workspace",
+        "engine_agent_session_id",
+        "id",
+        "title",
+        "updated_at"
+      ],
+      "title": "Session",
+      "type": "object"
+    },
+    "SetLayerVisibility": {
+      "properties": {
+        "layer_id": {
+          "title": "Layer Id",
+          "type": "string"
+        },
+        "opacity": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Opacity"
+        },
+        "type": {
+          "const": "set_layer_visibility",
+          "default": "set_layer_visibility",
+          "title": "Type",
+          "type": "string"
+        },
+        "visible": {
+          "title": "Visible",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "layer_id",
+        "opacity",
+        "type",
+        "visible"
+      ],
+      "title": "SetLayerVisibility",
+      "type": "object"
+    },
+    "SetTime": {
+      "properties": {
+        "instant": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instant"
+        },
+        "playback_speed": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Playback Speed"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "type": {
+          "const": "set_time",
+          "default": "set_time",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "instant",
+        "playback_speed",
+        "range",
+        "type"
+      ],
+      "title": "SetTime",
+      "type": "object"
+    },
+    "ShowInvestigation": {
+      "properties": {
+        "area": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Area"
+        },
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "investigation_id": {
+          "title": "Investigation Id",
+          "type": "string"
+        },
+        "time_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimeRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "type": {
+          "const": "show_investigation",
+          "default": "show_investigation",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "area",
+        "evidence_ids",
+        "investigation_id",
+        "time_range",
+        "type"
+      ],
+      "title": "ShowInvestigation",
+      "type": "object"
+    },
+    "StreamError": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "type": {
+          "const": "stream.error",
+          "default": "stream.error",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "type"
+      ],
+      "title": "StreamError",
+      "type": "object"
+    },
+    "Subscribe": {
+      "properties": {
+        "after_seq": {
+          "default": 0,
+          "title": "After Seq",
+          "type": "integer"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "subscribe",
+          "default": "subscribe",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "after_seq",
+        "session_id",
+        "type"
+      ],
+      "title": "Subscribe",
+      "type": "object"
+    },
+    "TextPart": {
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "text",
+          "default": "text",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "type"
+      ],
+      "title": "TextPart",
+      "type": "object"
+    },
+    "TimeRange": {
+      "properties": {
+        "end": {
+          "format": "date-time",
+          "title": "End",
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "title": "Start",
+          "type": "string"
+        }
+      },
+      "required": [
+        "end",
+        "start"
+      ],
+      "title": "TimeRange",
+      "type": "object"
+    },
+    "ToolCallPart": {
+      "properties": {
+        "arguments": {
+          "additionalProperties": true,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "invocation_id": {
+          "title": "Invocation Id",
+          "type": "string"
+        },
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        },
+        "type": {
+          "const": "tool_call",
+          "default": "tool_call",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "arguments",
+        "invocation_id",
+        "tool",
+        "type"
+      ],
+      "title": "ToolCallPart",
+      "type": "object"
+    },
+    "ToolCompleted": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "invocation_id": {
+          "title": "Invocation Id",
+          "type": "string"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "tool.completed",
+          "default": "tool.completed",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "conversation_id",
+        "error",
+        "evidence",
+        "id",
+        "invocation_id",
+        "ok",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "type"
+      ],
+      "title": "ToolCompleted",
+      "type": "object"
+    },
+    "ToolProgressed": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "fraction": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fraction"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "invocation_id": {
+          "title": "Invocation Id",
+          "type": "string"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "tool.progress",
+          "default": "tool.progress",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "conversation_id",
+        "fraction",
+        "id",
+        "invocation_id",
+        "message",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "type"
+      ],
+      "title": "ToolProgressed",
+      "type": "object"
+    },
+    "ToolRequested": {
+      "properties": {
+        "arguments": {
+          "additionalProperties": true,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "invocation_id": {
+          "title": "Invocation Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        },
+        "type": {
+          "const": "tool.requested",
+          "default": "tool.requested",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "arguments",
+        "at",
+        "conversation_id",
+        "id",
+        "invocation_id",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "tool",
+        "type"
+      ],
+      "title": "ToolRequested",
+      "type": "object"
+    },
+    "ToolResultPart": {
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "invocation_id": {
+          "title": "Invocation Id",
+          "type": "string"
+        },
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "output": {
+          "additionalProperties": true,
+          "title": "Output",
+          "type": "object"
+        },
+        "type": {
+          "const": "tool_result",
+          "default": "tool_result",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_ids",
+        "invocation_id",
+        "ok",
+        "output",
+        "type"
+      ],
+      "title": "ToolResultPart",
+      "type": "object"
+    },
+    "ToolStarted": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "invocation_id": {
+          "title": "Invocation Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "tool.started",
+          "default": "tool.started",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "at",
+        "conversation_id",
+        "id",
+        "invocation_id",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "type"
+      ],
+      "title": "ToolStarted",
+      "type": "object"
+    },
+    "UpdateEarthContext": {
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/EarthContext"
+        },
+        "type": {
+          "const": "earth.context",
+          "default": "earth.context",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "context",
+        "type"
+      ],
+      "title": "UpdateEarthContext",
+      "type": "object"
+    },
+    "UpdateImageAssetRequest": {
+      "properties": {
+        "filename": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "georef": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GeoReference"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "filename",
+        "georef"
+      ],
+      "title": "UpdateImageAssetRequest",
+      "type": "object"
+    },
+    "Usage": {
+      "properties": {
+        "cached_input_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Input Tokens"
+        },
+        "input_tokens": {
+          "default": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "output_tokens": {
+          "default": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        },
+        "reasoning_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Tokens"
+        }
+      },
+      "required": [
+        "cached_input_tokens",
+        "input_tokens",
+        "output_tokens",
+        "reasoning_tokens"
+      ],
+      "title": "Usage",
+      "type": "object"
+    },
+    "UsageReported": {
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seq"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "usage",
+          "default": "usage",
+          "title": "Type",
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/$defs/Usage"
+        }
+      },
+      "required": [
+        "at",
+        "conversation_id",
+        "id",
+        "run_id",
+        "schema_version",
+        "seq",
+        "session_id",
+        "type",
+        "usage"
+      ],
+      "title": "UsageReported",
+      "type": "object"
+    },
+    "VisionContext": {
+      "properties": {
+        "assets": {
+          "items": {
+            "$ref": "#/$defs/ImageAsset"
+          },
+          "title": "Assets",
+          "type": "array"
+        },
+        "earth_captures": {
+          "items": {
+            "$ref": "#/$defs/EarthCaptureMetadata"
+          },
+          "title": "Earth Captures",
+          "type": "array"
+        },
+        "georeference": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GeoReference"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "metadata": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "assets",
+        "earth_captures",
+        "georeference",
+        "metadata"
+      ],
+      "title": "VisionContext",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "active_task": {
+      "$ref": "#/$defs/ActiveTask"
+    },
+    "agent_event": {
+      "discriminator": {
+        "mapping": {
+          "earth.command": "#/$defs/EarthCommandIssued",
+          "engine.event": "#/$defs/EngineEventReceived",
+          "investigation.updated": "#/$defs/InvestigationUpdated",
+          "message.completed": "#/$defs/MessageCompleted",
+          "message.delta": "#/$defs/MessageDelta",
+          "reasoning.delta": "#/$defs/ReasoningDeltaEvent",
+          "run.completed": "#/$defs/RunCompleted",
+          "run.failed": "#/$defs/RunFailed",
+          "run.started": "#/$defs/RunStarted",
+          "tool.completed": "#/$defs/ToolCompleted",
+          "tool.progress": "#/$defs/ToolProgressed",
+          "tool.requested": "#/$defs/ToolRequested",
+          "tool.started": "#/$defs/ToolStarted",
+          "usage": "#/$defs/UsageReported"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RunStarted"
+        },
+        {
+          "$ref": "#/$defs/MessageDelta"
+        },
+        {
+          "$ref": "#/$defs/ReasoningDeltaEvent"
+        },
+        {
+          "$ref": "#/$defs/MessageCompleted"
+        },
+        {
+          "$ref": "#/$defs/ToolRequested"
+        },
+        {
+          "$ref": "#/$defs/ToolStarted"
+        },
+        {
+          "$ref": "#/$defs/ToolProgressed"
+        },
+        {
+          "$ref": "#/$defs/ToolCompleted"
+        },
+        {
+          "$ref": "#/$defs/InvestigationUpdated"
+        },
+        {
+          "$ref": "#/$defs/EarthCommandIssued"
+        },
+        {
+          "$ref": "#/$defs/UsageReported"
+        },
+        {
+          "$ref": "#/$defs/RunCompleted"
+        },
+        {
+          "$ref": "#/$defs/RunFailed"
+        },
+        {
+          "$ref": "#/$defs/EngineEventReceived"
+        }
+      ],
+      "title": "Agent Event"
+    },
+    "agent_turn_request": {
+      "$ref": "#/$defs/AgentTurnRequest"
+    },
+    "client_message": {
+      "discriminator": {
+        "mapping": {
+          "cancel": "#/$defs/Cancel",
+          "earth.context": "#/$defs/UpdateEarthContext",
+          "ping": "#/$defs/Ping",
+          "subscribe": "#/$defs/Subscribe"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Subscribe"
+        },
+        {
+          "$ref": "#/$defs/Cancel"
+        },
+        {
+          "$ref": "#/$defs/UpdateEarthContext"
+        },
+        {
+          "$ref": "#/$defs/Ping"
+        }
+      ],
+      "title": "Client Message"
+    },
+    "control_message": {
+      "discriminator": {
+        "mapping": {
+          "hello": "#/$defs/Hello",
+          "pong": "#/$defs/Pong",
+          "stream.error": "#/$defs/StreamError"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Hello"
+        },
+        {
+          "$ref": "#/$defs/Pong"
+        },
+        {
+          "$ref": "#/$defs/StreamError"
+        }
+      ],
+      "title": "Control Message"
+    },
+    "conversation": {
+      "$ref": "#/$defs/Conversation"
+    },
+    "earth_command": {
+      "discriminator": {
+        "mapping": {
+          "add_overlay": "#/$defs/AddOverlay",
+          "clear_overlays": "#/$defs/ClearOverlays",
+          "fly_to": "#/$defs/FlyTo",
+          "highlight_evidence": "#/$defs/HighlightEvidence",
+          "set_layer_visibility": "#/$defs/SetLayerVisibility",
+          "set_time": "#/$defs/SetTime",
+          "show_investigation": "#/$defs/ShowInvestigation"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/FlyTo"
+        },
+        {
+          "$ref": "#/$defs/SetTime"
+        },
+        {
+          "$ref": "#/$defs/SetLayerVisibility"
+        },
+        {
+          "$ref": "#/$defs/AddOverlay"
+        },
+        {
+          "$ref": "#/$defs/ClearOverlays"
+        },
+        {
+          "$ref": "#/$defs/HighlightEvidence"
+        },
+        {
+          "$ref": "#/$defs/ShowInvestigation"
+        }
+      ],
+      "title": "Earth Command"
+    },
+    "earth_context": {
+      "$ref": "#/$defs/EarthContext"
+    },
+    "engine_agent_session": {
+      "$ref": "#/$defs/EngineAgentSession"
+    },
+    "engine_health": {
+      "$ref": "#/$defs/EngineHealth"
+    },
+    "evidence": {
+      "$ref": "#/$defs/EvidenceRef"
+    },
+    "image_asset": {
+      "$ref": "#/$defs/ImageAsset"
+    },
+    "layer_spec": {
+      "$ref": "#/$defs/LayerSpec"
+    },
+    "message": {
+      "$ref": "#/$defs/Message"
+    },
+    "model_info": {
+      "$ref": "#/$defs/ModelInfo"
+    },
+    "panel": {
+      "$ref": "#/$defs/PanelContribution"
+    },
+    "plugin_manifest": {
+      "$ref": "#/$defs/PluginManifest"
+    },
+    "prepare_vision_request": {
+      "$ref": "#/$defs/PrepareVisionRequest"
+    },
+    "prepared_vision_payload": {
+      "$ref": "#/$defs/PreparedVisionPayload"
+    },
+    "session": {
+      "$ref": "#/$defs/Session"
+    },
+    "update_image_asset_request": {
+      "$ref": "#/$defs/UpdateImageAssetRequest"
+    },
+    "vision_context": {
+      "$ref": "#/$defs/VisionContext"
+    }
+  },
+  "required": [
+    "agent_event",
+    "agent_turn_request",
+    "client_message",
+    "control_message",
+    "earth_command",
+    "earth_context",
+    "layer_spec",
+    "evidence",
+    "engine_health",
+    "engine_agent_session",
+    "message",
+    "model_info",
+    "image_asset",
+    "vision_context",
+    "prepared_vision_payload",
+    "prepare_vision_request",
+    "update_image_asset_request",
+    "session",
+    "conversation",
+    "active_task",
+    "plugin_manifest",
+    "panel"
+  ],
+  "title": "Contracts",
+  "type": "object"
+}

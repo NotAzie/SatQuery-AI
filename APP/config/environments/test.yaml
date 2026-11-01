@@ -1,0 +1,6 @@
+debug: true
+sessions:
+  store_kind: sqlite
+  dsn: ":memory:"
+logging:
+  level: WARNING

@@ -1,0 +1,7 @@
+# Everything stays on this machine. Enable with EARTH_PROFILES=local-models.
+# Choose a model you have pulled: EARTH_LLM__DEFAULT_MODEL=<name>
+llm:
+  default_provider: ollama
+  providers:
+    ollama:
+      enabled: true

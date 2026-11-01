@@ -1,0 +1,51 @@
+name: Earth Intelligence Platform
+
+on: [push, pull_request]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: APP/backend/pyproject.toml
+      - name: Install backend and development dependencies
+        run: python -m pip install -e "APP/backend[dev]"
+      - name: Lint
+        run: ruff check --config APP/backend/pyproject.toml APP/backend APP/scripts
+      - name: Check import boundaries
+        working-directory: APP/backend
+        run: lint-imports
+      - name: Type-check
+        working-directory: APP/backend
+        run: mypy src
+      - name: Test
+        working-directory: APP/backend
+        run: pytest
+      - name: Check backend contracts
+        run: python APP/scripts/export_contracts.py && git diff --exit-code -- APP/contracts/schema.json
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: APP/frontend/package-lock.json
+      - name: Install locked frontend dependencies
+        working-directory: APP/frontend
+        run: npm ci
+      - name: Lint, type-check, test, build, and check generated contracts
+        working-directory: APP/frontend
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
+          npm run gen:contracts
+          git diff --exit-code -- src/shared/generated/contracts.ts

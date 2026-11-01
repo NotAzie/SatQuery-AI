@@ -1,0 +1,6 @@
+llm:
+  providers:
+    google:
+      kind: google
+      base_url: https://generativelanguage.googleapis.com
+      api_key_env: GOOGLE_API_KEY

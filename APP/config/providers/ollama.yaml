@@ -1,0 +1,6 @@
+llm:
+  providers:
+    ollama:
+      kind: ollama
+      local: true
+      base_url: http://localhost:11434

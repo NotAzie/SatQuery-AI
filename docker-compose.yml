@@ -1,0 +1,62 @@
+services:
+  satquery-engine:
+    build:
+      context: .
+      dockerfile: docker/engine.Dockerfile
+    environment:
+      SATQUERY_HOST: 0.0.0.0
+      SATQUERY_PORT: "8000"
+      SATQUERY_DEVICE: cpu
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3).read()"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  platform-api:
+    build:
+      context: .
+      dockerfile: docker/platform-api.Dockerfile
+    environment:
+      EARTH_ENGINE__KIND: http
+      EARTH_ENGINE__BASE_URL: http://satquery-engine:8000
+      EARTH_SERVER__HOST: 0.0.0.0
+      EARTH_ENV: development
+    depends_on:
+      satquery-engine:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - platform-data:/app/var
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).read()"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    environment:
+      VITE_API_PROXY_TARGET: http://platform-api:8000
+      VITE_CESIUM_ION_TOKEN: ${VITE_CESIUM_ION_TOKEN:-}
+    depends_on:
+      platform-api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5173:5173"
+
+volumes:
+  platform-data:
