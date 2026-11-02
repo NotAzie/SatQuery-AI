@@ -125,7 +125,13 @@ class WorkspaceMemory:
             score = self._score(record, terms, target_location, target_time, target_range)
             if score > 0:
                 ranked.append(RankedMemoryRecord(record=record, score=score))
-        ranked.sort(key=lambda result: (-result.score, -result.record.created_at.timestamp()))
+        ranked.sort(
+            key=lambda result: (
+                -result.score,
+                -result.record.created_at.timestamp(),
+                result.record.id,
+            )
+        )
         return ranked[:limit]
 
     async def _build_index(self, *, current_session_id: str | None) -> list[MemoryRecord]:

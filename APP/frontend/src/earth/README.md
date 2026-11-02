@@ -13,4 +13,8 @@
 
 **Depends on.** `shared`, `state` (camera mirror).
 
-**Public interface.** `EarthController` (`camera`, `commands`, `timeline`, `workspace`, `events`, `capture`), `EarthCommandDispatcher`, `EarthCommandHandlers`, `EarthEventBus`, `EarthProvider`, `EarthStage`. Cesium-only types and objects remain within this module.
+**Public interface.** `EarthController` (`camera`, `commands`, `overlays`, `timeline`, `workspace`, `events`, `capture`), `EarthCommandDispatcher`, `EarthCommandHandlers`, `EarthEventBus`, `EarthProvider`, `EarthStage`. Serializable viewport and overlay changes are published through the Earth event bus for EarthContext snapshots. Cesium-only types and objects remain within this module.
+
+The viewer uses Cesium request-render mode so an idle workspace does not continuously redraw.
+Application-owned entity mutations explicitly request a frame; Cesium's clock and camera changes
+continue to request frames during timeline playback and navigation.

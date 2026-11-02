@@ -256,6 +256,9 @@ export type RollDeg = number;
 export type Id17 = string;
 export type Instant1 = string | null;
 export type Name = string;
+/**
+ * @maxItems 32
+ */
 export type Bookmarks = EarthBookmarkRef[];
 /**
  * @maxItems 100
@@ -275,23 +278,90 @@ export type Width = number;
 export type Source = "viewport" | "region";
 export type ViewportHeightPx = number | null;
 export type ViewportWidthPx = number | null;
+/**
+ * @maxItems 128
+ */
 export type Captures = EarthCaptureMetadata[];
 export type Id19 = string;
 export type Kind2 = "point" | "line" | "polygon" | "rectangle" | "circle";
 export type Name1 = string;
+/**
+ * @maxItems 32
+ */
 export type Drawings = EarthDrawing[];
+export type AssetId2 = string;
+export type Attached = boolean;
+export type CapturedAt1 = string | null;
+export type Height1 = number | null;
+export type MimeType1 = ("image/png" | "image/jpeg" | "image/webp" | "image/tiff") | null;
+export type Source1 = "capture" | "attachment";
+export type Width1 = number | null;
+/**
+ * @maxItems 128
+ */
+export type Imagery = EarthImageryRef[];
 export type Instant2 = string | null;
+/**
+ * @maxItems 64
+ */
+export type KnownIds = string[];
+/**
+ * @maxItems 64
+ */
+export type VisibleIds = string[];
 export type LayerId1 = string;
 export type Opacity1 = number;
 export type Visible1 = boolean;
+/**
+ * @maxItems 64
+ */
 export type Layers = LayerState[];
 export type Kind3 = "distance" | "area" | "coordinates" | "elevation";
 export type Unit = "m" | "km" | "m2" | "km2" | "degrees" | "m elevation";
 export type Value = number | null;
+export type Id20 = string;
+/**
+ * @maxItems 4096
+ */
+export type Features = EarthOverlayFeature[];
+export type GeometryPolicy = string | null;
+export type Id21 = string;
+export type InvestigationId2 = string | null;
+export type Label1 = string | null;
+export type ObjectId = string;
+export type Reason = string;
+/**
+ * @maxItems 4096
+ */
+export type OmittedObjects = EarthOverlayOmission[];
+/**
+ * @maxItems 32
+ */
+export type Overlays = EarthOverlay[];
+/**
+ * @maxItems 64
+ */
+export type Layers1 = LayerState[];
+/**
+ * @maxItems 32
+ */
+export type Overlays1 = EarthOverlay[];
+/**
+ * @maxItems 64
+ */
 export type SelectedEvidenceIds = string[];
+export type HeightPx = number;
+export type PixelRatio = number;
+export type WidthPx = number;
+/**
+ * @maxItems 64
+ */
+export type SelectedEvidenceIds1 = string[];
 export type EntityId = string;
 export type Enabled = boolean;
 export type SyncCameras = boolean;
+export type Playing = boolean;
+export type Speed = number;
 export type ExecutionAuthorized = boolean;
 export type Message4 = string;
 export type ModelId = string | null;
@@ -300,14 +370,14 @@ export type Filename = string | null;
 export type Crs = string;
 export type OrientationDeg = number;
 export type PixelResolutionM = [unknown, unknown] | null;
-export type Height1 = number | null;
-export type Id20 = string;
-export type MimeType1 = string;
+export type Height2 = number | null;
+export type Id22 = string;
+export type MimeType2 = string;
 export type Origin = "upload" | "drag_drop" | "clipboard" | "screen_capture" | "earth_capture" | "url";
 export type SessionId15 = string | null;
 export type Sha256 = string;
 export type SizeBytes = number;
-export type Width1 = number | null;
+export type Width2 = number | null;
 export type Assets = ImageAsset[];
 export type EarthCaptures = EarthCaptureMetadata[];
 export type ClientMessage = Subscribe | Cancel | UpdateEarthContext | Ping;
@@ -328,7 +398,7 @@ export type Code1 = string;
 export type Message5 = string;
 export type Type32 = "stream.error";
 export type CreatedAt2 = string;
-export type Id21 = string;
+export type Id23 = string;
 export type Messages = Message[];
 export type SessionId18 = string;
 export type Title1 = string | null;
@@ -336,6 +406,13 @@ export type EarthCommand =
   FlyTo | SetTime | SetLayerVisibility | AddOverlay | ClearOverlays | HighlightEvidence | ShowInvestigation;
 export type CreatedAt3 = string;
 export type InvestigationIds = string[];
+export type AssetId3 = string;
+export type Height3 = number | null;
+export type MimeType3 = "image/png" | "image/jpeg" | "image/webp" | "image/tiff";
+export type Sha2561 = string;
+export type SizeBytes1 = number;
+export type Width3 = number | null;
+export type Attachments = EngineAgentImageRef[];
 export type Content1 = string;
 export type ModelId1 = string | null;
 export type Role1 = "user" | "assistant" | "tool";
@@ -349,15 +426,209 @@ export type Messages1 = EngineAgentMessage[];
 export type Revision = number;
 export type SessionId19 = string;
 export type UpdatedAt = string;
-export type Detail = string | null;
-export type Status2 = "ok" | "degraded" | "unavailable" | "unconfigured";
+export type Availability = "available";
+export type Description = string;
+export type ModelVisibleWithExecutionConsent = boolean;
+export type ModelVisibleWithoutConsent = boolean;
+export type RequiresExecutionAuthorization = boolean;
+export type ToolId1 = string;
+export type Capabilities = string[];
+export type Citation = string | null;
+export type ConnectorId = string;
+export type Crs1 = string | null;
+export type DatasetId = string;
+export type Deprecated = boolean;
+export type End1 = string | null;
+export type Start1 = string | null;
+export type Latency = string | null;
+export type Licensing = string | null;
+export type Modalities = string[];
+export type Provider = string;
+export type ResolutionUnit = string | null;
+export type SpatialResolution = number | null;
+export type SupportsForecast = boolean | null;
+export type SupportsHistorical = boolean | null;
+export type UpdateFrequency = string | null;
+export type Variables = string[];
 export type Version = string | null;
+export type AgentTools = EngineAgentToolDescriptor[];
+export type Datasets = EngineDatasetMetadata[];
+export type DatasetIds = string[];
+export type Description1 = string | null;
+export type ImplementationIds = string[];
+export type Label2 = string | null;
+export type ModalityId = string;
+export type Status2 = "registered" | "unavailable" | "declared" | "not_registered";
+export type Variables1 = string[];
+export type Modalities1 = EngineEarthModalityCapability[];
+export type Revision1 = string;
+export type SnapshotSchemaVersion = "1.0.0";
+export type SnapshotSha256 = string;
+export type Available = boolean;
+export type BackendPreference = string[];
+export type Description2 = string;
+export type Intent = string;
+export type RequiresImages = number;
+export type Tool2 = string;
+export type UnavailableReason = string | null;
+export type ImageCapabilities = EngineImageCapability[];
+export type Id24 = string;
+export type EvidenceIds3 = string[];
+export type InvestigationIds1 = string[];
+export type Lifecycle = string | null;
+export type ObjectId1 = string | null;
+export type ObjectType = string | null;
+export type Revision2 = number | null;
+export type SourceObservationIds = string[];
+export type Type33 = "Feature";
+export type Features1 = EngineEarthObjectFeature[];
+export type SatqueryGeometryPolicy = string;
+export type ObjectId2 = string;
+export type Reason1 = string;
+export type SatqueryOmittedObjects = EngineGeoJSONOmission[];
+export type Type34 = "FeatureCollection";
+export type AssetPreferences = string[];
+export type AssetSampling = "point" | null;
+export type Bbox =
+  | [number, number, number, number]
+  | [number, number, number, number, number]
+  | [number, number, number, number, number, number]
+  | null;
+export type Crs2 = string;
+export type Geometry5 = {
+  [k: string]: unknown;
+} | null;
+export type Point = [unknown, unknown] | null;
+export type RasterAnalysis = "zonal_descriptive" | null;
+export type RasterComponentExtraction = {
+  [k: string]: unknown;
+}[];
+export type RasterPixelSelection = ("pixel_center" | "all_touched") | null;
+export type RasterWeighting = ("equal_cell" | "geodesic_cell_area") | null;
+export type Region = string | null;
+export type RequestedDatasetIds = string[];
+export type RequestedModalities = string[];
+export type RequestedVariables = string[];
+export type RequiredCapabilities = string[];
+export type ResolutionUnit1 = string | null;
+export type SpatialResolution1 = number | null;
+export type TemporalEnd = string | null;
+export type TemporalStart = string | null;
+export type Detail = string | null;
+export type Status3 = "ok" | "degraded" | "unavailable" | "unconfigured";
+export type Version1 = string | null;
+export type EventSha256 = string;
+export type EventType = string;
+export type PlanId = string;
+export type PreviousEventSha256 = string;
+export type Sequence = number;
+export type Timestamp = string;
+export type Events = EngineInvestigationEvent[];
+export type HasMore = boolean;
+export type InvestigationId3 = string;
+export type NextSequence = number;
+export type PlanId1 = string | null;
+export type InvestigationId4 = string;
+export type Markdown = string;
+export type ReportId = string;
+export type ReportSha256 = string;
+export type CreatedAt4 = string;
+export type FinishedAt1 = string | null;
+export type MissionId = string;
+export type Name2 = string;
+export type Objective = string;
+export type Status4 = "active" | "completed" | "cancelled";
+export type Name3 = string;
+export type Objective1 = string;
+export type ComparisonId = string;
+export type ComparisonSha256 = string;
+export type Limitations = string[];
+export type Markdown1 = string;
+export type AcknowledgedAt = string | null;
+export type CreatedAt5 = string;
+export type Detail1 = string;
+export type EventId = string;
+export type NotificationId = string;
+export type RunId16 = string;
+export type ScheduleId = string;
+export type Severity = "warning" | "error";
+export type Status5 = "unread" | "acknowledged";
+export type Title2 = string;
+export type EffectiveTemporalEnd = string | null;
+export type EffectiveTemporalStart = string | null;
+export type ExecutionId = string | null;
+export type FailureType = string | null;
+export type FinishedAt2 = string | null;
+export type InvestigationId5 = string | null;
+export type LeaseExpiresAt = string | null;
+export type MissedIntervals = number;
+export type MissionId1 = string;
+export type RunId17 = string;
+export type ScheduleId1 = string;
+export type ScheduleRevision = number;
+export type ScheduledAt = string;
+export type StartedAt1 = string;
+export type Status6 = "running" | "completed" | "partial" | "failed" | "skipped";
+export type WorkerId = string | null;
+export type CreatedAt6 = string;
+export type Enabled1 = boolean;
+export type IntervalSeconds = number;
+export type MissionId2 = string;
+export type Name4 = string;
+export type NextRunAt = string;
+export type OverlapPolicy = "skip_while_running" | "allow";
+export type Priority = number;
+export type Revision3 = number;
+export type RollingWindowSeconds = number | null;
+export type ScheduleId2 = string;
+export type CanonicalVariable = string;
+export type CooldownSeconds = number;
+export type MaxAttempts = number;
+export type Name5 = string;
+export type Operator = "gt" | "gte" | "lt" | "lte" | "abs_gt" | "abs_gte";
+export type PolicyId = string;
+export type RetrySafe = boolean;
+export type Threshold = number;
+export type Unit1 = string;
+export type TriggerPolicies = EngineMonitoringTriggerPolicy[];
+export type UpdatedAt1 = string;
+export type IntervalSeconds1 = number;
+export type MissionId3 = string;
+export type Name6 = string;
+export type OverlapPolicy1 = "skip_while_running" | "allow";
+export type Priority1 = number;
+export type RollingWindowSeconds1 = number | null;
+export type TriggerPolicies1 = EngineMonitoringTriggerPolicy[];
+export type ExpectedRevision = number;
+export type IntervalSeconds2 = number | null;
+export type Name7 = string | null;
+export type OverlapPolicy2 = ("skip_while_running" | "allow") | null;
+export type Priority2 = number | null;
+export type RollingWindowSeconds2 = number | null;
+export type TriggerPolicies2 = EngineMonitoringTriggerPolicy[] | null;
+export type EventId1 = string;
+export type EventType1 =
+  | "trigger_evaluated"
+  | "trigger_matched"
+  | "trigger_suppressed_cooldown"
+  | "trigger_investigation_created"
+  | "trigger_investigation_completed"
+  | "trigger_investigation_failed";
+export type OccurredAt = string;
+export type RunId18 = string | null;
+export type ScheduleId3 = string;
+export type Events1 = EngineMonitoringTriggerEvent[];
+export type HasMore1 = boolean;
+export type NextCursor = string | null;
+export type Policies = EngineMonitoringTriggerPolicy[];
+export type ScheduleId4 = string;
+export type ScheduleRevision1 = number;
 export type Attribution = string | null;
 export type DefaultVisible = boolean;
-export type Id22 = string;
+export type Id25 = string;
 export type Kind4 = string;
 export type TimeDynamic = boolean;
-export type Title2 = string;
+export type Title3 = string;
 export type ZOrder = number;
 export type MaxContextTokens = number | null;
 export type MaxOutputTokens = number | null;
@@ -370,28 +641,28 @@ export type DisplayName = string | null;
 export type Local = boolean;
 export type Component = string;
 export type Icon = string | null;
-export type Id23 = string;
+export type Id26 = string;
 export type Order = number;
 export type Slot = "left" | "right" | "bottom" | "overlay" | "settings";
-export type Title3 = string;
+export type Title4 = string;
 export type ApiVersion = number;
-export type Description = string | null;
+export type Description3 = string | null;
 export type FrontendEntry = string | null;
-export type Id24 = string;
-export type Name2 = string;
+export type Id27 = string;
+export type Name8 = string;
 export type Provides = ("llm_provider" | "tool_source" | "ui_panel" | "earth_layer")[];
-export type Version1 = string;
+export type Version2 = string;
 /**
  * @minItems 1
  */
 export type AssetIds1 = [string, ...string[]];
 export type DataBase64 = string;
 export type Assets1 = PreparedVisionAsset[];
-export type Version2 = number;
+export type Version3 = number;
 export type Archived = boolean;
 export type ActiveInvestigationIds = string[];
 export type PinnedEvidenceIds = string[];
-export type CreatedAt4 = string;
+export type CreatedAt7 = string;
 /**
  * @maxItems 20
  */
@@ -603,16 +874,16 @@ export type EarthContextSnapshots =
       EarthContext,
       EarthContext
     ];
-export type CreatedAt5 = string;
-export type Id25 = string;
-export type Name3 = string;
-export type UpdatedAt1 = string;
+export type CreatedAt8 = string;
+export type Id28 = string;
+export type Name9 = string;
+export type UpdatedAt2 = string;
 export type Bookmarks1 = EarthBookmark[];
 export type Captures1 = EarthCaptureMetadata[];
 export type EngineAgentSessionId = string | null;
-export type Id26 = string;
-export type Title4 = string | null;
-export type UpdatedAt2 = string;
+export type Id29 = string;
+export type Title5 = string | null;
+export type UpdatedAt3 = string;
 export type Filename1 = string | null;
 
 export interface Contracts {
@@ -625,7 +896,25 @@ export interface Contracts {
   earth_command: EarthCommand;
   earth_context: EarthContext;
   engine_agent_session: EngineAgentSession;
+  engine_agent_tool_descriptor: EngineAgentToolDescriptor;
+  engine_dataset_metadata: EngineDatasetMetadata;
+  engine_discovery_response: EngineDiscoveryResponse;
+  engine_earth_capability_snapshot: EngineEarthCapabilitySnapshot;
+  engine_earth_object_geojson: EngineEarthObjectGeoJSON;
+  engine_earth_query: EngineEarthQuery;
   engine_health: EngineHealth;
+  engine_image_capability: EngineImageCapability;
+  engine_investigation_event_page: EngineInvestigationEventPage;
+  engine_investigation_report: EngineInvestigationReport;
+  engine_mission: EngineMission;
+  engine_mission_create: EngineMissionCreate;
+  engine_monitoring_comparison: EngineMonitoringComparison;
+  engine_monitoring_notification: EngineMonitoringNotification;
+  engine_monitoring_run: EngineMonitoringRun;
+  engine_monitoring_schedule: EngineMonitoringSchedule;
+  engine_monitoring_schedule_create: EngineMonitoringScheduleCreate;
+  engine_monitoring_schedule_update: EngineMonitoringScheduleUpdate;
+  engine_monitoring_trigger_history: EngineMonitoringTriggerHistory;
   evidence: EvidenceRef;
   image_asset: ImageAsset;
   layer_spec: LayerSpec;
@@ -1119,13 +1408,19 @@ export interface EarthContext {
   camera_history: EarthCameraHistory;
   captures: Captures;
   drawings: Drawings;
+  imagery: Imagery;
   instant: Instant2;
+  investigations: EarthInvestigationState;
   layers: Layers;
   measurement: EarthMeasurement | null;
-  selected_evidence_ids: SelectedEvidenceIds;
+  overlays: Overlays;
+  secondary_view: EarthSecondaryView | null;
+  selected_evidence_ids: SelectedEvidenceIds1;
   selection: EarthSelection | null;
   split_view: EarthSplitView;
   time: TimeRange | null;
+  timeline_playback: EarthTimelinePlayback;
+  viewport: EarthViewport | null;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -1199,6 +1494,29 @@ export interface Geometry2 {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EarthImageryRef".
+ */
+export interface EarthImageryRef {
+  asset_id: AssetId2;
+  attached: Attached;
+  camera: CameraState | null;
+  captured_at: CapturedAt1;
+  height: Height1;
+  mime_type: MimeType1;
+  region: BoundingBox | null;
+  source: Source1;
+  width: Width1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EarthInvestigationState".
+ */
+export interface EarthInvestigationState {
+  known_ids: KnownIds;
+  visible_ids: VisibleIds;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "LayerState".
  */
 export interface LayerState {
@@ -1218,14 +1536,69 @@ export interface EarthMeasurement {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EarthOverlay".
+ */
+export interface EarthOverlay {
+  features: Features;
+  geometry_policy: GeometryPolicy;
+  id: Id21;
+  investigation_id: InvestigationId2;
+  label: Label1;
+  omitted_objects: OmittedObjects;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EarthOverlayFeature".
+ */
+export interface EarthOverlayFeature {
+  geometry: Geometry3;
+  id: Id20;
+  properties: Properties;
+}
+export interface Geometry3 {
+  [k: string]: unknown;
+}
+export interface Properties {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EarthOverlayOmission".
+ */
+export interface EarthOverlayOmission {
+  object_id: ObjectId;
+  reason: Reason;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EarthSecondaryView".
+ */
+export interface EarthSecondaryView {
+  camera: CameraState;
+  layers: Layers1;
+  overlays: Overlays1;
+  selected_evidence_ids: SelectedEvidenceIds;
+  viewport: EarthViewport | null;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EarthViewport".
+ */
+export interface EarthViewport {
+  height_px: HeightPx;
+  pixel_ratio: PixelRatio;
+  width_px: WidthPx;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "EarthSelection".
  */
 export interface EarthSelection {
   entity_id: EntityId;
   position: LngLat | null;
-  properties: Properties;
+  properties: Properties1;
 }
-export interface Properties {
+export interface Properties1 {
   [k: string]: string | number | boolean | null;
 }
 /**
@@ -1235,6 +1608,14 @@ export interface Properties {
 export interface EarthSplitView {
   enabled: Enabled;
   sync_cameras: SyncCameras;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EarthTimelinePlayback".
+ */
+export interface EarthTimelinePlayback {
+  playing: Playing;
+  speed: Speed;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -1254,15 +1635,15 @@ export interface ImageAsset {
   created_at: CreatedAt1;
   filename: Filename;
   georef: GeoReference | null;
-  height: Height1;
-  id: Id20;
-  mime_type: MimeType1;
+  height: Height2;
+  id: Id22;
+  mime_type: MimeType2;
   origin: Origin;
   session_id: SessionId15;
   sha256: Sha256;
   size_bytes: SizeBytes;
   source_metadata: SourceMetadata;
-  width: Width1;
+  width: Width2;
 }
 /**
  * Best-known placement of an image on Earth when it is known (e.g. an Earth capture or a
@@ -1348,7 +1729,7 @@ export interface StreamError {
  */
 export interface Conversation {
   created_at: CreatedAt2;
-  id: Id21;
+  id: Id23;
   messages: Messages;
   session_id: SessionId18;
   title: Title1;
@@ -1372,6 +1753,7 @@ export interface EngineAgentSession {
  * via the `definition` "EngineAgentMessage".
  */
 export interface EngineAgentMessage {
+  attachments: Attachments;
   content: Content1;
   model_id: ModelId1;
   role: Role1;
@@ -1379,6 +1761,20 @@ export interface EngineAgentMessage {
   tool_calls: ToolCalls;
   tool_name: ToolName;
   turn_id: TurnId;
+}
+/**
+ * Verified Platform image reference retained in the Engine Agent transcript.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineAgentImageRef".
+ */
+export interface EngineAgentImageRef {
+  asset_id: AssetId3;
+  height: Height3;
+  mime_type: MimeType3;
+  sha256: Sha2561;
+  size_bytes: SizeBytes1;
+  width: Width3;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -1394,12 +1790,393 @@ export interface Arguments2 {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineAgentToolDescriptor".
+ */
+export interface EngineAgentToolDescriptor {
+  availability: Availability;
+  description: Description;
+  input_schema: InputSchema;
+  model_visible_with_execution_consent: ModelVisibleWithExecutionConsent;
+  model_visible_without_consent: ModelVisibleWithoutConsent;
+  requires_execution_authorization: RequiresExecutionAuthorization;
+  tool_id: ToolId1;
+}
+export interface InputSchema {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineDatasetMetadata".
+ */
+export interface EngineDatasetMetadata {
+  capabilities: Capabilities;
+  citation: Citation;
+  connector_id: ConnectorId;
+  crs: Crs1;
+  dataset_id: DatasetId;
+  deprecated: Deprecated;
+  forecast_coverage: EngineDatasetTemporalCoverage | null;
+  historical_coverage: EngineDatasetTemporalCoverage | null;
+  latency: Latency;
+  licensing: Licensing;
+  modalities: Modalities;
+  provider: Provider;
+  resolution_unit: ResolutionUnit;
+  spatial_resolution: SpatialResolution;
+  supports_forecast: SupportsForecast;
+  supports_historical: SupportsHistorical;
+  temporal_coverage: EngineDatasetTemporalCoverage | null;
+  units: Units;
+  update_frequency: UpdateFrequency;
+  variables: Variables;
+  version: Version;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineDatasetTemporalCoverage".
+ */
+export interface EngineDatasetTemporalCoverage {
+  end: End1;
+  start: Start1;
+}
+export interface Units {
+  [k: string]: string;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineDiscoveryResponse".
+ */
+export interface EngineDiscoveryResponse {
+  agent_tools: AgentTools;
+  datasets: Datasets;
+  earth_capabilities: EngineEarthCapabilitySnapshot;
+  image_capabilities: ImageCapabilities;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineEarthCapabilitySnapshot".
+ */
+export interface EngineEarthCapabilitySnapshot {
+  modalities: Modalities1;
+  revision: Revision1;
+  snapshot_schema_version: SnapshotSchemaVersion;
+  snapshot_sha256: SnapshotSha256;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineEarthModalityCapability".
+ */
+export interface EngineEarthModalityCapability {
+  dataset_ids: DatasetIds;
+  description: Description1;
+  implementation_ids: ImplementationIds;
+  label: Label2;
+  modality_id: ModalityId;
+  status: Status2;
+  variables: Variables1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineImageCapability".
+ */
+export interface EngineImageCapability {
+  available: Available;
+  backend_preference: BackendPreference;
+  description: Description2;
+  intent: Intent;
+  requires_images: RequiresImages;
+  tool: Tool2;
+  unavailable_reason: UnavailableReason;
+}
+/**
+ * Engine-exported GeoJSON limited to verified WGS 84 object geometries.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineEarthObjectGeoJSON".
+ */
+export interface EngineEarthObjectGeoJSON {
+  features: Features1;
+  "satquery:geometry_policy": SatqueryGeometryPolicy;
+  "satquery:omitted_objects": SatqueryOmittedObjects;
+  type: Type34;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineEarthObjectFeature".
+ */
+export interface EngineEarthObjectFeature {
+  geometry: Geometry4;
+  id: Id24;
+  properties: EngineEarthObjectProperties;
+  type: Type33;
+}
+export interface Geometry4 {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineEarthObjectProperties".
+ */
+export interface EngineEarthObjectProperties {
+  evidence_ids: EvidenceIds3;
+  investigation_ids: InvestigationIds1;
+  lifecycle: Lifecycle;
+  object_id: ObjectId1;
+  object_type: ObjectType;
+  revision: Revision2;
+  source_observation_ids: SourceObservationIds;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineGeoJSONOmission".
+ */
+export interface EngineGeoJSONOmission {
+  object_id: ObjectId2;
+  reason: Reason1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineEarthQuery".
+ */
+export interface EngineEarthQuery {
+  asset_preferences: AssetPreferences;
+  asset_sampling: AssetSampling;
+  bbox: Bbox;
+  crs: Crs2;
+  filters: Filters;
+  geometry: Geometry5;
+  point: Point;
+  raster_analysis: RasterAnalysis;
+  raster_component_extraction: RasterComponentExtraction;
+  raster_pixel_selection: RasterPixelSelection;
+  raster_semantics: RasterSemantics;
+  raster_weighting: RasterWeighting;
+  region: Region;
+  requested_dataset_ids: RequestedDatasetIds;
+  requested_modalities: RequestedModalities;
+  requested_variables: RequestedVariables;
+  required_capabilities: RequiredCapabilities;
+  resolution_unit: ResolutionUnit1;
+  spatial_resolution: SpatialResolution1;
+  temporal_end: TemporalEnd;
+  temporal_start: TemporalStart;
+}
+export interface Filters {
+  [k: string]: unknown;
+}
+export interface RasterSemantics {
+  [k: string]: "numeric" | "categorical";
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "EngineHealth".
  */
 export interface EngineHealth {
   detail: Detail;
-  status: Status2;
-  version: Version;
+  status: Status3;
+  version: Version1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineInvestigationEventPage".
+ */
+export interface EngineInvestigationEventPage {
+  events: Events;
+  has_more: HasMore;
+  investigation_id: InvestigationId3;
+  next_sequence: NextSequence;
+  plan_id: PlanId1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineInvestigationEvent".
+ */
+export interface EngineInvestigationEvent {
+  event_sha256: EventSha256;
+  event_type: EventType;
+  payload: Payload1;
+  plan_id: PlanId;
+  previous_event_sha256: PreviousEventSha256;
+  sequence: Sequence;
+  timestamp: Timestamp;
+}
+export interface Payload1 {
+  [k: string]: unknown;
+}
+/**
+ * Engine-authored report text linked to an Engine-owned investigation.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineInvestigationReport".
+ */
+export interface EngineInvestigationReport {
+  investigation_id: InvestigationId4;
+  markdown: Markdown;
+  report_id: ReportId;
+  report_sha256: ReportSha256;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineMission".
+ */
+export interface EngineMission {
+  created_at: CreatedAt4;
+  finished_at: FinishedAt1;
+  metadata: Metadata2;
+  mission_id: MissionId;
+  name: Name2;
+  objective: Objective;
+  status: Status4;
+}
+export interface Metadata2 {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineMissionCreate".
+ */
+export interface EngineMissionCreate {
+  name: Name3;
+  objective: Objective1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineMonitoringComparison".
+ */
+export interface EngineMonitoringComparison {
+  comparison_id: ComparisonId;
+  comparison_sha256: ComparisonSha256;
+  limitations: Limitations;
+  markdown: Markdown1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineMonitoringNotification".
+ */
+export interface EngineMonitoringNotification {
+  acknowledged_at: AcknowledgedAt;
+  created_at: CreatedAt5;
+  detail: Detail1;
+  event_id: EventId;
+  notification_id: NotificationId;
+  run_id: RunId16;
+  schedule_id: ScheduleId;
+  severity: Severity;
+  status: Status5;
+  title: Title2;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineMonitoringRun".
+ */
+export interface EngineMonitoringRun {
+  effective_temporal_end: EffectiveTemporalEnd;
+  effective_temporal_start: EffectiveTemporalStart;
+  execution_id: ExecutionId;
+  failure_type: FailureType;
+  finished_at: FinishedAt2;
+  investigation_id: InvestigationId5;
+  lease_expires_at: LeaseExpiresAt;
+  missed_intervals: MissedIntervals;
+  mission_id: MissionId1;
+  run_id: RunId17;
+  schedule_id: ScheduleId1;
+  schedule_revision: ScheduleRevision;
+  scheduled_at: ScheduledAt;
+  started_at: StartedAt1;
+  status: Status6;
+  worker_id: WorkerId;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineMonitoringSchedule".
+ */
+export interface EngineMonitoringSchedule {
+  created_at: CreatedAt6;
+  earth_query: EngineEarthQuery;
+  enabled: Enabled1;
+  interval_seconds: IntervalSeconds;
+  mission_id: MissionId2;
+  name: Name4;
+  next_run_at: NextRunAt;
+  overlap_policy: OverlapPolicy;
+  priority: Priority;
+  revision: Revision3;
+  rolling_window_seconds: RollingWindowSeconds;
+  schedule_id: ScheduleId2;
+  trigger_policies: TriggerPolicies;
+  updated_at: UpdatedAt1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineMonitoringTriggerPolicy".
+ */
+export interface EngineMonitoringTriggerPolicy {
+  canonical_variable: CanonicalVariable;
+  cooldown_seconds: CooldownSeconds;
+  follow_up_query: EngineEarthQuery;
+  max_attempts: MaxAttempts;
+  name: Name5;
+  operator: Operator;
+  policy_id: PolicyId;
+  retry_safe: RetrySafe;
+  threshold: Threshold;
+  unit: Unit1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineMonitoringScheduleCreate".
+ */
+export interface EngineMonitoringScheduleCreate {
+  earth_query: EngineEarthQuery;
+  interval_seconds: IntervalSeconds1;
+  mission_id: MissionId3;
+  name: Name6;
+  overlap_policy: OverlapPolicy1;
+  priority: Priority1;
+  rolling_window_seconds: RollingWindowSeconds1;
+  trigger_policies: TriggerPolicies1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineMonitoringScheduleUpdate".
+ */
+export interface EngineMonitoringScheduleUpdate {
+  earth_query?: EngineEarthQuery | null;
+  expected_revision: ExpectedRevision;
+  interval_seconds?: IntervalSeconds2;
+  name?: Name7;
+  overlap_policy?: OverlapPolicy2;
+  priority?: Priority2;
+  rolling_window_seconds?: RollingWindowSeconds2;
+  trigger_policies?: TriggerPolicies2;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineMonitoringTriggerHistory".
+ */
+export interface EngineMonitoringTriggerHistory {
+  events: Events1;
+  has_more: HasMore1;
+  next_cursor: NextCursor;
+  policies: Policies;
+  schedule_id: ScheduleId4;
+  schedule_revision: ScheduleRevision1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineMonitoringTriggerEvent".
+ */
+export interface EngineMonitoringTriggerEvent {
+  event_id: EventId1;
+  event_type: EventType1;
+  occurred_at: OccurredAt;
+  payload: Payload2;
+  run_id: RunId18;
+  schedule_id: ScheduleId3;
+}
+export interface Payload2 {
+  [k: string]: unknown;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -1409,15 +2186,15 @@ export interface LayerSpec {
   attribution: Attribution;
   available_time: TimeRange | null;
   default_visible: DefaultVisible;
-  id: Id22;
+  id: Id25;
   kind: Kind4;
-  source: Source1;
+  source: Source2;
   style: Style1;
   time_dynamic: TimeDynamic;
-  title: Title2;
+  title: Title3;
   z_order: ZOrder;
 }
-export interface Source1 {
+export interface Source2 {
   [k: string]: unknown;
 }
 export interface Style1 {
@@ -1456,10 +2233,10 @@ export interface ModelCapabilities {
 export interface PanelContribution {
   component: Component;
   icon: Icon;
-  id: Id23;
+  id: Id26;
   order: Order;
   slot: Slot;
-  title: Title3;
+  title: Title4;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -1467,12 +2244,12 @@ export interface PanelContribution {
  */
 export interface PluginManifest {
   api_version: ApiVersion;
-  description: Description;
+  description: Description3;
   frontend_entry: FrontendEntry;
-  id: Id24;
-  name: Name2;
+  id: Id27;
+  name: Name8;
   provides: Provides;
-  version: Version1;
+  version: Version2;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -1491,7 +2268,7 @@ export interface PrepareVisionRequest {
 export interface PreparedVisionPayload {
   assets: Assets1;
   context: VisionContext;
-  version: Version2;
+  version: Version3;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -1508,13 +2285,13 @@ export interface PreparedVisionAsset {
 export interface Session {
   archived: Archived;
   context: InvestigationContext;
-  created_at: CreatedAt4;
+  created_at: CreatedAt7;
   earth_context_snapshots: EarthContextSnapshots;
   earth_workspace: EarthWorkspaceState;
   engine_agent_session_id: EngineAgentSessionId;
-  id: Id26;
-  title: Title4;
-  updated_at: UpdatedAt2;
+  id: Id29;
+  title: Title5;
+  updated_at: UpdatedAt3;
 }
 /**
  * The working focus of a session. References only; evidence lives in the Engine.
@@ -1547,10 +2324,10 @@ export interface EarthWorkspaceState {
  */
 export interface EarthBookmark {
   context: EarthContext;
-  created_at: CreatedAt5;
-  id: Id25;
-  name: Name3;
-  updated_at: UpdatedAt1;
+  created_at: CreatedAt8;
+  id: Id28;
+  name: Name9;
+  updated_at: UpdatedAt2;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema

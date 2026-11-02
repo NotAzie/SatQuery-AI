@@ -12,25 +12,12 @@ The Engine can run on its own. For live Platform chat, the Engine must be reacha
 compatible reasoning model registered. The checked-in default configuration does not supply
 provider credentials or a model adapter.
 
-## Quick Start (5–10 minutes)
+## Quick Start
 
-The development Docker Compose stack starts the Engine, Platform API, and Vite frontend:
-
-```bash
-docker compose up --build
-```
-
-Open <http://localhost:5173>. Platform liveness is at <http://localhost:8000/healthz>;
-readiness is at <http://localhost:8000/readyz>. With the default configuration, readiness is
-degraded: the Engine process is reachable, but no reasoning model/provider is registered.
-Cesium's default imagery requires an optional scoped Cesium ion token; without one, the globe still
-opens without the default imagery layer. Chat requires an Engine model adapter and registered
-model ID; starting the stack does not invent or configure one.
-
-Stop with `Ctrl+C`; `docker compose down` stops and removes the containers. The named
-`platform-data` volume holds Platform SQLite session data and uploaded Vision assets. The Engine
-uses its configured storage defaults; see [BOOTSTRAP.md](BOOTSTRAP.md) and
-[INSTALL.md](INSTALL.md) for runtime and persistence boundaries.
+Use the repository's [authoritative integrated startup guide](INSTALL.md) for clean-clone setup,
+local Engine + Platform + frontend startup, endpoint checks, troubleshooting, and the optional
+Docker Compose path. It distinguishes a running, connected workspace from live Agent chat, which
+requires an Engine reasoning adapter registered for the Agent API.
 
 ## Local development
 

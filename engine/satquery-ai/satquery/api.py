@@ -16,7 +16,12 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, StrictBool, model_validator
 
-from .agent import AgentEvent
+from .agent import (
+    AgentEarthContext,
+    AgentImageInput,
+    AgentInvestigationEventPage,
+    AgentToolDescriptor,
+)
 from .config import Settings, get_settings
 from .connector_bootstrap import load_configured_connectors
 from .errors import ExtensionError, QueryError, SatQueryError, ValidationError
@@ -90,6 +95,17 @@ class AgentTurnRequest(BaseModel):
     message: str = Field(min_length=1)
     model_id: str = Field(min_length=1)
     execution_authorized: StrictBool = False
+    earth_context: AgentEarthContext | None = None
+    attachments: list[AgentImageInput] = Field(default_factory=list, max_length=8)
+
+    @model_validator(mode="after")
+    def validate_attachments(self) -> AgentTurnRequest:
+        asset_ids = [item.asset_id for item in self.attachments]
+        if len(set(asset_ids)) != len(asset_ids):
+            raise ValueError("an image asset may only be attached once per Agent turn")
+        if sum(item.size_bytes for item in self.attachments) > 40 * 1024 * 1024:
+            raise ValueError("Agent turn image attachments exceed 40 MiB")
+        return self
 
 
 class StationSearchRequest(BaseModel):
@@ -1125,6 +1141,14 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         return JSONResponse(jsonable_encoder(session), status_code=201)
 
     @app.get(
+        "/api/v1/agent/tools",
+        response_model=list[AgentToolDescriptor],
+        summary="List registered Agent tool contracts and consent visibility",
+    )
+    async def agent_tools() -> list[AgentToolDescriptor]:
+        return list(get_engine().agent_turn_service.tool_descriptors())
+
+    @app.get(
         "/api/v1/agent/sessions/{session_id}",
         summary="Read a SatQuery agent conversation",
     )
@@ -1134,6 +1158,27 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return JSONResponse(jsonable_encoder(session))
+
+    @app.get(
+        "/api/v1/agent/sessions/{session_id}/investigations/{investigation_id}/events",
+        response_model=AgentInvestigationEventPage,
+        summary="Read a session-owned investigation's paged execution history",
+    )
+    async def get_agent_investigation_events(
+        session_id: str,
+        investigation_id: str,
+        after_sequence: int = 0,
+        limit: int = 100,
+    ) -> AgentInvestigationEventPage:
+        try:
+            return get_engine().agent_turn_service.investigation_events(
+                session_id,
+                investigation_id,
+                after_sequence=after_sequence,
+                limit=limit,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post(
         "/api/v1/agent/sessions/{session_id}/turns",
@@ -1150,7 +1195,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         if not request.message.strip():
             raise ValidationError("agent user message must not be empty")
-        service.validate_model(request.model_id)
+        service.validate_model(
+            request.model_id,
+            require_vision=bool(request.attachments),
+        )
 
         async def stream():
             turn_stream = service.stream_turn(
@@ -1158,6 +1206,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 request.message,
                 model_id=request.model_id,
                 execution_authorized=request.execution_authorized,
+                earth_context=request.earth_context,
+                attachments=tuple(request.attachments),
             )
             try:
                 async for event in turn_stream:

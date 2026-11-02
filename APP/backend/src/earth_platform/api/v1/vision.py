@@ -8,7 +8,7 @@ from fastapi import APIRouter, File, Form, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
-from earth_platform.api.deps import ContainerDep, SessionStoreDep
+from earth_platform.api.deps import AgentRuntimeDep, ContainerDep, SessionStoreDep
 from earth_platform.container import Container
 from earth_platform.shared.errors import NotFoundError, ValidationFailedError
 from earth_platform.vision.types import (
@@ -56,22 +56,24 @@ async def _session_asset(
 async def upload_image(
     session_id: str,
     container: ContainerDep,
+    runtime: AgentRuntimeDep,
     sessions: SessionStoreDep,
     upload: Annotated[UploadFile, File()],
     origin: Annotated[ImageOrigin, Form()] = "upload",
     georef: Annotated[str | None, Form()] = None,
 ) -> ImageAsset:
-    await sessions.sessions.get(session_id)
-    if origin not in _ORIGINS:
-        raise ValidationFailedError(f"Unsupported image origin '{origin}'")
-    return await container.image_ingestor.ingest(
-        _upload_chunks(upload),
-        origin=origin,
-        declared_mime_type=upload.content_type,
-        filename=upload.filename,
-        session_id=session_id,
-        georef=_parse_georef(georef),
-    )
+    async with runtime.session_operation(session_id):
+        await sessions.sessions.get(session_id)
+        if origin not in _ORIGINS:
+            raise ValidationFailedError(f"Unsupported image origin '{origin}'")
+        return await container.image_ingestor.ingest(
+            _upload_chunks(upload),
+            origin=origin,
+            declared_mime_type=upload.content_type,
+            filename=upload.filename,
+            session_id=session_id,
+            georef=_parse_georef(georef),
+        )
 
 
 @router.get("/sessions/{session_id}/assets", response_model=list[ImageAsset])

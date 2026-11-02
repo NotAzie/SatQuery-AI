@@ -7,6 +7,8 @@ import {
   createEarthCommandDispatcher,
   type EarthCommandDispatcher,
 } from "./commands/dispatcher";
+import { createCesiumOverlayController } from "./overlays/CesiumOverlayController";
+import type { OverlayController } from "./overlays/types";
 import { createTimelineController } from "./timeline/CesiumTimelineController";
 import type { TimelineController } from "./timeline/types";
 import { createEarthEventBus, type EarthEventBus, type EarthViewId } from "./events";
@@ -20,6 +22,7 @@ import type { EarthWorkspaceController } from "./workspace/types";
 export interface EarthController {
   camera: CameraController;
   commands: EarthCommandDispatcher;
+  overlays: OverlayController;
   timeline: TimelineController;
   workspace: EarthWorkspaceController;
   events: EarthEventBus;
@@ -35,16 +38,24 @@ export function createEarthController(
   const camera = createCameraController(viewer);
   const timeline = createTimelineController(viewer.clock);
   const workspace = createCesiumWorkspaceController(viewer, events);
+  const overlays = createCesiumOverlayController(viewer);
   const stopCameraEvents = camera.onSettle((state) =>
     events.publish({ type: "earth.camera.changed", camera: state, viewId }),
   );
   const stopTimelineEvents = timeline.onChange((state) =>
     events.publish({ type: "earth.timeline.changed", timeline: state, viewId }),
   );
+  const stopOverlayEvents = overlays.onChange((state) =>
+    events.publish({ type: "earth.overlays.changed", overlays: state, viewId }),
+  );
+  const stopHighlightEvents = overlays.onHighlightChange((evidenceIds) =>
+    events.publish({ type: "earth.evidence.highlighted", evidenceIds, viewId }),
+  );
   return {
     camera,
     timeline,
     workspace,
+    overlays,
     events,
     commands: createEarthCommandDispatcher({
       fly_to: (command) => camera.flyTo(command),
@@ -54,12 +65,19 @@ export function createEarthController(
         if (command.playback_speed === null) timeline.pause();
         else if (command.playback_speed !== undefined) timeline.play(command.playback_speed);
       },
+      add_overlay: (command) => overlays.add(command),
+      clear_overlays: (command) => overlays.clear(command.overlay_ids ?? undefined),
+      highlight_evidence: (command) => overlays.highlight(command.evidence_ids),
     }),
     capture: { captureEarth: () => captureViewer(viewer) },
     destroy() {
       stopCameraEvents();
       stopTimelineEvents();
       workspace.destroy();
+      overlays.destroy();
+      stopOverlayEvents();
+      stopHighlightEvents();
+      timeline.destroy();
     },
   };
 }

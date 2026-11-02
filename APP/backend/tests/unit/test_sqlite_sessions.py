@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from earth_platform.sessions.models import Conversation, Session
@@ -40,4 +42,45 @@ async def test_sqlite_store_cascades_session_delete_and_reports_missing_records(
         await store.sessions.get(session.id)
     with pytest.raises(NotFoundError):
         await store.conversations.get(conversation.id)
+    await store.aclose()
+
+
+@pytest.mark.asyncio
+async def test_session_mutations_preserve_concurrent_independent_updates(tmp_path):
+    store = SQLiteSessionStore(str(tmp_path / "platform.sqlite3"))
+    await store.open()
+    session = await store.sessions.create(Session(title="Initial"))
+
+    def update_title(current: Session) -> None:
+        current.title = "Updated"
+
+    def archive_session(current: Session) -> None:
+        current.archived = True
+
+    await asyncio.gather(
+        store.sessions.mutate(session.id, update_title),
+        store.sessions.mutate(session.id, archive_session),
+    )
+
+    saved = await store.sessions.get(session.id)
+    assert saved.title == "Updated"
+    assert saved.archived
+    await store.aclose()
+
+
+@pytest.mark.asyncio
+async def test_session_mutation_rejects_identity_changes_and_rolls_back(tmp_path):
+    store = SQLiteSessionStore(str(tmp_path / "platform.sqlite3"))
+    await store.open()
+    session = await store.sessions.create(Session(title="Initial"))
+
+    def change_identity(current: Session) -> None:
+        current.title = "Should not persist"
+        current.id = "different-session"
+
+    with pytest.raises(ValueError, match="cannot change the session ID"):
+        await store.sessions.mutate(session.id, change_identity)
+
+    saved = await store.sessions.get(session.id)
+    assert saved.title == "Initial"
     await store.aclose()

@@ -13,9 +13,10 @@ Layers, later overriding earlier (maps deep-merge; lists and scalars replace):
 | Development vs production | `environments/` |
 | API providers | `providers/*.yaml` + `profiles/hosted-apis.yaml` |
 | Local models | `providers/ollama.yaml` + `profiles/local-models.yaml` |
-| SatQuery Engine | `engine.kind: http`, `engine.base_url`, optional `engine.api_key_env` |
+| SatQuery Engine | `engine.kind: http`, `engine.base_url`; `engine.api_key_env` is not usable until the Engine/deployment authentication scheme is defined |
 | Engine Agent model | `agent.model_id`: an id already registered with SatQuery Engine |
-| Vision uploads | `vision.max_image_bytes`, `vision.max_images_per_message`, `vision.max_message_bytes`, `vision.store_path` |
+| Event streaming | `streaming.heartbeat_interval_s`, `streaming.replay_window_events` (bounded replay page size; history is not truncated) |
+| Vision uploads | `vision.max_image_bytes`, `vision.max_images_per_message`, `vision.max_message_bytes`, `vision.max_concurrent_ingests`, `vision.store_path` |
 | Secrets | environment only; sections name the variable (`api_key_env: OPENAI_API_KEY`) |
 
 Examples:

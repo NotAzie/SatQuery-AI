@@ -103,9 +103,11 @@ function VisionAttachmentSession({ sessionId }: VisionAttachmentSessionProps) {
   const setSelectedAssets = useVisionStore((state) => state.setSelectedAssets);
   const panelOpen = useVisionStore((state) => state.panelOpen);
   const setPanelOpen = useVisionStore((state) => state.setPanelOpen);
-  const captures = useEarthStore((state) => state.captures);
   const earth = useEarthController();
   const fileInput = useRef<HTMLInputElement>(null);
+  const mounted = useRef(false);
+  const uploadControllers = useRef(new Set<AbortController>());
+  const screenCaptureStream = useRef<MediaStream | null>(null);
   const [assets, setAssets] = useState<ImageAsset[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [progress, setProgress] = useState<UploadProgress[]>([]);
@@ -114,22 +116,47 @@ function VisionAttachmentSession({ sessionId }: VisionAttachmentSessionProps) {
   const [viewerAsset, setViewerAsset] = useState<ImageAsset | null>(null);
   const [regionCapture, setRegionCapture] = useState<RegionCapture | null>(null);
 
+  const isCurrentSession = useCallback(
+    () =>
+      mounted.current &&
+      sessionId !== null &&
+      useSessionStore.getState().activeSessionId === sessionId,
+    [sessionId],
+  );
+
+  useEffect(() => {
+    mounted.current = true;
+    const controllers = uploadControllers.current;
+    return () => {
+      mounted.current = false;
+      for (const controller of controllers) controller.abort();
+      screenCaptureStream.current?.getTracks().forEach((track) => track.stop());
+      screenCaptureStream.current = null;
+    };
+  }, []);
+
   useEffect(() => {
     if (!sessionId) return;
     const controller = new AbortController();
     void listImageAssets(sessionId, controller.signal)
-      .then(setAssets)
+      .then((loaded) => {
+        if (!controller.signal.aborted && isCurrentSession()) setAssets(loaded);
+      })
       .catch((reason: unknown) => {
-        if (!(reason instanceof DOMException && reason.name === "AbortError")) {
+        if (
+          !controller.signal.aborted &&
+          !(reason instanceof DOMException && reason.name === "AbortError")
+        ) {
           setError(messageOf(reason));
         }
       });
     return () => controller.abort();
-  }, [sessionId]);
+  }, [isCurrentSession, sessionId]);
 
   useEffect(() => {
+    if (!isCurrentSession()) return;
     setSelectedAssets(assets.filter((asset) => selectedIds.includes(asset.id)));
-  }, [assets, selectedIds, setSelectedAssets]);
+  }, [assets, isCurrentSession, selectedIds, setSelectedAssets]);
 
   const uploadFiles = useCallback(
     async (files: File[], origin: ImageOrigin): Promise<ImageAsset[]> => {
@@ -144,6 +171,7 @@ function VisionAttachmentSession({ sessionId }: VisionAttachmentSessionProps) {
       }
       const successful: ImageAsset[] = [];
       for (const file of files) {
+        if (!isCurrentSession()) break;
         if (
           !ACCEPTED_TYPES.has(file.type) &&
           !(
@@ -160,16 +188,20 @@ function VisionAttachmentSession({ sessionId }: VisionAttachmentSessionProps) {
         }
         setError(null);
         const uploadId = crypto.randomUUID();
+        const controller = new AbortController();
+        uploadControllers.current.add(controller);
         setProgress((current) => [...current, { id: uploadId, filename: file.name, fraction: 0 }]);
         try {
           const asset = await uploadImageAsset(sessionId, file, origin, (fraction) => {
+            if (!isCurrentSession()) return;
             setProgress((current) =>
               current.map((item) =>
                 item.id === uploadId ? { ...item, fraction } : item,
               ),
             );
-          });
+          }, controller.signal);
           successful.push(asset);
+          if (!isCurrentSession()) return successful;
           setAssets((current) => [...current.filter((item) => item.id !== asset.id), asset]);
           setSelectedIds((current) =>
             current.includes(asset.id) || current.length >= MAX_ATTACHMENTS
@@ -177,14 +209,22 @@ function VisionAttachmentSession({ sessionId }: VisionAttachmentSessionProps) {
               : [...current, asset.id],
           );
         } catch (reason) {
-          setError(`${file.name}: ${messageOf(reason)}`);
+          if (
+            isCurrentSession() &&
+            !(reason instanceof DOMException && reason.name === "AbortError")
+          ) {
+            setError(`${file.name}: ${messageOf(reason)}`);
+          }
         } finally {
-          setProgress((current) => current.filter((item) => item.id !== uploadId));
+          uploadControllers.current.delete(controller);
+          if (isCurrentSession()) {
+            setProgress((current) => current.filter((item) => item.id !== uploadId));
+          }
         }
       }
       return successful;
     },
-    [selectedIds.length, sessionId],
+    [isCurrentSession, selectedIds.length, sessionId],
   );
 
   const addEarthCapture = useCallback(async () => {
@@ -196,7 +236,7 @@ function VisionAttachmentSession({ sessionId }: VisionAttachmentSessionProps) {
       const image = await earth.capture.captureEarth();
       const file = asFile(image, `earth-view-${Date.now()}.png`);
       const [asset] = await uploadFiles([file], "earth_capture");
-      if (!asset) return;
+      if (!asset || !isCurrentSession()) return;
       const capture: EarthCaptureMetadata = {
         id: crypto.randomUUID(),
         asset_id: asset.id,
@@ -208,12 +248,13 @@ function VisionAttachmentSession({ sessionId }: VisionAttachmentSessionProps) {
         viewport_width_px: asset.width,
         viewport_height_px: asset.height,
       };
-      addCapture(capture);
-      setEarthCaptures([...captures, capture]);
+      if (addCapture(sessionId, capture)) {
+        setEarthCaptures(useSessionStore.getState().captures);
+      }
     } catch (reason) {
-      setError(messageOf(reason));
+      if (isCurrentSession()) setError(messageOf(reason));
     }
-  }, [addCapture, captures, earth, sessionId, setEarthCaptures, uploadFiles]);
+  }, [addCapture, earth, isCurrentSession, sessionId, setEarthCaptures, uploadFiles]);
 
   const captureEarthRegion = useCallback(async () => {
     if (!earth) {
@@ -224,19 +265,20 @@ function VisionAttachmentSession({ sessionId }: VisionAttachmentSessionProps) {
       const camera = earth.camera.getState();
       const capturedAt = new Date().toISOString();
       const image = await earth.capture.captureEarth();
+      if (!isCurrentSession()) return;
       setRegionCapture({ image, camera, capturedAt });
     } catch (reason) {
-      setError(messageOf(reason));
+      if (isCurrentSession()) setError(messageOf(reason));
     }
-  }, [earth]);
+  }, [earth, isCurrentSession]);
 
   const saveEarthRegion = useCallback(
     async (crop: CroppedRegion) => {
-      if (!regionCapture) return;
+      if (!sessionId || !regionCapture) return;
       try {
         const file = asFile(crop.image, `earth-region-${Date.now()}.png`);
         const [asset] = await uploadFiles([file], "earth_capture");
-        if (!asset) return;
+        if (!asset || !isCurrentSession()) return;
         const capture: EarthCaptureMetadata = {
           id: crypto.randomUUID(),
           asset_id: asset.id,
@@ -248,14 +290,15 @@ function VisionAttachmentSession({ sessionId }: VisionAttachmentSessionProps) {
           viewport_width_px: crop.viewportWidth,
           viewport_height_px: crop.viewportHeight,
         };
-        addCapture(capture);
-        setEarthCaptures([...captures, capture]);
+        if (addCapture(sessionId, capture)) {
+          setEarthCaptures(useSessionStore.getState().captures);
+        }
         setRegionCapture(null);
       } catch (reason) {
-        setError(messageOf(reason));
+        if (isCurrentSession()) setError(messageOf(reason));
       }
     },
-    [addCapture, captures, regionCapture, setEarthCaptures, uploadFiles],
+    [addCapture, isCurrentSession, regionCapture, sessionId, setEarthCaptures, uploadFiles],
   );
 
   const addScreenCapture = useCallback(async () => {
@@ -266,6 +309,8 @@ function VisionAttachmentSession({ sessionId }: VisionAttachmentSessionProps) {
     let stream: MediaStream | null = null;
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      screenCaptureStream.current = stream;
+      if (!isCurrentSession()) return;
       const video = document.createElement("video");
       video.srcObject = stream;
       await video.play();
@@ -288,11 +333,12 @@ function VisionAttachmentSession({ sessionId }: VisionAttachmentSessionProps) {
       });
       await uploadFiles([asFile(blob, `screen-capture-${Date.now()}.png`)], "screen_capture");
     } catch (reason) {
-      setError(messageOf(reason));
+      if (isCurrentSession()) setError(messageOf(reason));
     } finally {
       stream?.getTracks().forEach((track) => track.stop());
+      if (screenCaptureStream.current === stream) screenCaptureStream.current = null;
     }
-  }, [uploadFiles]);
+  }, [isCurrentSession, uploadFiles]);
 
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
@@ -325,18 +371,19 @@ function VisionAttachmentSession({ sessionId }: VisionAttachmentSessionProps) {
     if (!sessionId) return;
     try {
       await deleteImageAsset(sessionId, asset.id);
+      if (!isCurrentSession()) return;
       setAssets((current) => current.filter((item) => item.id !== asset.id));
       setSelectedIds((current) => current.filter((id) => id !== asset.id));
       setViewerAsset(null);
-      const remaining = captures.filter((capture) => capture.asset_id !== asset.id);
-      if (remaining.length !== captures.length) {
-        setEarthCaptures(remaining);
-        for (const capture of captures) {
-          if (capture.asset_id === asset.id) useSessionStore.getState().deleteCapture(capture.id);
+      const currentCaptures = useSessionStore.getState().captures;
+      for (const capture of currentCaptures) {
+        if (capture.asset_id === asset.id) {
+          useSessionStore.getState().deleteCapture(sessionId, capture.id);
         }
       }
+      setEarthCaptures(useSessionStore.getState().captures);
     } catch (reason) {
-      setError(messageOf(reason));
+      if (isCurrentSession()) setError(messageOf(reason));
     }
   };
 

@@ -12,6 +12,7 @@ from pathlib import Path
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from earth_platform.settings.models import VisionSettings
+from earth_platform.shared.concurrency import KeyedLock
 from earth_platform.shared.errors import NotFoundError, ValidationFailedError
 from earth_platform.vision.store import ImageStore
 from earth_platform.vision.types import GeoReference, ImageAsset, ImageOrigin
@@ -29,6 +30,7 @@ _THUMBNAIL_MAX_SIZE = (480, 480)
 class FilesystemImageStore:
     def __init__(self, root: Path) -> None:
         self._root = root.expanduser().resolve()
+        self._asset_write_locks: KeyedLock[str] = KeyedLock()
 
     def _directory(self, asset_id: str) -> Path:
         if not _ASSET_ID.fullmatch(asset_id):
@@ -91,6 +93,11 @@ class FilesystemImageStore:
     async def list_all(self) -> list[ImageAsset]:
         return await asyncio.to_thread(self._list_all)
 
+    async def delete_for_session(self, session_id: str) -> None:
+        assets = await self.list_for_session(session_id)
+        for asset in assets:
+            await self.delete(asset.id)
+
     def _list_all(self) -> list[ImageAsset]:
         if not self._root.exists():
             return []
@@ -119,14 +126,15 @@ class FilesystemImageStore:
         georef: GeoReference | None = None,
         update_georef: bool = False,
     ) -> ImageAsset:
-        return await asyncio.to_thread(
-            self._update,
-            asset_id,
-            filename,
-            update_filename,
-            georef,
-            update_georef,
-        )
+        async with self._asset_write_locks.hold(asset_id):
+            return await asyncio.to_thread(
+                self._update,
+                asset_id,
+                filename,
+                update_filename,
+                georef,
+                update_georef,
+            )
 
     def _update(
         self,
@@ -148,14 +156,20 @@ class FilesystemImageStore:
         return asset
 
     async def delete(self, asset_id: str) -> None:
-        await asyncio.to_thread(self._delete, asset_id)
+        async with self._asset_write_locks.hold(asset_id):
+            await asyncio.to_thread(self._delete, asset_id)
 
     def _delete(self, asset_id: str) -> None:
         directory = self._directory(asset_id)
         if not directory.exists():
             raise NotFoundError(f"Image asset '{asset_id}' was not found")
-        for path in directory.iterdir():
-            path.unlink()
+        paths = list(directory.iterdir())
+        metadata_path = directory / "metadata.json"
+        for path in paths:
+            if path != metadata_path:
+                path.unlink()
+        if metadata_path.exists():
+            metadata_path.unlink()
         directory.rmdir()
 
 
@@ -163,6 +177,7 @@ class FilesystemImageIngestor:
     def __init__(self, store: ImageStore, settings: VisionSettings) -> None:
         self._store = store
         self._settings = settings
+        self._ingest_slots = asyncio.Semaphore(settings.max_concurrent_ingests)
 
     async def ingest(
         self,
@@ -174,35 +189,36 @@ class FilesystemImageIngestor:
         session_id: str | None = None,
         georef: GeoReference | None = None,
     ) -> ImageAsset:
-        parts: list[bytes] = []
-        size = 0
-        async for part in data:
-            size += len(part)
-            if size > self._settings.max_image_bytes:
-                raise ValidationFailedError(
-                    f"Image exceeds the {self._settings.max_image_bytes}-byte size limit"
-                )
-            parts.append(part)
-        if not size:
-            raise ValidationFailedError("Image upload is empty")
-        raw = b"".join(parts)
-        mime_type, width, height, thumbnail = await asyncio.to_thread(
-            _inspect_image, raw, declared_mime_type, self._settings.allowed_mime_types
-        )
-        asset = ImageAsset(
-            id=uuid.uuid4().hex,
-            session_id=session_id,
-            mime_type=mime_type,
-            size_bytes=size,
-            width=width,
-            height=height,
-            sha256=hashlib.sha256(raw).hexdigest(),
-            origin=origin,
-            filename=_safe_filename(filename) if filename else None,
-            georef=georef,
-        )
-        await self._store.put(asset, raw, thumbnail)
-        return asset
+        async with self._ingest_slots:
+            parts: list[bytes] = []
+            size = 0
+            async for part in data:
+                size += len(part)
+                if size > self._settings.max_image_bytes:
+                    raise ValidationFailedError(
+                        f"Image exceeds the {self._settings.max_image_bytes}-byte size limit"
+                    )
+                parts.append(part)
+            if not size:
+                raise ValidationFailedError("Image upload is empty")
+            raw = b"".join(parts)
+            mime_type, width, height, thumbnail = await asyncio.to_thread(
+                _inspect_image, raw, declared_mime_type, self._settings.allowed_mime_types
+            )
+            asset = ImageAsset(
+                id=uuid.uuid4().hex,
+                session_id=session_id,
+                mime_type=mime_type,
+                size_bytes=size,
+                width=width,
+                height=height,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                origin=origin,
+                filename=_safe_filename(filename) if filename else None,
+                georef=georef,
+            )
+            await self._store.put(asset, raw, thumbnail)
+            return asset
 
 
 def _inspect_image(

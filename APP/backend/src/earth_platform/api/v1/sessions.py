@@ -3,11 +3,11 @@
 from fastapi import APIRouter, Query, Response, status
 from pydantic import BaseModel
 
-from earth_platform.api.deps import SessionStoreDep
+from earth_platform.api.deps import AgentRuntimeDep, ContainerDep, SessionStoreDep
 from earth_platform.sessions.models import Conversation, Session
 from earth_platform.shared.clock import utcnow
 from earth_platform.shared.earth import EarthWorkspaceState
-from earth_platform.shared.errors import ConflictError, NotFoundError
+from earth_platform.shared.errors import NotFoundError
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -52,26 +52,28 @@ async def update_session(
     body: UpdateSession,
     store: SessionStoreDep,
 ) -> Session:
-    session = await store.sessions.get(session_id)
-    if "title" in body.model_fields_set:
-        session.title = body.title
-    if "archived" in body.model_fields_set and body.archived is not None:
-        session.archived = body.archived
-    if "earth_workspace" in body.model_fields_set and body.earth_workspace is not None:
-        session.earth_workspace = body.earth_workspace
-    session.updated_at = utcnow()
-    return await store.sessions.update(session)
+    def apply_update(session: Session) -> None:
+        if "title" in body.model_fields_set:
+            session.title = body.title
+        if "archived" in body.model_fields_set and body.archived is not None:
+            session.archived = body.archived
+        if "earth_workspace" in body.model_fields_set and body.earth_workspace is not None:
+            session.earth_workspace = body.earth_workspace
+        session.updated_at = utcnow()
+
+    return await store.sessions.mutate(session_id, apply_update)
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_session(session_id: str, store: SessionStoreDep) -> Response:
-    session = await store.sessions.get(session_id)
-    if session.engine_agent_session_id is not None:
-        raise ConflictError(
-            "This session has an Engine-owned transcript; archive it instead of deleting it "
-            "until the Engine Agent API supports session deletion."
-        )
-    await store.sessions.delete(session_id)
+async def delete_session(
+    session_id: str,
+    runtime: AgentRuntimeDep,
+    container: ContainerDep,
+) -> Response:
+    await runtime.delete_platform_session(
+        session_id,
+        delete_session_assets=container.image_store.delete_for_session,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

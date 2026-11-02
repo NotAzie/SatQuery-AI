@@ -45,7 +45,7 @@ export function createTimelineController(clock: TimelineClock): TimelineControll
     listeners.forEach((listener) => listener(snapshot));
   };
 
-  clock.onTick.addEventListener(() => publish());
+  const removeTickListener = clock.onTick.addEventListener(() => publish());
 
   return {
     getState: state,
@@ -98,6 +98,11 @@ export function createTimelineController(clock: TimelineClock): TimelineControll
     onChange(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+
+    destroy() {
+      removeTickListener();
+      listeners.clear();
     },
   };
 }

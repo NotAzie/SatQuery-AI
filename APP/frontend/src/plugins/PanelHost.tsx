@@ -15,7 +15,10 @@ export function PanelHost({ slot }: { slot: PanelSlot }) {
   return (
     <>
       {inSlot.map(({ id, component: Panel }) => (
-        <div key={id} className="pointer-events-auto">
+        <div
+          key={id}
+          className={slot === "bottom" ? "pointer-events-none" : "pointer-events-auto"}
+        >
           <Panel />
         </div>
       ))}

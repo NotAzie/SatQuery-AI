@@ -19,8 +19,16 @@ class InMemoryEventBus(EventBus):
     multiple API workers should replace this bus with a shared broker implementation.
     """
 
-    def __init__(self, event_log: EventLog | None = None) -> None:
+    def __init__(
+        self,
+        event_log: EventLog | None = None,
+        *,
+        replay_window_events: int = 2000,
+    ) -> None:
+        if replay_window_events < 1:
+            raise ValueError("replay_window_events must be positive")
         self._event_log = event_log
+        self._replay_window_events = replay_window_events
         self._subscribers: dict[str, set[asyncio.Queue[AgentEvent | None]]] = {}
         self._lock = asyncio.Lock()
         self._closed = False
@@ -55,9 +63,7 @@ class InMemoryEventBus(EventBus):
                     queue.put_nowait(published)
                 except asyncio.QueueFull:
                     subscribers.discard(queue)
-                    while not queue.empty():
-                        queue.get_nowait()
-                    queue.put_nowait(None)
+                    _terminate_subscriber(queue)
             if not subscribers:
                 self._subscribers.pop(session_id, None)
         return published
@@ -69,20 +75,30 @@ class InMemoryEventBus(EventBus):
             raise ValueError("after_seq must be non-negative")
         queue: asyncio.Queue[AgentEvent | None] = asyncio.Queue(maxsize=self._subscriber_queue_size)
         async with self._lock:
-            replay: list[AgentEvent] = []
-            async for stored in self._log().read_after(session_id, after_seq):
-                replay.append(_EVENT_ADAPTER.validate_python({**stored.payload, "seq": stored.seq}))
             if self._closed:
                 return
+            through_seq = await self._log().latest_seq(session_id)
             self._subscribers.setdefault(session_id, set()).add(queue)
 
         try:
-            for event in replay:
+            last_seq = after_seq
+            async for stored in self._log().read_after(
+                session_id,
+                after_seq,
+                through_seq=through_seq,
+                limit=self._replay_window_events,
+            ):
+                event = _EVENT_ADAPTER.validate_python({**stored.payload, "seq": stored.seq})
+                last_seq = stored.seq
                 yield event
             while not self._closed:
                 next_event = await queue.get()
                 if next_event is None:
                     return
+                if next_event.seq is not None and next_event.seq <= last_seq:
+                    continue
+                if next_event.seq is not None:
+                    last_seq = next_event.seq
                 yield next_event
         finally:
             async with self._lock:
@@ -97,5 +113,11 @@ class InMemoryEventBus(EventBus):
             self._closed = True
             for subscribers in self._subscribers.values():
                 for queue in subscribers:
-                    queue.put_nowait(None)
+                    _terminate_subscriber(queue)
             self._subscribers.clear()
+
+
+def _terminate_subscriber(queue: asyncio.Queue[AgentEvent | None]) -> None:
+    while not queue.empty():
+        queue.get_nowait()
+    queue.put_nowait(None)

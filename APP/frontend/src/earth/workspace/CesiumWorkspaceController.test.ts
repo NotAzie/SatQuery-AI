@@ -96,9 +96,11 @@ function createEntity(
 
 function fakeViewer() {
   const createdEntities: unknown[] = [];
+  const requestRender = vi.fn();
   const viewer = {
     scene: {
       canvas: {},
+      requestRender,
       globe: {
         ellipsoid: {},
         pick: (ray: { x: number; y: number }) => ({ longitude: ray.x, latitude: ray.y }),
@@ -125,7 +127,7 @@ function fakeViewer() {
       }),
     },
   };
-  return { viewer: viewer as unknown as Viewer, createdEntities };
+  return { viewer: viewer as unknown as Viewer, createdEntities, requestRender };
 }
 
 function click(x: number, y: number): { position: Cartesian2 } {
@@ -145,6 +147,7 @@ describe("Cesium workspace controller", () => {
     const selected = createEntity("feature-7", {
       class: { getValue: () => "water" },
       count: { getValue: () => 3 },
+      evidence_ids: { getValue: () => ["evidence-1", "evidence-2"] },
       ignored: { getValue: () => ({ internal: true }) },
     });
     viewer.scene.pick = () => ({ id: selected });
@@ -157,7 +160,11 @@ describe("Cesium workspace controller", () => {
       selection: {
         entity_id: "feature-7",
         position: { lng: 12, lat: 48 },
-        properties: { class: "water", count: 3 },
+        properties: {
+          class: "water",
+          count: 3,
+          evidence_ids: '["evidence-1","evidence-2"]',
+        },
       },
     });
 
@@ -171,7 +178,7 @@ describe("Cesium workspace controller", () => {
   });
 
   it("creates GeoJSON presentation drawings without invoking Engine behavior", () => {
-    const { viewer, createdEntities } = fakeViewer();
+    const { viewer, createdEntities, requestRender } = fakeViewer();
     const secondary = fakeViewer();
     const events = createEarthEventBus();
     const changed = vi.fn();
@@ -238,6 +245,7 @@ describe("Cesium workspace controller", () => {
     });
     expect(createdEntities).toHaveLength(5);
     expect(secondary.createdEntities).toHaveLength(5);
+    expect(requestRender).toHaveBeenCalled();
     controller.destroy();
     secondaryController.destroy();
   });

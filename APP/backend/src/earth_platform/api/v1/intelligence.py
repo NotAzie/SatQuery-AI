@@ -1,3 +1,4 @@
+import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Query
@@ -5,10 +6,15 @@ from fastapi import APIRouter, Query
 from earth_platform.api.deps import (
     AgentRuntimeDep,
     CapabilityDiscoveryDep,
+    EngineDep,
     SessionStoreDep,
     WorkspaceMemoryDep,
 )
-from earth_platform.intelligence.models import CapabilitySnapshot, MemorySearchResponse
+from earth_platform.intelligence.models import (
+    CapabilitySnapshot,
+    EngineDiscoveryResponse,
+    MemorySearchResponse,
+)
 
 router = APIRouter(prefix="/intelligence", tags=["intelligence"])
 
@@ -16,6 +22,22 @@ router = APIRouter(prefix="/intelligence", tags=["intelligence"])
 @router.get("/capabilities", response_model=CapabilitySnapshot)
 async def get_capabilities(discovery: CapabilityDiscoveryDep) -> CapabilitySnapshot:
     return discovery.snapshot()
+
+
+@router.get("/engine-discovery", response_model=EngineDiscoveryResponse)
+async def get_engine_discovery(engine: EngineDep) -> EngineDiscoveryResponse:
+    image_capabilities, datasets, earth_capabilities, agent_tools = await asyncio.gather(
+        engine.list_engine_image_capabilities(),
+        engine.list_engine_datasets(),
+        engine.get_engine_earth_capabilities(),
+        engine.list_engine_agent_tools(),
+    )
+    return EngineDiscoveryResponse(
+        image_capabilities=image_capabilities,
+        datasets=datasets,
+        earth_capabilities=earth_capabilities,
+        agent_tools=agent_tools,
+    )
 
 
 @router.get(

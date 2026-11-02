@@ -1,10 +1,10 @@
 # `earth_platform/plugins`
 
-**Purpose.** The extension contract and host.
+**Purpose.** The extension contract.
 
 **Belongs here**
 - `api.py`, the only module third-party plugins import
-- `PluginHost` Protocol; later its implementation (entry-point discovery, isolation, ownership tracking)
+- `PluginHost` Protocol; no concrete host is wired into the application
 
 **Never here**
 - Core feature code (first-party features use the same registries directly)

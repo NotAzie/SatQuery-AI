@@ -73,6 +73,7 @@ class VisionSettings(BaseModel):
     max_image_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
     max_images_per_message: int = Field(default=8, ge=1, le=8)
     max_message_bytes: int = Field(default=40 * 1024 * 1024, gt=0)
+    max_concurrent_ingests: int = Field(default=2, ge=1, le=32)
     allowed_mime_types: list[str] = Field(
         default_factory=lambda: ["image/png", "image/jpeg", "image/webp", "image/tiff"]
     )
@@ -88,7 +89,7 @@ class SessionSettings(BaseModel):
 class StreamingSettings(BaseModel):
     bus_kind: str = "memory"
     heartbeat_interval_s: float = 15.0
-    replay_window_events: int = 2000
+    replay_window_events: int = Field(default=2000, ge=1, le=100_000)
 
 
 class PluginSettings(BaseModel):

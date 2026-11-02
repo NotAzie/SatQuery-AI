@@ -5,6 +5,8 @@ import { AgentChat } from "@/features/chat/AgentChat";
 import { SessionSidebar } from "@/features/sessions/SessionSidebar";
 import { TimelinePanel } from "@/features/timeline/TimelinePanel";
 import { WorkspaceToolsPanel } from "@/features/earth/WorkspaceToolsPanel";
+import { EngineDiscoveryPanel } from "@/features/earth/EngineDiscoveryPanel";
+import { MonitoringPanel } from "@/features/monitoring/MonitoringPanel";
 import { VisionAttachments } from "@/features/vision/VisionAttachments";
 import { PluginHostProvider, usePluginHost } from "@/plugins/PluginHostProvider";
 
@@ -63,12 +65,34 @@ function RegisterCorePanels() {
         },
         "core",
       );
+      const unregisterMonitoring = host.panels.register(
+        {
+          id: "core.monitoring",
+          title: "Monitoring",
+          slot: "right",
+          order: 20,
+          component: MonitoringPanel,
+        },
+        "core",
+      );
+      const unregisterEngineDiscovery = host.panels.register(
+        {
+          id: "core.engine-discovery",
+          title: "Engine data",
+          slot: "right",
+          order: 30,
+          component: EngineDiscoveryPanel,
+        },
+        "core",
+      );
       return () => {
         unregisterSessions();
         unregisterChat();
         unregisterTimeline();
         unregisterEarthTools();
         unregisterVision();
+        unregisterMonitoring();
+        unregisterEngineDiscovery();
       };
     },
     [host],

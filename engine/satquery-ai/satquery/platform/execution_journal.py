@@ -14,6 +14,7 @@ import threading
 from collections.abc import Mapping
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from itertools import islice
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
@@ -165,7 +166,13 @@ class ExecutionJournal(Protocol):
     def checkpoints(self, plan_id: str) -> dict[str, TaskExecution]: ...
     def record_event(self, plan_id: str, event_type: str, payload: Mapping[str, Any]) -> None: ...
     def checkpoint(self, plan: ExecutionPlan, task: TaskExecution) -> None: ...
-    def events(self, plan_id: str, *, after_sequence: int = 0) -> tuple[dict[str, Any], ...]: ...
+    def events(
+        self,
+        plan_id: str,
+        *,
+        after_sequence: int = 0,
+        limit: int | None = None,
+    ) -> tuple[dict[str, Any], ...]: ...
 
 
 class InMemoryExecutionJournal:
@@ -232,9 +239,23 @@ class InMemoryExecutionJournal:
             self._checkpoints[plan.plan_id][task.task_id] = stored
         self.record_event(plan.plan_id, "task.checkpointed", {"task_id": task.task_id, "codec_id": codec_id, "codec_version": version})
 
-    def events(self, plan_id: str, *, after_sequence: int = 0) -> tuple[dict[str, Any], ...]:
+    def events(
+        self,
+        plan_id: str,
+        *,
+        after_sequence: int = 0,
+        limit: int | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        if limit is not None and limit < 1:
+            raise ValueError("Execution event limit must be positive.")
         with self._lock:
-            return tuple(_json_value(item) for item in self._events if item["plan_id"] == plan_id and item["sequence"] > after_sequence)
+            events = (
+                item for item in self._events
+                if item["plan_id"] == plan_id and item["sequence"] > after_sequence
+            )
+            if limit is not None:
+                events = islice(events, limit)
+            return tuple(_json_value(item) for item in events)
 
 
 class SQLiteExecutionJournal:
@@ -437,7 +458,15 @@ class SQLiteExecutionJournal:
                 connection.execute("ROLLBACK")
                 raise
 
-    def events(self, plan_id: str, *, after_sequence: int = 0) -> tuple[dict[str, Any], ...]:
+    def events(
+        self,
+        plan_id: str,
+        *,
+        after_sequence: int = 0,
+        limit: int | None = None,
+    ) -> tuple[dict[str, Any], ...]:
+        if limit is not None and limit < 1:
+            raise ValueError("Execution event limit must be positive.")
         with self._connection() as connection:
             if after_sequence > 0:
                 anchor_row = connection.execute(
@@ -458,16 +487,20 @@ class SQLiteExecutionJournal:
                     "SELECT sequence, plan_id, event_type, timestamp, payload_json, "
                     "previous_event_sha256, event_sha256 "
                     "FROM satquery_execution_events "
-                    "WHERE plan_id = ? AND sequence > ? ORDER BY sequence",
-                    (plan_id, after_sequence),
+                    "WHERE plan_id = ? AND sequence > ? ORDER BY sequence"
+                    + (" LIMIT ?" if limit is not None else ""),
+                    (plan_id, after_sequence, limit)
+                    if limit is not None
+                    else (plan_id, after_sequence),
                 ).fetchall()
             else:
                 anchor = None
                 rows = connection.execute(
                     "SELECT sequence, plan_id, event_type, timestamp, payload_json, "
                     "previous_event_sha256, event_sha256 "
-                    "FROM satquery_execution_events WHERE plan_id = ? ORDER BY sequence",
-                    (plan_id,),
+                    "FROM satquery_execution_events WHERE plan_id = ? ORDER BY sequence"
+                    + (" LIMIT ?" if limit is not None else ""),
+                    (plan_id, limit) if limit is not None else (plan_id,),
                 ).fetchall()
         events = tuple(_event_from_row(row) for row in rows)
         _verify_event_chain(

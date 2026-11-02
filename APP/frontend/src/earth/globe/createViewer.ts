@@ -11,6 +11,7 @@ export function createViewer(container: HTMLElement): Viewer {
   if (CESIUM_ION_TOKEN) Ion.defaultAccessToken = CESIUM_ION_TOKEN;
 
   const viewer = new Viewer(container, {
+    requestRenderMode: true,
     animation: false,
     timeline: false,
     baseLayerPicker: false,

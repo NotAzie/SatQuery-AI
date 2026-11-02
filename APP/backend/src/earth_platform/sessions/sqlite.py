@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
 
@@ -140,6 +140,41 @@ class _Sessions:
             await self._store._connection().commit()
         if cursor.rowcount == 0:
             raise NotFoundError(f"Session '{session.id}' was not found")
+        return session
+
+    async def mutate(
+        self,
+        session_id: str,
+        mutation: Callable[[Session], None],
+    ) -> Session:
+        db = self._store._connection()
+        async with self._store._lock:
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                cursor = await db.execute(
+                    "SELECT data FROM sessions WHERE id = ?",
+                    (session_id,),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    raise NotFoundError(f"Session '{session_id}' was not found")
+                session = Session.model_validate_json(row["data"])
+                mutation(session)
+                if session.id != session_id:
+                    raise ValueError("Session mutations cannot change the session ID")
+                await db.execute(
+                    "UPDATE sessions SET updated_at = ?, archived = ?, data = ? WHERE id = ?",
+                    (
+                        session.updated_at.isoformat(),
+                        int(session.archived),
+                        session.model_dump_json(),
+                        session.id,
+                    ),
+                )
+                await db.commit()
+            except BaseException:
+                await db.rollback()
+                raise
         return session
 
     async def list(
@@ -299,7 +334,7 @@ class _Events:
                     (session_id, seq, type, json.dumps(payload), at),
                 )
                 await db.commit()
-            except Exception:
+            except BaseException:
                 await db.rollback()
                 raise
         return StoredEvent(
@@ -309,21 +344,45 @@ class _Events:
             payload=payload,
         )
 
-    async def read_after(self, session_id: str, seq: int) -> AsyncIterator[StoredEvent]:
-        async with self._store._lock:
-            cursor = await self._store._connection().execute(
-                "SELECT seq, type, payload FROM events WHERE session_id = ? AND seq > ? "
-                "ORDER BY seq",
-                (session_id, seq),
+    async def read_after(
+        self,
+        session_id: str,
+        seq: int,
+        *,
+        through_seq: int | None = None,
+        limit: int | None = None,
+    ) -> AsyncIterator[StoredEvent]:
+        if limit is not None and limit < 1:
+            raise ValueError("limit must be positive")
+        current_seq = seq
+        while True:
+            query = (
+                "SELECT seq, type, payload FROM events "
+                "WHERE session_id = ? AND seq > ?"
             )
-            rows = await cursor.fetchall()
-        for row in rows:
-            yield StoredEvent(
-                session_id=session_id,
-                seq=row["seq"],
-                type=row["type"],
-                payload=json.loads(row["payload"]),
-            )
+            params: tuple[Any, ...] = (session_id, current_seq)
+            if through_seq is not None:
+                query += " AND seq <= ?"
+                params += (through_seq,)
+            query += " ORDER BY seq"
+            if limit is not None:
+                query += " LIMIT ?"
+                params += (limit,)
+            async with self._store._lock:
+                cursor = await self._store._connection().execute(query, params)
+                rows = list(await cursor.fetchall())
+            if not rows:
+                return
+            for row in rows:
+                current_seq = int(row["seq"])
+                yield StoredEvent(
+                    session_id=session_id,
+                    seq=current_seq,
+                    type=row["type"],
+                    payload=json.loads(row["payload"]),
+                )
+            if limit is None or len(rows) < limit:
+                return
 
     async def latest_seq(self, session_id: str) -> int:
         async with self._store._lock:

@@ -25,8 +25,8 @@ interface SessionStoreState {
   renameBookmark: (id: string, name: string) => void;
   updateBookmark: (id: string, context: EarthContext) => void;
   deleteBookmark: (id: string) => void;
-  addCapture: (capture: EarthCaptureMetadata) => void;
-  deleteCapture: (id: string) => void;
+  addCapture: (sessionId: string, capture: EarthCaptureMetadata) => boolean;
+  deleteCapture: (sessionId: string, id: string) => boolean;
 }
 
 interface PersistedWorkspace {
@@ -441,16 +441,16 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
       };
     });
   },
-  addCapture: (capture) => {
-    if (!get().activeSessionId) {
-      throw new Error("Save an Earth capture only after opening a Platform session");
-    }
+  addCapture: (sessionId, capture) => {
+    if (get().activeSessionId !== sessionId) return false;
     save(get, set, (workspace) => ({
       ...workspace,
       captures: [...workspace.captures, capture],
     }));
+    return true;
   },
-  deleteCapture: (id) => {
+  deleteCapture: (sessionId, id) => {
+    if (get().activeSessionId !== sessionId) return false;
     save(get, set, (workspace) => {
       if (!workspace.captures.some((capture) => capture.id === id)) {
         throw new RangeError(`Earth capture '${id}' does not exist`);
@@ -460,5 +460,6 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         captures: workspace.captures.filter((capture) => capture.id !== id),
       };
     });
+    return true;
   },
 }));

@@ -31,9 +31,12 @@ def test_session_and_conversation_routes_use_persistent_store(tmp_path):
                     "name": "Alps",
                     "context": {
                         "camera": camera,
+                        "secondary_view": None,
+                        "viewport": None,
                         "layers": [],
                         "time": None,
                         "instant": None,
+                        "timeline_playback": {"playing": False, "speed": 1},
                         "selection": {
                             "entity_id": "feature-1",
                             "position": {"lng": 12.5, "lat": 48.1},
@@ -48,6 +51,9 @@ def test_session_and_conversation_routes_use_persistent_store(tmp_path):
                             }
                         ],
                         "captures": [],
+                        "imagery": [],
+                        "overlays": [],
+                        "investigations": {"known_ids": [], "visible_ids": []},
                         "selected_evidence_ids": [],
                         "bookmarks": [],
                         "camera_history": {"past": [], "present": None, "future": []},

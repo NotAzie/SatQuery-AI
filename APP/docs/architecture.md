@@ -9,8 +9,8 @@
    the backend can drive it with typed commands. (ADR 0003)
 4. **One wire contract.** Events, Earth commands and shared models are defined once in pydantic,
    exported to `contracts/schema.json`, and generated into TypeScript. The two sides cannot drift.
-5. **Everything extensible goes through a registry.** First-party features and plugins use the same
-   registries, so the extension API is exercised by the core.
+5. **Extension points use registries.** Backend plugin loading and frontend module loading remain
+   contracts, not active runtime capabilities.
 6. **Dependencies point down.** Enforced mechanically, not by convention.
 
 ## Runtime view
@@ -37,53 +37,90 @@ flowchart LR
   ECES --> CESIUM[Cesium workspace]
   FE -- "GET /api/v1/chat/sessions/{id}" --> API
   API --> SQ
-  FE -- "multipart image upload / preparation" --> VAPI[Vision API]
+  FE -- "GET /api/v1/chat/sessions/{id}/investigations/{investigation_id}/report" --> API
+  API -- "GET /api/v1/platform/investigations/{id}/report" --> SQ
+  FE -- "GET /api/v1/chat/sessions/{id}/investigations/{investigation_id}/earth-objects" --> API
+  API -- "GET /api/v1/platform/earth-objects/geojson?investigation_id=..." --> SQ
+  FE -- "multipart image upload / asset management" --> VAPI[Vision API]
   VAPI --> VSTORE[Session-scoped ImageStore]
-  VAPI -- "PreparedVisionPayload (not forwarded to Engine)" --> FE
   FE -- "EarthContext + asset references" --> PLAN
+  PLAN --> VSTORE
+  VSTORE -- "verified original bytes" --> EC
   PLAN --> SNAP[Platform session snapshots]
+  FE -- "mission and monitoring controls" --> MAPI[Monitoring API]
+  MAPI --> EC
+  EC -- "missions, schedules, runs, comparisons, cursor-paged trigger events" --> SQ
+  FE -- "Engine dataset and image capability discovery" --> API
+  API --> EC
 ```
 
-## Phase 2 text question, end to end
+## Phase 2 Agent turn, end to end
 
-1. The user selects a Platform session and submits text. Investigation execution authorization is
+1. The user selects a Platform session and submits text and optional selected image asset IDs.
+   Investigation execution authorization is
    off by default; the UI checkbox is explicit per-turn consent. The client also sends its current
    typed EarthContext and provider-neutral vision metadata/asset references when present.
 2. The chat API verifies the Platform session and configured Engine model id. The Request Planner
    reads the Engine-owned transcript, builds and persists a bounded Platform EarthContext snapshot,
    retrieves existing Platform records, resolves asset metadata by session-owned IDs, discovers
    registered/configured capabilities, and estimates context size.
-3. If EarthContext exists, the planner serializes descriptive UI state into a clearly delimited text
-   context block and appends it to the user's Engine message. This is the only supported way to
-   convey it through today's text-only Agent API. The frontend removes that block when it renders
-   the user's transcript. Image attachment IDs are rejected from turn submission before the Engine
-   Agent turn is called; they are never silently dropped or submitted as fake structured fields.
+3. If EarthContext exists, the planner budgets its model-relevant fields separately from the message.
+   The Engine request carries a typed context containing camera/view scope, time, selection,
+   user-created drawings, and selected evidence references. Local rendering state is not sent.
+   If image IDs are present, the route resolves the originals from the session-owned image store
+   and sends typed attachment metadata and bytes separately from message text.
 4. `AgentRuntime` lazily creates and persists the matching Engine Agent session id for older and new
-   Platform sessions. `EngineClient` sends the planned message, model id, and consent flag to
+   Platform sessions. Concurrent initialization of the same Platform session is single-flight;
+   independent sessions initialize concurrently. `EngineClient` sends the planned message, model id,
+   consent flag, structured EarthContext, and optional images to
    `POST /api/v1/agent/sessions/{id}/turns`. SatQuery Engine owns model selection, tool calls,
    scientific execution, and transcript persistence.
-5. The adapter parses Engine SSE events into typed boundary models. `AgentRuntime` wraps each event
-   without interpreting or recalculating it, persists it to the Platform event log, and forwards it
-   as SSE to the chat request.
+5. The adapter parses Engine SSE events into typed boundary models. `AgentRuntime` preserves
+   ordinary Engine events as opaque `engine.event` records. It validates `earth.command` against the
+   shared command schema, stores it as `EarthCommandIssued`, and forwards it for workspace dispatch.
 6. The frontend renders assistant deltas and Engine tool/progress status. On session revisit, it
-   fetches the authoritative transcript from the Engine Agent session.
+   fetches the authoritative transcript from the Engine Agent session. Investigation IDs from that
+   transcript are the only report links shown; a report request is checked against the session's
+   current Engine transcript before the existing Engine report endpoint is called. The Platform
+   validates and returns the Engine report identity, digest, and Markdown without interpreting
+   observations or constructing scientific claims.
+7. The user can load an investigation's Engine-exported Earth Object GeoJSON through a similarly
+   session-scoped route. The Engine export includes only explicitly materialized, valid WGS 84
+   geometries and reports omitted objects. The Engine exposes the investigation's append-only
+   execution journal through a bounded cursor page after verifying Agent-session ownership; journal
+   integrity is checked before a page is returned. The frontend renders the FeatureCollection as a
+   transient Cesium data source, displays typed evidence IDs on feature selection, highlights
+   matching loaded evidence on request, and removes owned sources when the session changes or its
+   EarthController is destroyed. No reprojection, geometry repair, or scientific interpretation
+   occurs in the Platform.
+8. Stop calls the Platform cancel route, which delegates to the Engine Agent session's cancellation
+   endpoint. The browser aborts its local event stream only after that request completes; a failed
+   cancellation is shown to the user rather than treated as a successful Engine stop.
 
 The same planner is inspectable without starting a turn at
 `POST /api/v1/chat/sessions/{id}/plan`. The Platform memory search endpoint is
 `GET /api/v1/intelligence/sessions/{id}/memory?query=...`; runtime capability facts are available
 at `GET /api/v1/intelligence/capabilities`.
 
-An Engine-originated Earth command, when supported by the Engine event contract, must arrive as a
-typed `earth.command` event. The frontend dispatches that event to the relevant EarthController;
-commands are never inferred from assistant prose or tool outputs. The current Engine Agent event
-allowlist does not include that event yet, so the dispatcher is an extension point and currently
-only `fly_to` has a registered workspace handler. See the [Phase 3 and Phase 4 roadmap](roadmap.md).
+The Engine Agent exposes `earth.command` as an explicit presentation tool and emits a typed event
+with the existing session/turn/sequence/timestamp envelope. The Platform validates and maps this to
+the shared `EarthCommandIssued` event before persistence and frontend dispatch. The first supported
+commands are `fly_to` and `show_investigation`; Engine and Platform both enforce investigation
+session ownership. Commands are never inferred from assistant prose or tool outputs. Other command
+types remain unavailable until their Engine data contracts exist. See the
+[Phase 3 and Phase 4 roadmap](roadmap.md).
 
-The Phase 4 timeline is a presentation-only EarthController slice. Its UI changes the Cesium clock,
-and clock state is mirrored into the frontend EarthContext store. Phase 6 includes the serializable
-EarthContext as descriptive text in the Engine message; there is still no structured Engine context
-field. Investigation visualization and layer rendering similarly require typed Engine-owned source
-data; the Platform does not derive these from opaque tool results.
+The Phase 4 timeline is a presentation-owned EarthController slice. Its UI changes the Cesium clock,
+and viewport and clock state are mirrored into the frontend EarthContext store. Phase 6 sends a
+bounded typed workspace snapshot with the Engine turn, including camera and viewport, timeline,
+selection, drawings, imagery references, primary and secondary view state, visible overlay geometry,
+evidence highlights, investigation references, and the remaining serializable workspace state. The Engine treats every value as
+untrusted scope, not evidence. Image bytes remain separate transient attachments. The Cesium viewer
+uses request-driven rendering, allowing static views to remain idle while camera, scene, timeline,
+and overlay changes request frames. The Engine's verified GeoJSON export remains the source for
+canonical Earth Object overlays; paged investigation history comes from the Engine execution journal.
+Layer rendering still requires typed Engine-owned source data. The Platform does not derive these
+from opaque tool results.
 
 Phase 4 workspace state is kept separate from Engine-owned session transcripts. The Platform's
 session record has an `earth_workspace` value persisted through the existing session API and SQLite
@@ -92,13 +129,20 @@ draw interaction, terrain-height queries, camera restoration, and entity renderi
 state stores only serializable selection/drawing values. A typed Earth event bus publishes selection
 and drawing changes to every active view. Split view creates a second EarthController that shares
 presentation events and timeline state while cameras remain independent unless the user enables
-synchronization.
+synchronization. Each controller releases its Cesium clock listener and other owned subscriptions
+when its viewport is destroyed.
+Session field changes use repository mutations that read, apply, and persist under one SQLite write
+transaction, so concurrent workspace, planner-snapshot, and Engine-link updates preserve unrelated
+fields.
 
 Distance, area, coordinate inspection, and optional terrain elevation are local workspace
 measurements, not Engine evidence. User-created GeoJSON drawings remain EarthContext presentation
-objects and never start an investigation. EarthContext presentation state is sent as descriptive
-message text only; it is not treated as an Engine structured input. The Platform does not
-synthesize investigation overlays or scientific layers.
+objects and never start an investigation. The Engine receives bounded typed presentation state as
+untrusted per-turn scope; the Platform does not synthesize investigation overlays or scientific
+layers. Layer state remains empty until product selects renderable source kinds and approved
+providers, deployment defines licensing, credentials, and source-serving endpoints, and the Engine
+can publish an authoritative catalogue from those sources. Dataset acquisition metadata alone does
+not identify renderable sources.
 
 ## Vision intake and preparation
 
@@ -114,15 +158,28 @@ The backend Vision API verifies the Platform session, validates image size/type/
 original data plus thumbnails through `ImageStore`, and exposes session-scoped metadata/content
 operations. The `MultimodalPreparer` resolves asset IDs from that store and returns a
 `PreparedVisionPayload` with metadata and original image bytes in a provider-neutral envelope.
+Image intake bounds concurrent in-process buffering, decoding, and persistence so simultaneous
+uploads cannot multiply the per-image memory allowance without limit. The setting is per worker;
+deployment-wide capacity scales with the number of API workers. Per-asset metadata updates are
+serialized within the store instance, preserving independent concurrent field changes.
+Deleting an unlinked Platform session removes its filesystem image assets before deleting the
+session record, under the same per-session lock used by uploads and Engine-session initialization;
+if asset cleanup fails, the session record remains available for a retry.
 Client-supplied metadata can describe the image but cannot replace stored asset metadata.
+The frontend cancels in-flight uploads when a session-bound Vision panel is destroyed and checks
+session identity after asynchronous work before changing shared capture state; capture mutations
+are rejected by the session store when their originating session is no longer active.
 
-The chat composer does not forward these payloads to SatQuery Engine: the current Engine Agent
-request schema is text-only. The request planner validates session-owned asset IDs and may include
-stored metadata in its neutral plan, but the chat route rejects attached-image turns before sending
-an Engine request. The current composer prepares selected images and clearly tells the user that no
-turn was submitted. An Engine-owned multimodal request/persistence contract is required before
-image bytes can be passed through `EngineClient`. Vision does no object detection, segmentation,
-geolocation inference, or scientific reasoning.
+The chat planner resolves session-owned asset IDs against persisted metadata and the image store.
+The Platform sends verified image bytes and metadata in a separate typed Engine Agent attachment
+field, never in the prompt text. The Engine validates the encoding, size, MIME type, and SHA-256,
+stores only the attachment reference in its transcript, and exposes the current turn's bytes to a
+reasoning adapter that explicitly declares vision support. Canonical bytes remain Platform-owned;
+the Platform resends selected assets on each turn. The Engine rejects an image turn before opening
+the stream if its selected adapter does not support vision. Vision does no object detection,
+segmentation, geolocation inference, or scientific reasoning.
+The chat transcript reloads persisted attachment references as thumbnails through the owning
+Platform session's image API; the Engine never becomes the durable image store.
 
 ## Phase 6 context and request planning
 
@@ -145,6 +202,8 @@ bookmarks, drawings, and EarthContext snapshots. Ranking combines word overlap, 
 proximity, and timeline recency. No embedding model is installed, and opaque Engine tool results or
 assistant prose are not parsed into science or evidence. The index is reconstructed from SQLite and
 image metadata for each query; an FTS/vector-backed persistent index is a future scale extension.
+Results are ordered by score, record time, then stable record ID so tied matches are reproducible
+regardless of source enumeration order.
 The active session's Engine transcript is included directly; cross-session conversation search
 uses only Platform-persisted conversations rather than fanning out to Engine sessions. Cross-session
 retrieval assumes a single trusted workspace because user/tenant authentication is not implemented;
@@ -153,21 +212,27 @@ owner filtering is required before shared-user deployment.
 Capability snapshots derive provider availability from configuration plus registered factories,
 tool sources and layer IDs from their registries, and workspace/command contracts from their typed
 models. A present contract is not conflated with a live runtime handler. Provider vision/attachment
-support, active browser Earth command handlers, Engine tool inventory, and Engine datasets are
-reported as unknown when the current interfaces do not expose them. Recommendations reference
-existing records only; unavailable Engine tool/dataset catalogues yield no such recommendations.
+support and active browser Earth command handlers remain unknown when the current interfaces do not
+expose them. The Engine data panel reads registered dataset metadata, image-analysis capability
+status, the versioned Earth modality snapshot, and the Engine's registered Agent tool descriptors
+through validated Platform boundary models. Tool descriptors are read-only and report which tools
+are model-visible with or without explicit execution consent. Dataset declarations do not establish
+reachability or suitability. Recommendations reference existing records only
+and do not infer dataset suitability or Agent tool recommendations.
 
-Prompt assembly is provider-neutral. It includes a marked JSON context block only when there is
-actual Earth, vision, or retrieved workspace context. The current Engine's text message is the only
-transport supported for Earth context; a future structured Engine contract should replace this text
-serialization rather than adding vendor formatting to the Platform. Uploaded image bytes remain
-outside the Engine request.
+Prompt assembly is provider-neutral. It accounts for Earth, vision, and retrieved workspace context
+separately from the user's message. The Engine Agent request carries supported EarthContext through
+its typed per-turn field and image bytes through a separate typed attachment list.
+
+The Engine owns its transcript; the Platform cannot replace or compact that history. The separate
+Earth-command event contract is documented below. Current backend and frontend validation results
+are recorded in the [implementation status](implementation-status.md).
 
 ## Boundaries that matter
 
 | Boundary | Rule |
 |---|---|
-| Platform ↔ Engine | Only `engine/`; `EngineClient` delegates to the existing Agent API; events/results remain opaque |
+| Platform ↔ Engine | Only `engine/`; `EngineClient` delegates to the Agent API; events/results remain opaque except validated `earth.command` events |
 | Platform ↔ LLM vendors | Only `llm/providers/*`; neutral `Message`/`LLMRequest`/`LLMChunk` everywhere else |
 | Request planning | `intelligence/` builds context and plans; only the unchanged `EngineClient` boundary sends a turn |
 | Backend ↔ Frontend | `contracts/schema.json` and the REST/stream endpoints |
@@ -176,11 +241,40 @@ outside the Engine request.
 
 ## Concurrency and lifetime
 
-Chat turns currently live for the lifetime of the POST/SSE request. The Platform persists each
-forwarded event before sending it, and its GET stream endpoint supports replay by per-session
-sequence. A disconnected chat request closes the upstream Engine stream; the Platform does not yet
-provide a durable run worker or resume an interrupted model turn. The Engine cancel endpoint is
-available through the Platform API.
+Container shutdown callbacks are registered before resource initialization, so the application
+lifespan can unwind resources in reverse acquisition order even when startup fails partway through.
+Chat turns currently live for the lifetime of the POST/SSE request. Engine-session initialization
+uses ref-counted keyed locks, so concurrent requests for one session create at most one Engine
+session while unrelated sessions do not wait behind remote creation latency; idle lock entries are
+removed. Session deletion shares that lock and cannot race Engine-session linking in this process.
+Session read-modify-write operations are transactional, so concurrent writers preserve fields they
+do not own. The Platform persists each forwarded event before sending it, and its GET stream endpoint
+supports replay by per-session sequence. A disconnected chat request closes the upstream Engine
+stream; the Platform does not yet provide a durable run worker or resume an interrupted model turn.
+The live bus has a bounded subscriber queue; a slow subscriber is disconnected after its backlog is
+discarded and can resume from its last received sequence. Bus shutdown also discards queued live
+events before signaling subscriber termination. Durable replay is loaded in ordered pages capped
+by `streaming.replay_window_events`; the setting bounds each query, not total replay, so reconnects
+do not silently skip old events. The Engine cancel endpoint is available through the Platform API.
+
+## Monitoring workflow
+
+The workspace monitoring panel calls Platform routes for Engine missions, recurring schedule
+definitions, enabled state, run history, and recent-run comparisons. The Platform's `EngineClient`
+models and validates these responses and returns only Engine-authored state; the Engine scheduler
+creates and executes the investigations. Comparison text, digest, and limitations are displayed
+without independent scientific interpretation. The panel also lists Engine notifications for
+partial/failed runs, forwards acknowledgements, supports revision-checked trigger-policy edits, and
+supports revision-checked edits to schedule name, supported query fields, interval, priority,
+overlap policy, and optional rolling-window duration. It reads trigger lifecycle events. Query
+changes retain unedited Engine query dimensions; spatial bounds are editable only for simple
+rectangular queries. When configured, a rolling window ends at the persisted run start time; its
+resolved bounds are stored in the run and its effective EarthQuery is passed to the Engine workflow.
+Fixed query times and rolling windows are mutually exclusive. External delivery is deferred until
+the Engine exposes a typed delivery configuration/lifecycle and an operator selects a provider.
+Trigger activity is loaded from the Engine in cursor-paged chunks. The UI
+preserves event order, filters duplicate event IDs, and refuses to combine pages across schedule
+revisions or reuse a non-advancing cursor.
 
 ## Failure model
 
@@ -193,7 +287,6 @@ as `run.failed` events. A missing Engine yields degraded readiness rather than a
 
 The current Engine adapter targets its published HTTP Agent API; the Engine must have a compatible
 reasoning model registered, configured as `agent.model_id`. Provider SDKs are deliberately not
-reimplemented or called directly by the Platform Agent runtime. Engine image input, Earth-context
-forwarding, Engine-originated Earth command events, visualization of returned evidence, worker
-recovery, authentication, and multi-worker
-event delivery remain future work; see [Phase 2 status](phase-2-agent-runtime.md).
+reimplemented or called directly by the Platform Agent runtime. Provider-backed image interpretation,
+broader evidence visualization, worker recovery, authentication, and multi-worker event delivery
+remain future work; see [Phase 2 status](phase-2-agent-runtime.md).

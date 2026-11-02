@@ -22,8 +22,8 @@ export interface FrontendPluginContext {
 }
 
 /**
- * Default export of a plugin's `frontend_entry` ES module (see backend `PluginManifest`).
- * Loaded at runtime from URLs the backend advertises, so plugins ship without rebuilding the app.
+ * Intended default export of a plugin's `frontend_entry` module (see backend `PluginManifest`).
+ * A runtime loader is not currently wired into the application.
  */
 export interface FrontendPlugin {
   register(ctx: FrontendPluginContext): void | Promise<void>;

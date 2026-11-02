@@ -24,8 +24,11 @@ the `AgentModel` protocol and translates its provider's message, tool-call, and
 stream formats to `AgentMessage`, `AgentToolCall`, and `AgentModelEvent`. It
 receives the fixed SatQuery system prompt, the current bounded conversation
 context, the schemas for the currently allowed tools, and a cooperative
-cancellation event. Provider-specific formats do not enter the engine or the
-HTTP API. The normalized `text_delta` event is user-visible output only;
+cancellation event. The current user message may also carry verified image
+references and transient image bytes. An adapter must declare
+`supports_vision = True` before the API accepts an image turn, and translates
+those bytes into its provider's image format. Provider-specific formats do not
+enter the engine or the HTTP API. The normalized `text_delta` event is user-visible output only;
 adapters must not forward private reasoning or hidden model tokens.
 
 Adapters are registered under a stable identifier in
@@ -91,6 +94,16 @@ single-host persistence adapter, not distributed session storage. Session
 messages are conversational state; Earth Memory remains the separate
 long-lived domain/evidence store.
 
+An image turn uses `attachments`, a list of up to eight objects containing
+`asset_id`, `mime_type`, `size_bytes`, optional pixel dimensions, `sha256`, and
+`data_base64`. Individual images are limited to 20 MiB and the turn total to
+40 MiB. The Engine validates strict base64, MIME signature, byte length, and
+SHA-256 before opening the stream. Agent transcript messages persist only the
+verified metadata references; image bytes are transient on the current user
+message and are not copied into Engine session storage. The Platform remains
+the durable owner of the source image and must resend it on a later turn when
+the user wants the model to inspect it again.
+
 Assistant text deltas are persisted as a partial assistant message if a model
 stream fails, times out, or is cancelled after emitting text. Incomplete tool
 requests are not persisted as completed assistant messages; interrupted calls
@@ -100,13 +113,31 @@ implying that a failed model response was complete.
 
 ## HTTP interface
 
+- `GET /api/v1/agent/tools` returns the sorted descriptors from the registered Agent tool allowlist.
+  Each descriptor includes its JSON input schema and whether it is visible to the model by default
+  or only when the turn explicitly authorizes execution. This endpoint is descriptive and never
+  invokes a tool.
 - `POST /api/v1/agent/sessions` creates a conversation.
 - `GET /api/v1/agent/sessions/{session_id}` reads persisted conversation state.
+- `GET /api/v1/agent/sessions/{session_id}/investigations/{investigation_id}/events`
+  returns an integrity-verified execution-journal page only when the investigation is linked to
+  that session. `after_sequence` is the cursor and `limit` is bounded from 1 to 200; an
+  investigation without executable tasks returns an empty page rather than a fabricated plan.
 - `POST /api/v1/agent/sessions/{session_id}/turns` accepts `message`,
-  `model_id`, and optional `execution_authorized` (default `false`), and
-  streams Server-Sent Events.
+  `model_id`, optional `execution_authorized` (default `false`), optional typed
+  `earth_context`, and optional image `attachments`, and streams Server-Sent
+  Events. Image requests fail with HTTP 422 before streaming when the selected
+  adapter does not declare vision support.
 - `POST /api/v1/agent/sessions/{session_id}/cancel` cooperatively cancels the
   active turn.
+
+The optional EarthContext is a bounded per-turn workspace snapshot. It carries
+viewport and camera state, temporal state, selection/drawings, imagery
+references, currently visible overlay geometry, evidence and investigation
+references, and other serializable presentation state. WGS 84 overlay
+geometries are validated and the encoded context is capped at 512 KiB. Every
+field is untrusted scope rather than evidence or instruction; image bytes are
+carried only by the separate attachment field.
 
 The synchronous Python client exposes the same operations through
 `client.agents.create_session()`, `get_session(session_id)`,

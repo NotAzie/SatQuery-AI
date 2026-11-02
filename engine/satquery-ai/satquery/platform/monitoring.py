@@ -43,6 +43,7 @@ class MonitoringSchedule(Contract):
     name: str = Field(min_length=1)
     earth_query: EarthQuery
     interval_seconds: int = Field(gt=0)
+    rolling_window_seconds: int | None = Field(default=None, gt=0)
     priority: int = Field(default=0, ge=0, le=100)
     overlap_policy: Literal["skip_while_running", "allow"] = "skip_while_running"
     trigger_policies: tuple[MonitoringTriggerPolicy, ...] = ()
@@ -60,7 +61,14 @@ class MonitoringSchedule(Contract):
         return value
 
     @model_validator(mode="after")
-    def unique_trigger_policy_ids(self) -> MonitoringSchedule:
+    def validate_schedule_semantics(self) -> MonitoringSchedule:
+        if self.rolling_window_seconds is not None and (
+            self.earth_query.temporal_start is not None
+            or self.earth_query.temporal_end is not None
+        ):
+            raise ValueError(
+                "rolling temporal windows cannot be combined with fixed EarthQuery times"
+            )
         identifiers = [policy.policy_id for policy in self.trigger_policies]
         if len(identifiers) != len(set(identifiers)):
             raise ValueError("monitoring trigger policy identifiers must be unique")
@@ -149,6 +157,7 @@ class MonitoringScheduleDefinition(Contract):
     name: str = Field(min_length=1)
     earth_query: EarthQuery
     interval_seconds: int = Field(gt=0)
+    rolling_window_seconds: int | None = Field(default=None, gt=0)
     priority: int = Field(default=0, ge=0, le=100)
     overlap_policy: Literal["skip_while_running", "allow"]
     trigger_policies: tuple[MonitoringTriggerPolicy, ...] = ()
@@ -165,6 +174,7 @@ class MonitoringScheduleUpdate(Contract):
     name: str | None = Field(default=None, min_length=1)
     earth_query: EarthQuery | None = None
     interval_seconds: int | None = Field(default=None, gt=0)
+    rolling_window_seconds: int | None = Field(default=None, gt=0)
     priority: int | None = Field(default=None, ge=0, le=100)
     overlap_policy: Literal["skip_while_running", "allow"] | None = None
     trigger_policies: tuple[MonitoringTriggerPolicy, ...] | None = None
@@ -174,7 +184,11 @@ class MonitoringScheduleUpdate(Contract):
         changed = self.model_fields_set - {"expected_revision"}
         if not changed:
             raise ValueError("at least one schedule field must be updated")
-        if any(getattr(self, field) is None for field in changed):
+        if any(
+            getattr(self, field) is None
+            for field in changed
+            if field != "rolling_window_seconds"
+        ):
             raise ValueError("updated schedule fields cannot be null")
         return self
 
@@ -192,6 +206,8 @@ class MonitoringRun(Contract):
     mission_id: str = Field(min_length=1)
     scheduled_at: datetime
     started_at: datetime
+    effective_temporal_start: datetime | None = None
+    effective_temporal_end: datetime | None = None
     finished_at: datetime | None = None
     status: Literal["running", "completed", "partial", "failed", "skipped"]
     investigation_id: str | None = None
@@ -201,12 +217,29 @@ class MonitoringRun(Contract):
     worker_id: str | None = None
     lease_expires_at: datetime | None = None
 
-    @field_validator("scheduled_at", "started_at", "finished_at", "lease_expires_at")
+    @field_validator(
+        "scheduled_at", "started_at", "effective_temporal_start",
+        "effective_temporal_end", "finished_at", "lease_expires_at",
+    )
     @classmethod
     def _require_timezone(cls, value: datetime | None) -> datetime | None:
         if value is not None and value.tzinfo is None:
             raise ValueError("monitoring run timestamps must be timezone-aware")
         return value
+
+    @model_validator(mode="after")
+    def paired_effective_temporal_bounds(self) -> MonitoringRun:
+        if (self.effective_temporal_start is None) != (
+            self.effective_temporal_end is None
+        ):
+            raise ValueError("effective temporal window bounds must be provided together")
+        if (
+            self.effective_temporal_start is not None
+            and self.effective_temporal_end is not None
+            and self.effective_temporal_start >= self.effective_temporal_end
+        ):
+            raise ValueError("effective temporal window must have positive duration")
+        return self
 
 
 class MonitoringEvent(Contract):
@@ -415,8 +448,11 @@ class InMemoryMonitoringRepository:
                     f"schedule revision is {current.revision}; expected {update.expected_revision}"
                 )
             changes = update.model_dump(exclude={"expected_revision"}, exclude_unset=True)
-            revised = current.model_copy(update={
-                **changes, "updated_at": now, "revision": current.revision + 1,
+            revised = MonitoringSchedule.model_validate({
+                **current.model_dump(),
+                **changes,
+                "updated_at": now,
+                "revision": current.revision + 1,
             })
             self._schedules[schedule_id] = revised
             self._append_event(MonitoringEvent(
@@ -462,6 +498,14 @@ class InMemoryMonitoringRepository:
                 mission_id=schedule.mission_id,
                 scheduled_at=scheduled_at,
                 started_at=now,
+                effective_temporal_start=(
+                    now - timedelta(seconds=schedule.rolling_window_seconds)
+                    if schedule.rolling_window_seconds is not None
+                    else None
+                ),
+                effective_temporal_end=(
+                    now if schedule.rolling_window_seconds is not None else None
+                ),
                 status="running",
                 missed_intervals=missed,
                 worker_id=worker_id,
@@ -872,7 +916,17 @@ class SQLiteMonitoringRepository(InMemoryMonitoringRepository):
             run = MonitoringRun(
                 run_id=run_id, schedule_id=schedule_id,
                 schedule_revision=schedule.revision, mission_id=schedule.mission_id,
-                scheduled_at=scheduled_at, started_at=now, status="running", missed_intervals=missed,
+                scheduled_at=scheduled_at,
+                started_at=now,
+                effective_temporal_start=(
+                    now - timedelta(seconds=schedule.rolling_window_seconds)
+                    if schedule.rolling_window_seconds is not None
+                    else None
+                ),
+                effective_temporal_end=(
+                    now if schedule.rolling_window_seconds is not None else None
+                ),
+                status="running", missed_intervals=missed,
                 worker_id=worker_id,
                 lease_expires_at=lease_expires_at or now + timedelta(seconds=120),
             )
@@ -1446,12 +1500,15 @@ class MonitoringService:
                         handler="earth.observe",
                         description=f"Scheduled Earth observation: {schedule.name}",
                         parameters={
-                            "earth_query": schedule.earth_query.model_dump(mode="json"),
+                            "earth_query": self._run_earth_query(
+                                schedule, run
+                            ).model_dump(mode="json"),
                             "monitoring_schedule_id": schedule.schedule_id,
                             "monitoring_run_id": run.run_id,
                             "schedule_revision": run.schedule_revision,
                             "scheduled_at": run.scheduled_at.isoformat(),
                             "missed_intervals": run.missed_intervals,
+                            "rolling_window_seconds": schedule.rolling_window_seconds,
                         },
                     ),),
                 )
@@ -1495,6 +1552,22 @@ class MonitoringService:
             raise asyncio.CancelledError
         return completed
 
+    @staticmethod
+    def _run_earth_query(
+        schedule: MonitoringSchedule, run: MonitoringRun
+    ) -> EarthQuery:
+        if schedule.rolling_window_seconds is None:
+            return schedule.earth_query
+        if (
+            run.effective_temporal_start is None
+            or run.effective_temporal_end is None
+        ):
+            raise ValueError("claimed run is missing its resolved rolling window")
+        return schedule.earth_query.model_copy(update={
+            "temporal_start": run.effective_temporal_start,
+            "temporal_end": run.effective_temporal_end,
+        })
+
     async def _renew_lease(self, run: MonitoringRun) -> None:
         delay = max(0.05, self.lease_seconds / 3)
         while True:
@@ -1521,6 +1594,7 @@ def monitoring_schedule_definition(
         name=schedule.name,
         earth_query=schedule.earth_query,
         interval_seconds=schedule.interval_seconds,
+        rolling_window_seconds=schedule.rolling_window_seconds,
         priority=schedule.priority,
         overlap_policy=schedule.overlap_policy,
         trigger_policies=schedule.trigger_policies,

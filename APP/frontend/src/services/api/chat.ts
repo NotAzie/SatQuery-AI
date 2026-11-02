@@ -1,6 +1,17 @@
-import type { AgentEvent, AgentTurnRequest, EngineAgentSession } from "@/shared/types";
+import type {
+  AgentEvent,
+  AgentTurnRequest,
+  EngineEarthObjectGeoJSON,
+  EngineAgentSession,
+  EngineInvestigationEventPage,
+  EngineInvestigationReport,
+} from "@/shared/types";
 
-import { apiFetch, apiUrl, ApiError } from "./client";
+import { apiFetch, apiFetchVoid, apiUrl, ApiError } from "./client";
+
+type AgentTurnSubmission = Omit<AgentTurnRequest, "asset_ids"> & {
+  asset_ids?: string[];
+};
 
 export async function getAgentSession(sessionId: string, signal?: AbortSignal) {
   return apiFetch<EngineAgentSession>(`/chat/sessions/${encodeURIComponent(sessionId)}`, {
@@ -8,9 +19,54 @@ export async function getAgentSession(sessionId: string, signal?: AbortSignal) {
   });
 }
 
+export async function getInvestigationReport(
+  sessionId: string,
+  investigationId: string,
+  signal?: AbortSignal,
+) {
+  return apiFetch<EngineInvestigationReport>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}/investigations/${encodeURIComponent(investigationId)}/report`,
+    { signal },
+  );
+}
+
+export async function getInvestigationEarthObjects(
+  sessionId: string,
+  investigationId: string,
+  signal?: AbortSignal,
+) {
+  return apiFetch<EngineEarthObjectGeoJSON>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}/investigations/${encodeURIComponent(investigationId)}/earth-objects`,
+    { signal },
+  );
+}
+
+export async function getInvestigationEvents(
+  sessionId: string,
+  investigationId: string,
+  afterSequence = 0,
+  limit = 100,
+  signal?: AbortSignal,
+) {
+  const query = new URLSearchParams({
+    after_sequence: String(afterSequence),
+    limit: String(limit),
+  });
+  return apiFetch<EngineInvestigationEventPage>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}/investigations/${encodeURIComponent(investigationId)}/events?${query}`,
+    { signal },
+  );
+}
+
+export async function cancelAgentTurn(sessionId: string): Promise<void> {
+  await apiFetchVoid(`/chat/sessions/${encodeURIComponent(sessionId)}/cancel`, {
+    method: "POST",
+  });
+}
+
 export async function* streamAgentTurn(
   sessionId: string,
-  request: AgentTurnRequest,
+  request: AgentTurnSubmission,
   signal: AbortSignal,
 ): AsyncGenerator<AgentEvent> {
   const response = await fetch(apiUrl(`/chat/sessions/${encodeURIComponent(sessionId)}/turns`), {

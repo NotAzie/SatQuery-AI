@@ -112,8 +112,11 @@ class CapabilityDiscovery:
             vision_engine_delivery=CapabilityEntry(
                 id="engine-vision-delivery",
                 kind="engine_agent_api",
-                status="unavailable",
-                detail="The Engine Agent turn contract accepts text only.",
+                status="available",
+                detail=(
+                    "The Engine Agent API accepts verified image attachments; the configured "
+                    "reasoning adapter must declare vision support."
+                ),
             ),
             streaming=CapabilityEntry(
                 id="engine-agent-stream",
@@ -125,7 +128,8 @@ class CapabilityDiscovery:
                 kind="engine_agent_api",
                 status="unknown",
                 detail=(
-                    "No Engine tool-discovery endpoint is present in the supported client contract."
+                    "The Engine publishes typed Agent tool descriptors through the separate live "
+                    "discovery endpoint; this local snapshot does not probe Engine connectivity."
                 ),
             ),
             dataset_discovery=CapabilityEntry(
@@ -133,8 +137,8 @@ class CapabilityDiscovery:
                 kind="engine_api",
                 status="unknown",
                 detail=(
-                    "No Engine dataset-discovery endpoint is present in the supported client "
-                    "contract."
+                    "The Engine data panel requests live dataset metadata separately; this local "
+                    "capability snapshot does not probe Engine connectivity."
                 ),
             ),
         )

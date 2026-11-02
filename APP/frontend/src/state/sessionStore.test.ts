@@ -15,12 +15,18 @@ const camera = (lng: number): CameraState => ({
 
 const context = (lng: number): EarthContext => ({
   camera: camera(lng),
+  secondary_view: null,
+  viewport: null,
   layers: [],
   time: null,
   instant: null,
+  timeline_playback: { playing: false, speed: 1 },
   selection: null,
   drawings: [],
   captures: [],
+  imagery: [],
+  overlays: [],
+  investigations: { known_ids: [], visible_ids: [] },
   selected_evidence_ids: [],
   bookmarks: [],
   camera_history: { past: [], present: null, future: [] },
@@ -67,13 +73,37 @@ describe("Session Earth workspace persistence", () => {
       viewport_width_px: null,
       viewport_height_px: null,
     };
-    useSessionStore.getState().addCapture(capture);
+    expect(useSessionStore.getState().addCapture("session-a", capture)).toBe(true);
     useSessionStore.getState().setActiveSession("session-b");
     expect(useSessionStore.getState().captures).toEqual([]);
     useSessionStore.getState().setActiveSession("session-a");
     expect(useSessionStore.getState().captures).toEqual([capture]);
-    useSessionStore.getState().deleteCapture(capture.id);
+    expect(useSessionStore.getState().deleteCapture("session-a", capture.id)).toBe(true);
     expect(useSessionStore.getState().captures).toEqual([]);
+  });
+
+  it("ignores stale capture mutations for a session that is no longer active", () => {
+    installStorage();
+    useSessionStore.getState().setActiveSession("session-a");
+    const captureA = {
+      id: "capture-a",
+      asset_id: "asset-a",
+      captured_at: "2026-11-01T10:00:00Z",
+      source: "viewport" as const,
+      camera: camera(12),
+      region: null,
+      pixel_region: null,
+      viewport_width_px: null,
+      viewport_height_px: null,
+    };
+    useSessionStore.getState().addCapture("session-a", captureA);
+    useSessionStore.getState().setActiveSession("session-b");
+    const captureB = { ...captureA, id: "capture-b", asset_id: "asset-b" };
+    useSessionStore.getState().addCapture("session-b", captureB);
+
+    expect(useSessionStore.getState().addCapture("session-a", captureA)).toBe(false);
+    expect(useSessionStore.getState().deleteCapture("session-a", captureB.id)).toBe(false);
+    expect(useSessionStore.getState().captures).toEqual([captureB]);
   });
 
   it("records camera history, supports undo/redo, and restores it per session", () => {

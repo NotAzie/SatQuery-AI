@@ -28,8 +28,8 @@ The Phase 6 `intelligence/` layer assembles Platform-owned Earth/conversation co
 existing workspace records, reports registered capabilities, and plans requests before chat turns.
 It does not call providers or execute Engine tools. See
 [Platform architecture](APP/docs/architecture.md), [roadmap](APP/docs/roadmap.md), and
-[implementation status](APP/docs/implementation-status.md) for the exact text-only and discovery
-boundaries.
+[implementation status](APP/docs/implementation-status.md) for the exact typed-attachment and
+discovery boundaries.
 
 ## Development setup
 

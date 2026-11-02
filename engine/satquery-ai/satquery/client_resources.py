@@ -467,11 +467,35 @@ class ScientificResource(_Resource):
 class AgentResource(_Resource):
     """Conversational session and streaming-turn access to the agent API."""
 
+    def tools(self) -> Any:
+        return self._get("/api/v1/agent/tools")
+
     def create_session(self) -> Any:
         return self._post("/api/v1/agent/sessions")
 
     def get_session(self, session_id: str) -> Any:
         return self._get(f"/api/v1/agent/sessions/{self._id(session_id)}")
+
+    def investigation_events(
+        self,
+        session_id: str,
+        investigation_id: str,
+        *,
+        after_sequence: int = 0,
+        limit: int = 100,
+    ) -> Any:
+        if type(after_sequence) is not int or after_sequence < 0:
+            raise ValueError("after_sequence must be a non-negative integer")
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise ValueError("limit must be an integer between 1 and 200")
+        return self._get(
+            (
+                f"/api/v1/agent/sessions/{self._id(session_id)}"
+                f"/investigations/{self._id(investigation_id)}/events"
+            ),
+            after_sequence=after_sequence,
+            limit=limit,
+        )
 
     def stream_turn(
         self,

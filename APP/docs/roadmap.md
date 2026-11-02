@@ -10,23 +10,46 @@ Cesium isolation, session metadata persistence, and resumable event infrastructu
 
 ## Phase 2 — Agent Runtime integration
 
-**Status: integration slice implemented; production closure remains.** Platform chat delegates to
+**Status: integration slice implemented; production closure is deferred on external dependencies.**
+Platform chat delegates to
 the Engine Agent API, links Platform sessions to Engine transcripts, and presents streamed events.
-The Platform does not create an Agent Runtime. Deployment verification, authentication, run recovery,
-and structured Earth-context/image input remain outstanding; the Platform currently appends
-descriptive Earth state to the existing text field only. See
+Investigation progress events are presented as a bounded activity timeline. Engine-authored reports
+and verified WGS 84 Earth Object GeoJSON can be opened only for IDs in the active Engine transcript.
+The Platform displays and manages these Engine-owned records without inferring results or
+reprojecting geometry; Stop delegates cancellation to the Engine before closing the local stream.
+The Engine also provides bounded, cursor-paged execution history for session-owned investigations;
+typed Earth Object properties preserve linked evidence IDs for selection and highlighting.
+The Platform does not create an Agent Runtime. Deployment verification, authentication, run
+recovery, and provider-backed image interpretation remain outstanding. Image delivery is supported
+through the Engine's typed per-turn attachment contract. EarthContext is sent as a typed per-turn
+field rather than appended to the user message. It captures the primary and secondary view when
+split view is active. See
 [implementation status](implementation-status.md).
+
+Production closure is deferred until the Engine/deployment contract and deployment decisions exist:
+authentication needs an accepted credential scheme/header and error behavior; per-user authorization
+needs an identity and ownership policy; interrupted-turn recovery and multi-worker delivery need
+Engine resume semantics plus a shared worker/event deployment design; live adapter validation needs
+a reachable deployed Engine version. Image interpretation needs a deployed Engine adapter that
+declares vision support.
 
 ## Phase 3 — Earth Workspace foundation
 
-**Status: dispatcher foundation implemented.** The Earth command dispatcher accepts typed
-`earth.command` events, and `fly_to` is wired to the camera controller. The Engine contract gap
-below currently prevents live turns from supplying those events.
+**Status: first live Engine commands implemented.** The Engine Agent exposes a typed
+`earth.command` tool and emits a sequenced SSE event only for explicit presentation requests.
+The Platform validates and persists that event as its shared `EarthCommandIssued` contract.
+`fly_to` and session-linked `show_investigation` are wired to the Earth workspace.
 
-The Engine Agent event contract currently has no dedicated `earth.command` event kind. The frontend
-dispatcher consumes the Platform's typed `EarthCommandIssued` event contract, but its source must be
-connected to an explicit Engine event contract before live Engine turns can issue those commands.
-The Platform must not infer commands from model text or scientific tool results.
+Commands are never inferred from assistant prose or scientific tool results. The Engine validates
+investigation IDs against the active Agent session before emitting `show_investigation`; the Platform
+rechecks session ownership before loading the report or GeoJSON.
+
+The Engine Agent SSE event uses the existing envelope
+(`session_id`, `turn_id`, `sequence`, `timestamp`), `kind: "earth.command"`, and a `payload.command`
+currently limited to `fly_to` and `show_investigation`. Additional command types remain unavailable
+until Engine-owned data and ownership semantics support them. Any future command geometry must be
+explicit WGS 84 GeoJSON from Engine-owned records, never generated from prose or silently reprojected
+by the Platform.
 
 ## Phase 4 — Earth Workspace
 
@@ -34,15 +57,21 @@ The Platform must not infer commands from model text or scientific tool results.
 for scientific state. No scientific results, investigation geometry, or layer catalogue may be
 created by the Platform.
 
-1. **Investigation visualization and evidence highlighting** — blocked pending a typed Engine
-   event/API carrying investigation lifecycle and renderable evidence geometry. Opaque tool results
-   are not a safe substitute.
-2. **Layer manager** — blocked pending an Engine-provided layer catalogue and source definitions.
-   The Platform must not invent scientific layers.
+1. **Investigation visualization and evidence highlighting** — implemented for Engine-recorded
+   execution history and materialized Earth Objects. Users can show the Engine's explicitly
+   materialized RFC 7946 WGS 84 Earth Objects for a linked investigation, inspect the bounded
+   cursor-paged execution journal, and select/highlight evidence IDs retained in typed GeoJSON
+   properties. The Engine exporter omits unsupported geometries and reports why; the Platform does
+   not repair or reproject them. Live turn progress remains separately streamed by the Engine Agent.
+   Opaque tool results are not a safe substitute.
+2. **Layer manager** — blocked pending a product/deployment decision on supported renderable layer
+   sources, approved providers and licensing, credential/access rules, and source-serving endpoints.
+   Current Engine dataset metadata describes acquisition capability, not renderable URLs or layer
+   ownership; the Platform must not turn it into fabricated layers or arbitrary URLs.
 3. **Timeline** — implemented as a local Earth workspace presentation control: users can select a
-   time range and instant, scrub, and play/pause the Cesium clock. It does not claim data availability
-   or send context to the Engine; a supported Engine context/command contract is still needed for
-   investigation-time integration.
+   time range and instant, scrub, and play/pause the Cesium clock. Its current time and playback
+   state are sent as untrusted EarthContext scope; this does not claim data availability or provide
+   Engine-side temporal execution.
 4. **Camera history and bookmarks** — implemented. Camera move-end states support bounded undo/redo
    and precise restore; named EarthContext bookmarks can be created, renamed, updated, deleted, and
    flown to. State is persisted in the Platform's SQLite-backed session record, with browser-local
@@ -53,13 +82,13 @@ created by the Platform.
 6. **Measurements** — implemented for geodesic distance, spherical polygon area, coordinate
    inspection, and local terrain elevation where the loaded terrain provider returns a height.
 7. **Split view** — implemented with a second Cesium view, shared timeline, selection and drawings,
-   independent cameras by default, and opt-in camera synchronization. Engine-owned overlays will
-   also be shared once the Engine supplies renderable typed overlay events.
+   independent cameras by default, and opt-in camera synchronization. Overlay visibility is tracked
+   per view; only the primary view's active overlays form the chat EarthContext.
 
-Investigation-result overlays are not fabricated or presented as complete. The current Engine event
-contract still does not provide typed investigation geometry/lifecycle or a layer catalogue, so
-investigation visualization, evidence highlighting, and Engine-backed layer management remain
-blocked at that integration boundary.
+Investigation reports, paged execution history, and explicitly exported WGS 84 Earth Object overlays
+are available from the Engine. Unsupported objects remain omitted according to the Engine's declared
+geometry policy. Engine-backed layer management remains blocked at the integration boundary; the
+Platform does not fabricate layers or infer geometry from prose.
 
 The sequence may advance around Engine contract blockers, but no feature may synthesize Engine-owned
 scientific information. Phase 4 is not complete until implemented capabilities are tested and all
@@ -67,10 +96,13 @@ remaining boundaries are documented.
 
 ## Phase 5 — Vision
 
-**Status: Platform-owned ingestion and preparation foundation implemented; Engine delivery is
-blocked by the current text-only Agent API.** The Platform accepts and validates session-scoped
-images, keeps browser and Cesium handling in the Vision/Earth modules, and prepares a neutral
-metadata-plus-bytes payload. It performs no image interpretation or scientific work.
+**Status: typed Engine image delivery is implemented; image interpretation requires a
+vision-capable Engine adapter.** The Platform accepts and validates session-scoped images, keeps
+browser and Cesium handling in the Vision/Earth modules, and sends original bytes through the
+provider-neutral Agent attachment contract. The Engine verifies image metadata and content hashes,
+persists references in its transcript, and delivers current-turn bytes only to a registered adapter
+that declares vision support. Canonical image bytes remain Platform-owned. The Platform performs no
+image interpretation or scientific work.
 
 1. **Image intake and storage** — file picker, drag/drop, clipboard paste, and display capture
    converge on the Vision attachment module. Uploads report progress, enforce the configured
@@ -89,19 +121,22 @@ metadata-plus-bytes payload. It performs no image interpretation or scientific w
 4. **Provider-neutral preparation** — `MultimodalPreparer` resolves attached asset IDs within the
    owning session and returns `PreparedVisionPayload` containing original bytes (base64 encoded for
    transport) plus typed `VisionContext`. No vendor formatting or vision model is selected here.
-5. **Chat boundary** — the composer can select and prepare attachments, but it does not send an
-   image turn. The inspected Engine Agent request currently accepts only `message`, `model_id`, and
-   `execution_authorized`; until Engine publishes a multimodal request contract, the UI explicitly
-   reports that nothing was submitted rather than silently dropping images or fabricating an API.
+5. **Chat boundary** — the composer sends selected asset IDs alongside the user message. The
+   Platform resolves the canonical bytes and sends a separate typed attachment list, with bounded
+   size/count and verified MIME/size/SHA-256 metadata. The Engine persists attachment references
+   rather than duplicating Platform image storage; transcript reload displays those references as
+   thumbnails through the owning Platform session. Requests are rejected before streaming unless
+   the selected Engine adapter declares vision support.
 
-The Phase 5 Engine integration remains open until the Engine Agent Interface defines a supported
-multimodal request shape and attachment lifecycle. Provider-specific request formatting, scientific
-interpretation, object detection, segmentation, and reasoning remain outside this Platform module.
+Provider-specific request formatting, scientific interpretation, object detection, segmentation,
+and reasoning remain outside this Platform module. Deployments must register a vision-capable Engine
+adapter to use image turns; the core Engine deliberately includes no provider SDK.
 
 ## Phase 6 — Earth Intelligence
 
-**Status: Platform-owned context and planning foundation implemented; Engine discovery and
-multimodal execution remain bounded by the current Engine Agent API.**
+**Status: Platform-owned context/planning and Engine dataset/image-capability/Earth modality/Agent
+tool discovery are implemented and validated; provider-specific image interpretation remains
+deployment-dependent.**
 
 1. **Earth Context Builder** — implemented. Chat requests may include the current typed EarthContext.
    The builder merges it with persisted camera history, bookmarks, captures, pinned Engine evidence
@@ -121,37 +156,51 @@ multimodal execution remain bounded by the current Engine Agent API.**
 4. **Context Retrieval** — integrated before each chat turn and also exposed at
    `GET /api/v1/intelligence/sessions/{id}/memory`. The builder ranks only existing workspace
    records; no history is generated when a source record is absent.
-5. **Prompt Assembly** — implemented as a vendor-neutral normalized plan. EarthContext, verified
-   stored image metadata, relevant memory, capability status, and the current message are accounted
-   for against a byte-based token estimate. Low-ranked memory and older context are compressed first.
-   The estimate is not a provider tokenizer and cannot budget the Engine's hidden transcript.
+5. **Prompt Assembly** — implemented as a vendor-neutral normalized plan. Typed Engine-bound
+   EarthContext, verified stored image metadata, relevant memory, capability status, and the current
+   message are accounted for against a byte-based token estimate. Low-ranked memory and older
+   context are compressed first. The estimate is not a provider tokenizer and cannot budget the
+   Engine's hidden transcript.
 6. **Capability Discovery** — implemented at `GET /api/v1/intelligence/capabilities`. Provider
    factories, configured providers, registered Platform tool sources and layers, EarthContext
-   fields, and command contracts are discovered from their registries/contracts. Provider vision
-   support and active frontend Earth handlers are reported unknown unless an implementation exposes
-   a discoverable contract. Engine tool and dataset inventories are unknown because no such Engine
-   discovery endpoint exists.
+   fields, and command contracts are discovered from their registries/contracts. The Earth
+   workspace's Engine data panel reads Engine-registered datasets, image-analysis capabilities, and
+   the versioned Earth modality snapshot from published Engine APIs through a validated Platform
+   endpoint. It also presents Engine-published Agent tool descriptors and their input schemas,
+   availability, and execution-consent visibility without invoking tools. These declarations do
+   not guarantee data access or scientific suitability. Provider vision support and active
+   frontend Earth handlers remain unknown unless an implementation exposes a discoverable contract;
 7. **Recommendations** — implemented for references that actually exist in retrieved Platform
    memory (investigation IDs, uploaded assets, bookmarks, timeline-overlapping records, and prior
-   conversations). No scientific outcomes are recommended. Tool and dataset recommendations are
-   withheld while Engine discovery is unavailable.
-8. **Request Planner** — implemented before every text chat turn and available for inspection at
+   conversations). No scientific outcomes are recommended. Dataset recommendations are not
+   generated from catalogue metadata alone; tool descriptors are presented for inspection, not
+   ranked or recommended from free text.
+8. **Request Planner** — implemented before every chat turn and available for inspection at
    `POST /api/v1/chat/sessions/{id}/plan`. It validates session-scoped asset references, normalizes
    Earth and vision metadata, retrieves memory, estimates context size, and returns explicit boundary
-   warnings. EarthContext is included in the Engine's existing text-only `message` as a clearly
-   delimited, serialized descriptive context block; it is never sent as a fabricated structured
-   Engine field. The UI hides this machine-added block when rendering the user transcript.
+   warnings. Model-relevant EarthContext is sent in the Engine Agent request's typed `earth_context`
+   field, separate from the user message. The Engine validates and presents that context to its
+   reasoning model as untrusted workspace scope. The snapshot includes viewport and camera,
+   timeline/playback, selection, imagery references, active overlay geometry, evidence highlights,
+   investigation references, primary/secondary viewports, bookmarks, camera history, split-view,
+   measurements, and layer state.
+   Image bytes remain separate transient attachments; no scientific availability is inferred.
 
 ### Phase 6 integration boundaries
 
 - The Engine Agent API persists its own complete conversation. Platform history limits and
   extractive compression are available in the neutral plan but cannot trim the Engine's internal
-  transcript until it supports a context/history input.
-- Image IDs and typed metadata can be validated and appear in a plan, but image bytes are not sent.
-  Chat requests with attachment IDs are rejected before an Engine turn starts. The Engine must
-  publish a multimodal request and persistence contract first.
-- The current Engine client cannot discover tools, datasets, or Engine-side provider capabilities.
-  No tool/dataset recommendation is fabricated.
+  transcript; structured EarthContext is per-turn scope, not a replacement history contract.
+- The Engine Agent API accepts image attachments. The Platform stores canonical bytes and resends
+  selected assets per turn; Engine transcripts retain metadata references only. The configured
+  Engine reasoning adapter must declare vision support; the core does not select or install a
+  provider-specific vision model.
+- The Platform can read registered Engine datasets, the versioned Earth modality snapshot,
+  legacy image-analysis capability status, and typed Agent tool descriptors through published
+  Engine APIs. Descriptors are presented read-only and do not invoke tools; visibility distinguishes
+  default turns from turns with explicit execution consent. Dataset metadata is declared registration,
+  not proof of live access or suitability. A configured Agent adapter must declare vision support
+  before an image turn is accepted.
 - Search is deterministic lexical/geographic/temporal ranking, not embedding/vector search. The
   index is rebuilt from persisted Platform records at query time; a durable full-text/vector index
   is a future performance extension if workspace volume requires it.
@@ -165,7 +214,50 @@ multimodal execution remain bounded by the current Engine Agent API.**
   typed investigation progress events, and saved evidence references are indexed; opaque tool results
   and assistant prose are not parsed as scientific records.
 
+- The current backend and frontend validation baseline passes; details and the one upstream test
+  dependency warning are recorded in the [implementation status](implementation-status.md).
+
+## Phase 7 — Recurring monitoring workflows
+
+**Status: Engine-backed management and review workflow implemented.** The workspace can create and
+select Engine-owned missions, create recurring schedules from a user-declared WGS 84 bounding box
+and optional requested variables, revise schedule name, supported query scope, interval, priority,
+overlap policy, and trigger policies through optimistic revisions, enable or pause schedules,
+inspect durable run history, and open the Engine-authored comparison for recent completed runs. The
+Platform only validates and presents the typed Engine contract, lists operational alerts for
+partial/failed runs, and acknowledges notifications. Users may declare descriptive-measurement
+trigger policies when creating or revising a schedule, then inspect Engine-authored trigger
+lifecycle events. The Platform does not execute investigations or interpret measurements.
+
+Schedules may optionally declare a rolling lookback duration. For each run, the Engine anchors the
+window end to the persisted run start time, subtracts the declared duration for the start, and
+executes the resulting EarthQuery; the resolved bounds are retained in run history. Rolling windows
+cannot be combined with fixed EarthQuery temporal bounds. Engine comparisons align explicitly
+resolved canonical variables and exact unit strings; they do not establish trend, causality, or
+scientific comparability. Trigger activity uses the Engine's cursor-paged history contract. External
+alert delivery is blocked until the Engine exposes a typed delivery configuration/lifecycle and the
+deployment selects and configures a delivery provider.
+
 ## Later platform capabilities
 
-Broader provider administration, plugin contributions, and distributed deployment remain future
-work; they do not authorize duplicating Engine execution.
+Broader provider administration and runtime plugin contributions require product/security decisions;
+distributed deployment requires externally provisioned shared infrastructure. These are deferred
+capabilities and do not authorize duplicating Engine execution.
+
+## Deferred roadmap blockers
+
+Blocked capabilities stay on the roadmap and can resume when their dependencies are available:
+
+| Capability | Classification | Explicit dependency |
+|---|---|---|
+| Earth layer manager | 4. Blocked by deployment or product decisions | Select supported renderable source kinds and approved providers/licensing, define credential/access rules, and provide source-serving endpoints from which the Engine can publish stable layer/source IDs and CRS/geometry semantics |
+| External monitoring alert delivery | 4. Blocked by deployment or product decisions | Select an operator-supported delivery provider and define destinations, credentials, retry/idempotency policy, and delivery ownership before adding the Engine-owned delivery contract |
+| Production Engine authentication | 4. Blocked by deployment or product decisions | Engine or proxy decision for accepted credential scheme/header, protected endpoints, and authentication error contract |
+| Platform user authentication and authorization | 4. Blocked by deployment or product decisions | Identity provider, tenant boundaries, and per-user session/resource ownership |
+| Interrupted-turn recovery and multi-worker delivery | 5. Blocked by external infrastructure | Select and deploy durable workers and shared event storage/broker; define recovery ownership and resume semantics against that infrastructure before implementing the Engine contract |
+| Live Engine adapter validation | 5. Blocked by external infrastructure | Reachable deployed Engine version and deployment configuration |
+| Image interpretation | 5. Blocked by external infrastructure | Deployed Engine reasoning adapter that declares vision support and its provider configuration |
+| Broader provider administration | 4. Blocked by deployment or product decisions | Product requirements for administrative roles, provider lifecycle, and credential-management UX |
+| Runtime plugin loading | 4. Blocked by deployment or product decisions | Administrator trust, backend execution permissions, and frontend module serving/security decisions |
+| Distributed Platform deployment | 5. Blocked by external infrastructure | Deployment decision and shared durable work, event fan-out, and persistence infrastructure |
+| Persistent full-text/vector memory index | 4. Blocked by deployment or product decisions | Product workload and scale requirements establishing that query-time index rebuilding needs replacement |

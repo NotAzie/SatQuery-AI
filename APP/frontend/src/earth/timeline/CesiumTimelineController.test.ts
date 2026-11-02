@@ -65,6 +65,18 @@ describe("CesiumTimelineController", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
+  it("removes its Cesium clock listener when destroyed", () => {
+    const clock = new Clock();
+    const controller = createTimelineController(clock);
+    const listener = vi.fn();
+    controller.onChange(listener);
+
+    controller.destroy();
+    clock.onTick.raiseEvent(clock);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it("uses a clamped Cesium clock range until playback is requested", () => {
     const clock = new Clock();
     const controller = createTimelineController(clock);

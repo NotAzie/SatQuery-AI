@@ -2550,11 +2550,19 @@ class PlatformRuntime:
         return result.model_copy(update={"tasks": tasks})
 
     def execution_events(
-        self, execution_id: str, *, after_sequence: int = 0
+        self,
+        execution_id: str,
+        *,
+        after_sequence: int = 0,
+        limit: int | None = None,
     ) -> tuple[dict, ...]:
         """Read durable workflow events for polling or a future streaming adapter."""
+        if limit is None:
+            return self.execution_journal.events(
+                execution_id, after_sequence=after_sequence
+            )
         return self.execution_journal.events(
-            execution_id, after_sequence=after_sequence
+            execution_id, after_sequence=after_sequence, limit=limit
         )
 
     async def _observe_task(self, context):

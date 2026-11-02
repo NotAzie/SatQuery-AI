@@ -4,7 +4,6 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 from satquery.errors import ExecutionError, ValidationError
 from satquery.platform.config import PlatformConfig
 from satquery.platform.contracts import (
@@ -19,6 +18,7 @@ from satquery.platform.contracts import (
 )
 from satquery.platform.execution import ExecutionEngine
 from satquery.platform.execution_journal import (
+    InMemoryExecutionJournal,
     PydanticTaskOutputCodec,
     SQLiteExecutionJournal,
     TaskOutputCodecRegistry,
@@ -140,6 +140,42 @@ def test_sqlite_event_cursor_reads_and_verifies_only_the_unread_tail(
         and "SEQUENCE <=" not in statement
         for statement in normalized_statements
     )
+
+
+def test_sqlite_event_cursor_reads_a_bounded_page(execution_database):
+    journal = SQLiteExecutionJournal(execution_database)
+    plan = ExecutionPlan(
+        plan_id="bounded-events",
+        tasks=(Task(task_id="task", handler="fixture"),),
+    )
+    journal.begin(plan, resume=False)
+    for index in range(5):
+        journal.record_event(plan.plan_id, f"fixture.event-{index}", {"index": index})
+
+    all_events = journal.events(plan.plan_id)
+    first_page = journal.events(plan.plan_id, limit=2)
+    second_page = journal.events(
+        plan.plan_id,
+        after_sequence=first_page[-1]["sequence"],
+        limit=2,
+    )
+
+    assert first_page == all_events[:2]
+    assert second_page == all_events[2:4]
+
+
+def test_in_memory_event_cursor_reads_a_bounded_page():
+    journal = InMemoryExecutionJournal()
+    plan = ExecutionPlan(
+        plan_id="bounded-memory-events",
+        tasks=(Task(task_id="task", handler="fixture"),),
+    )
+    journal.begin(plan, resume=False)
+    for index in range(5):
+        journal.record_event(plan.plan_id, f"fixture.event-{index}", {"index": index})
+
+    all_events = journal.events(plan.plan_id)
+    assert journal.events(plan.plan_id, limit=2) == all_events[:2]
 
 
 def test_sqlite_event_cursor_detects_tampering_in_returned_tail(execution_database):

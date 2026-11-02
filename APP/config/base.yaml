@@ -22,6 +22,7 @@ vision:
   max_image_bytes: 20971520
   max_images_per_message: 8
   max_message_bytes: 41943040
+  max_concurrent_ingests: 2
   store_path: ./var/images
 
 sessions:
@@ -31,6 +32,7 @@ sessions:
 streaming:
   bus_kind: memory
   heartbeat_interval_s: 15
+  # Maximum durable events loaded per replay query; replay itself is never truncated.
   replay_window_events: 2000
 
 plugins:

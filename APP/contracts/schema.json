@@ -728,6 +728,7 @@
           "items": {
             "$ref": "#/$defs/EarthBookmarkRef"
           },
+          "maxItems": 32,
           "title": "Bookmarks",
           "type": "array"
         },
@@ -741,6 +742,7 @@
           "items": {
             "$ref": "#/$defs/EarthCaptureMetadata"
           },
+          "maxItems": 128,
           "title": "Captures",
           "type": "array"
         },
@@ -748,7 +750,16 @@
           "items": {
             "$ref": "#/$defs/EarthDrawing"
           },
+          "maxItems": 32,
           "title": "Drawings",
+          "type": "array"
+        },
+        "imagery": {
+          "items": {
+            "$ref": "#/$defs/EarthImageryRef"
+          },
+          "maxItems": 128,
+          "title": "Imagery",
           "type": "array"
         },
         "instant": {
@@ -764,10 +775,14 @@
           "default": null,
           "title": "Instant"
         },
+        "investigations": {
+          "$ref": "#/$defs/EarthInvestigationState"
+        },
         "layers": {
           "items": {
             "$ref": "#/$defs/LayerState"
           },
+          "maxItems": 64,
           "title": "Layers",
           "type": "array"
         },
@@ -782,10 +797,30 @@
           ],
           "default": null
         },
+        "overlays": {
+          "items": {
+            "$ref": "#/$defs/EarthOverlay"
+          },
+          "maxItems": 32,
+          "title": "Overlays",
+          "type": "array"
+        },
+        "secondary_view": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EarthSecondaryView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "selected_evidence_ids": {
           "items": {
             "type": "string"
           },
+          "maxItems": 64,
           "title": "Selected Evidence Ids",
           "type": "array"
         },
@@ -813,6 +848,20 @@
             }
           ],
           "default": null
+        },
+        "timeline_playback": {
+          "$ref": "#/$defs/EarthTimelinePlayback"
+        },
+        "viewport": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EarthViewport"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -821,13 +870,19 @@
         "camera_history",
         "captures",
         "drawings",
+        "imagery",
         "instant",
+        "investigations",
         "layers",
         "measurement",
+        "overlays",
+        "secondary_view",
         "selected_evidence_ids",
         "selection",
         "split_view",
-        "time"
+        "time",
+        "timeline_playback",
+        "viewport"
       ],
       "title": "EarthContext",
       "type": "object"
@@ -866,6 +921,147 @@
         "name"
       ],
       "title": "EarthDrawing",
+      "type": "object"
+    },
+    "EarthImageryRef": {
+      "properties": {
+        "asset_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "attached": {
+          "default": false,
+          "title": "Attached",
+          "type": "boolean"
+        },
+        "camera": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CameraState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "captured_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Captured At"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height"
+        },
+        "mime_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "image/png",
+                "image/jpeg",
+                "image/webp",
+                "image/tiff"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mime Type"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "enum": [
+            "capture",
+            "attachment"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width"
+        }
+      },
+      "required": [
+        "asset_id",
+        "attached",
+        "camera",
+        "captured_at",
+        "height",
+        "mime_type",
+        "region",
+        "source",
+        "width"
+      ],
+      "title": "EarthImageryRef",
+      "type": "object"
+    },
+    "EarthInvestigationState": {
+      "properties": {
+        "known_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Known Ids",
+          "type": "array"
+        },
+        "visible_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Visible Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "known_ids",
+        "visible_ids"
+      ],
+      "title": "EarthInvestigationState",
       "type": "object"
     },
     "EarthMeasurement": {
@@ -915,6 +1111,182 @@
         "value"
       ],
       "title": "EarthMeasurement",
+      "type": "object"
+    },
+    "EarthOverlay": {
+      "properties": {
+        "features": {
+          "items": {
+            "$ref": "#/$defs/EarthOverlayFeature"
+          },
+          "maxItems": 4096,
+          "title": "Features",
+          "type": "array"
+        },
+        "geometry_policy": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Geometry Policy"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "investigation_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Investigation Id"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "omitted_objects": {
+          "items": {
+            "$ref": "#/$defs/EarthOverlayOmission"
+          },
+          "maxItems": 4096,
+          "title": "Omitted Objects",
+          "type": "array"
+        }
+      },
+      "required": [
+        "features",
+        "geometry_policy",
+        "id",
+        "investigation_id",
+        "label",
+        "omitted_objects"
+      ],
+      "title": "EarthOverlay",
+      "type": "object"
+    },
+    "EarthOverlayFeature": {
+      "properties": {
+        "geometry": {
+          "additionalProperties": true,
+          "title": "Geometry",
+          "type": "object"
+        },
+        "id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "properties": {
+          "additionalProperties": true,
+          "title": "Properties",
+          "type": "object"
+        }
+      },
+      "required": [
+        "geometry",
+        "id",
+        "properties"
+      ],
+      "title": "EarthOverlayFeature",
+      "type": "object"
+    },
+    "EarthOverlayOmission": {
+      "properties": {
+        "object_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Object Id",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "object_id",
+        "reason"
+      ],
+      "title": "EarthOverlayOmission",
+      "type": "object"
+    },
+    "EarthSecondaryView": {
+      "properties": {
+        "camera": {
+          "$ref": "#/$defs/CameraState"
+        },
+        "layers": {
+          "items": {
+            "$ref": "#/$defs/LayerState"
+          },
+          "maxItems": 64,
+          "title": "Layers",
+          "type": "array"
+        },
+        "overlays": {
+          "items": {
+            "$ref": "#/$defs/EarthOverlay"
+          },
+          "maxItems": 32,
+          "title": "Overlays",
+          "type": "array"
+        },
+        "selected_evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Selected Evidence Ids",
+          "type": "array"
+        },
+        "viewport": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EarthViewport"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "camera",
+        "layers",
+        "overlays",
+        "selected_evidence_ids",
+        "viewport"
+      ],
+      "title": "EarthSecondaryView",
       "type": "object"
     },
     "EarthSelection": {
@@ -986,6 +1358,58 @@
       "title": "EarthSplitView",
       "type": "object"
     },
+    "EarthTimelinePlayback": {
+      "properties": {
+        "playing": {
+          "default": false,
+          "title": "Playing",
+          "type": "boolean"
+        },
+        "speed": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "maximum": 10000,
+          "title": "Speed",
+          "type": "number"
+        }
+      },
+      "required": [
+        "playing",
+        "speed"
+      ],
+      "title": "EarthTimelinePlayback",
+      "type": "object"
+    },
+    "EarthViewport": {
+      "properties": {
+        "height_px": {
+          "exclusiveMinimum": 0,
+          "maximum": 16384,
+          "title": "Height Px",
+          "type": "integer"
+        },
+        "pixel_ratio": {
+          "default": 1.0,
+          "maximum": 8,
+          "minimum": 0.1,
+          "title": "Pixel Ratio",
+          "type": "number"
+        },
+        "width_px": {
+          "exclusiveMinimum": 0,
+          "maximum": 16384,
+          "title": "Width Px",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "height_px",
+        "pixel_ratio",
+        "width_px"
+      ],
+      "title": "EarthViewport",
+      "type": "object"
+    },
     "EarthWorkspaceState": {
       "properties": {
         "bookmarks": {
@@ -1014,8 +1438,83 @@
       "title": "EarthWorkspaceState",
       "type": "object"
     },
+    "EngineAgentImageRef": {
+      "description": "Verified Platform image reference retained in the Engine Agent transcript.",
+      "properties": {
+        "asset_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Height"
+        },
+        "mime_type": {
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "image/tiff"
+          ],
+          "title": "Mime Type",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "maximum": 20971520,
+          "minimum": 1,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "width": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Width"
+        }
+      },
+      "required": [
+        "asset_id",
+        "height",
+        "mime_type",
+        "sha256",
+        "size_bytes",
+        "width"
+      ],
+      "title": "EngineAgentImageRef",
+      "type": "object"
+    },
     "EngineAgentMessage": {
       "properties": {
+        "attachments": {
+          "items": {
+            "$ref": "#/$defs/EngineAgentImageRef"
+          },
+          "title": "Attachments",
+          "type": "array"
+        },
         "content": {
           "default": "",
           "title": "Content",
@@ -1079,6 +1578,7 @@
         }
       },
       "required": [
+        "attachments",
         "content",
         "model_id",
         "role",
@@ -1161,6 +1661,888 @@
         "tool_id"
       ],
       "title": "EngineAgentToolCall",
+      "type": "object"
+    },
+    "EngineAgentToolDescriptor": {
+      "properties": {
+        "availability": {
+          "const": "available",
+          "title": "Availability",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "input_schema": {
+          "additionalProperties": true,
+          "title": "Input Schema",
+          "type": "object"
+        },
+        "model_visible_with_execution_consent": {
+          "title": "Model Visible With Execution Consent",
+          "type": "boolean"
+        },
+        "model_visible_without_consent": {
+          "title": "Model Visible Without Consent",
+          "type": "boolean"
+        },
+        "requires_execution_authorization": {
+          "title": "Requires Execution Authorization",
+          "type": "boolean"
+        },
+        "tool_id": {
+          "minLength": 1,
+          "title": "Tool Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "availability",
+        "description",
+        "input_schema",
+        "model_visible_with_execution_consent",
+        "model_visible_without_consent",
+        "requires_execution_authorization",
+        "tool_id"
+      ],
+      "title": "EngineAgentToolDescriptor",
+      "type": "object"
+    },
+    "EngineDatasetMetadata": {
+      "properties": {
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "citation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Citation"
+        },
+        "connector_id": {
+          "minLength": 1,
+          "title": "Connector Id",
+          "type": "string"
+        },
+        "crs": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Crs"
+        },
+        "dataset_id": {
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "deprecated": {
+          "default": false,
+          "title": "Deprecated",
+          "type": "boolean"
+        },
+        "forecast_coverage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngineDatasetTemporalCoverage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "historical_coverage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngineDatasetTemporalCoverage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "latency": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency"
+        },
+        "licensing": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Licensing"
+        },
+        "modalities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Modalities",
+          "type": "array"
+        },
+        "provider": {
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "resolution_unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resolution Unit"
+        },
+        "spatial_resolution": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spatial Resolution"
+        },
+        "supports_forecast": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supports Forecast"
+        },
+        "supports_historical": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supports Historical"
+        },
+        "temporal_coverage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngineDatasetTemporalCoverage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "units": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Units",
+          "type": "object"
+        },
+        "update_frequency": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Update Frequency"
+        },
+        "variables": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Variables",
+          "type": "array"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "capabilities",
+        "citation",
+        "connector_id",
+        "crs",
+        "dataset_id",
+        "deprecated",
+        "forecast_coverage",
+        "historical_coverage",
+        "latency",
+        "licensing",
+        "modalities",
+        "provider",
+        "resolution_unit",
+        "spatial_resolution",
+        "supports_forecast",
+        "supports_historical",
+        "temporal_coverage",
+        "units",
+        "update_frequency",
+        "variables",
+        "version"
+      ],
+      "title": "EngineDatasetMetadata",
+      "type": "object"
+    },
+    "EngineDatasetTemporalCoverage": {
+      "properties": {
+        "end": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start"
+        }
+      },
+      "required": [
+        "end",
+        "start"
+      ],
+      "title": "EngineDatasetTemporalCoverage",
+      "type": "object"
+    },
+    "EngineDiscoveryResponse": {
+      "properties": {
+        "agent_tools": {
+          "items": {
+            "$ref": "#/$defs/EngineAgentToolDescriptor"
+          },
+          "title": "Agent Tools",
+          "type": "array"
+        },
+        "datasets": {
+          "items": {
+            "$ref": "#/$defs/EngineDatasetMetadata"
+          },
+          "title": "Datasets",
+          "type": "array"
+        },
+        "earth_capabilities": {
+          "$ref": "#/$defs/EngineEarthCapabilitySnapshot"
+        },
+        "image_capabilities": {
+          "items": {
+            "$ref": "#/$defs/EngineImageCapability"
+          },
+          "title": "Image Capabilities",
+          "type": "array"
+        }
+      },
+      "required": [
+        "agent_tools",
+        "datasets",
+        "earth_capabilities",
+        "image_capabilities"
+      ],
+      "title": "EngineDiscoveryResponse",
+      "type": "object"
+    },
+    "EngineEarthCapabilitySnapshot": {
+      "properties": {
+        "modalities": {
+          "items": {
+            "$ref": "#/$defs/EngineEarthModalityCapability"
+          },
+          "title": "Modalities",
+          "type": "array"
+        },
+        "revision": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "title": "Revision",
+          "type": "string"
+        },
+        "snapshot_schema_version": {
+          "const": "1.0.0",
+          "title": "Snapshot Schema Version",
+          "type": "string"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "title": "Snapshot Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "modalities",
+        "revision",
+        "snapshot_schema_version",
+        "snapshot_sha256"
+      ],
+      "title": "EngineEarthCapabilitySnapshot",
+      "type": "object"
+    },
+    "EngineEarthModalityCapability": {
+      "properties": {
+        "dataset_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dataset Ids",
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "implementation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Implementation Ids",
+          "type": "array"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "modality_id": {
+          "minLength": 1,
+          "title": "Modality Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "registered",
+            "unavailable",
+            "declared",
+            "not_registered"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "variables": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Variables",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dataset_ids",
+        "description",
+        "implementation_ids",
+        "label",
+        "modality_id",
+        "status",
+        "variables"
+      ],
+      "title": "EngineEarthModalityCapability",
+      "type": "object"
+    },
+    "EngineEarthObjectFeature": {
+      "properties": {
+        "geometry": {
+          "additionalProperties": true,
+          "title": "Geometry",
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "properties": {
+          "$ref": "#/$defs/EngineEarthObjectProperties"
+        },
+        "type": {
+          "const": "Feature",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "geometry",
+        "id",
+        "properties",
+        "type"
+      ],
+      "title": "EngineEarthObjectFeature",
+      "type": "object"
+    },
+    "EngineEarthObjectGeoJSON": {
+      "description": "Engine-exported GeoJSON limited to verified WGS 84 object geometries.",
+      "properties": {
+        "features": {
+          "items": {
+            "$ref": "#/$defs/EngineEarthObjectFeature"
+          },
+          "title": "Features",
+          "type": "array"
+        },
+        "satquery:geometry_policy": {
+          "minLength": 1,
+          "title": "Satquery:Geometry Policy",
+          "type": "string"
+        },
+        "satquery:omitted_objects": {
+          "items": {
+            "$ref": "#/$defs/EngineGeoJSONOmission"
+          },
+          "title": "Satquery:Omitted Objects",
+          "type": "array"
+        },
+        "type": {
+          "const": "FeatureCollection",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "features",
+        "satquery:geometry_policy",
+        "satquery:omitted_objects",
+        "type"
+      ],
+      "title": "EngineEarthObjectGeoJSON",
+      "type": "object"
+    },
+    "EngineEarthObjectProperties": {
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "investigation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Investigation Ids",
+          "type": "array"
+        },
+        "lifecycle": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lifecycle"
+        },
+        "object_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Object Id"
+        },
+        "object_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Object Type"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        },
+        "source_observation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Observation Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "evidence_ids",
+        "investigation_ids",
+        "lifecycle",
+        "object_id",
+        "object_type",
+        "revision",
+        "source_observation_ids"
+      ],
+      "title": "EngineEarthObjectProperties",
+      "type": "object"
+    },
+    "EngineEarthQuery": {
+      "properties": {
+        "asset_preferences": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Asset Preferences",
+          "type": "array"
+        },
+        "asset_sampling": {
+          "anyOf": [
+            {
+              "const": "point",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Sampling"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 6,
+              "minItems": 4,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bbox"
+        },
+        "crs": {
+          "default": "OGC:CRS84",
+          "title": "Crs",
+          "type": "string"
+        },
+        "filters": {
+          "additionalProperties": true,
+          "title": "Filters",
+          "type": "object"
+        },
+        "geometry": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Geometry"
+        },
+        "point": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Point"
+        },
+        "raster_analysis": {
+          "anyOf": [
+            {
+              "const": "zonal_descriptive",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raster Analysis"
+        },
+        "raster_component_extraction": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Raster Component Extraction",
+          "type": "array"
+        },
+        "raster_pixel_selection": {
+          "anyOf": [
+            {
+              "enum": [
+                "pixel_center",
+                "all_touched"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raster Pixel Selection"
+        },
+        "raster_semantics": {
+          "additionalProperties": {
+            "enum": [
+              "numeric",
+              "categorical"
+            ],
+            "type": "string"
+          },
+          "title": "Raster Semantics",
+          "type": "object"
+        },
+        "raster_weighting": {
+          "anyOf": [
+            {
+              "enum": [
+                "equal_cell",
+                "geodesic_cell_area"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raster Weighting"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Region"
+        },
+        "requested_dataset_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requested Dataset Ids",
+          "type": "array"
+        },
+        "requested_modalities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requested Modalities",
+          "type": "array"
+        },
+        "requested_variables": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Requested Variables",
+          "type": "array"
+        },
+        "required_capabilities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Capabilities",
+          "type": "array"
+        },
+        "resolution_unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resolution Unit"
+        },
+        "spatial_resolution": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spatial Resolution"
+        },
+        "temporal_end": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temporal End"
+        },
+        "temporal_start": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temporal Start"
+        }
+      },
+      "required": [
+        "asset_preferences",
+        "asset_sampling",
+        "bbox",
+        "crs",
+        "filters",
+        "geometry",
+        "point",
+        "raster_analysis",
+        "raster_component_extraction",
+        "raster_pixel_selection",
+        "raster_semantics",
+        "raster_weighting",
+        "region",
+        "requested_dataset_ids",
+        "requested_modalities",
+        "requested_variables",
+        "required_capabilities",
+        "resolution_unit",
+        "spatial_resolution",
+        "temporal_end",
+        "temporal_start"
+      ],
+      "title": "EngineEarthQuery",
       "type": "object"
     },
     "EngineEventReceived": {
@@ -1256,6 +2638,26 @@
       "title": "EngineEventReceived",
       "type": "object"
     },
+    "EngineGeoJSONOmission": {
+      "properties": {
+        "object_id": {
+          "minLength": 1,
+          "title": "Object Id",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "object_id",
+        "reason"
+      ],
+      "title": "EngineGeoJSONOmission",
+      "type": "object"
+    },
     "EngineHealth": {
       "properties": {
         "detail": {
@@ -1299,6 +2701,1042 @@
         "version"
       ],
       "title": "EngineHealth",
+      "type": "object"
+    },
+    "EngineImageCapability": {
+      "properties": {
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "backend_preference": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Backend Preference",
+          "type": "array"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "intent": {
+          "minLength": 1,
+          "title": "Intent",
+          "type": "string"
+        },
+        "requires_images": {
+          "minimum": 0,
+          "title": "Requires Images",
+          "type": "integer"
+        },
+        "tool": {
+          "minLength": 1,
+          "title": "Tool",
+          "type": "string"
+        },
+        "unavailable_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unavailable Reason"
+        }
+      },
+      "required": [
+        "available",
+        "backend_preference",
+        "description",
+        "intent",
+        "requires_images",
+        "tool",
+        "unavailable_reason"
+      ],
+      "title": "EngineImageCapability",
+      "type": "object"
+    },
+    "EngineInvestigationEvent": {
+      "properties": {
+        "event_sha256": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "title": "Event Sha256",
+          "type": "string"
+        },
+        "event_type": {
+          "minLength": 1,
+          "title": "Event Type",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "plan_id": {
+          "minLength": 1,
+          "title": "Plan Id",
+          "type": "string"
+        },
+        "previous_event_sha256": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "title": "Previous Event Sha256",
+          "type": "string"
+        },
+        "sequence": {
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "timestamp": {
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_sha256",
+        "event_type",
+        "payload",
+        "plan_id",
+        "previous_event_sha256",
+        "sequence",
+        "timestamp"
+      ],
+      "title": "EngineInvestigationEvent",
+      "type": "object"
+    },
+    "EngineInvestigationEventPage": {
+      "properties": {
+        "events": {
+          "items": {
+            "$ref": "#/$defs/EngineInvestigationEvent"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "has_more": {
+          "default": false,
+          "title": "Has More",
+          "type": "boolean"
+        },
+        "investigation_id": {
+          "minLength": 1,
+          "title": "Investigation Id",
+          "type": "string"
+        },
+        "next_sequence": {
+          "minimum": 0,
+          "title": "Next Sequence",
+          "type": "integer"
+        },
+        "plan_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Plan Id"
+        }
+      },
+      "required": [
+        "events",
+        "has_more",
+        "investigation_id",
+        "next_sequence",
+        "plan_id"
+      ],
+      "title": "EngineInvestigationEventPage",
+      "type": "object"
+    },
+    "EngineInvestigationReport": {
+      "description": "Engine-authored report text linked to an Engine-owned investigation.",
+      "properties": {
+        "investigation_id": {
+          "minLength": 1,
+          "title": "Investigation Id",
+          "type": "string"
+        },
+        "markdown": {
+          "minLength": 1,
+          "title": "Markdown",
+          "type": "string"
+        },
+        "report_id": {
+          "minLength": 1,
+          "title": "Report Id",
+          "type": "string"
+        },
+        "report_sha256": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "title": "Report Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "investigation_id",
+        "markdown",
+        "report_id",
+        "report_sha256"
+      ],
+      "title": "EngineInvestigationReport",
+      "type": "object"
+    },
+    "EngineMission": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finished At"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        },
+        "mission_id": {
+          "minLength": 1,
+          "title": "Mission Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "objective": {
+          "minLength": 1,
+          "title": "Objective",
+          "type": "string"
+        },
+        "status": {
+          "default": "active",
+          "enum": [
+            "active",
+            "completed",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "created_at",
+        "finished_at",
+        "metadata",
+        "mission_id",
+        "name",
+        "objective",
+        "status"
+      ],
+      "title": "EngineMission",
+      "type": "object"
+    },
+    "EngineMissionCreate": {
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "objective": {
+          "minLength": 1,
+          "title": "Objective",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "objective"
+      ],
+      "title": "EngineMissionCreate",
+      "type": "object"
+    },
+    "EngineMonitoringComparison": {
+      "properties": {
+        "comparison_id": {
+          "minLength": 1,
+          "title": "Comparison Id",
+          "type": "string"
+        },
+        "comparison_sha256": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "title": "Comparison Sha256",
+          "type": "string"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "markdown": {
+          "title": "Markdown",
+          "type": "string"
+        }
+      },
+      "required": [
+        "comparison_id",
+        "comparison_sha256",
+        "limitations",
+        "markdown"
+      ],
+      "title": "EngineMonitoringComparison",
+      "type": "object"
+    },
+    "EngineMonitoringNotification": {
+      "properties": {
+        "acknowledged_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Acknowledged At"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "detail": {
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "event_id": {
+          "minLength": 1,
+          "title": "Event Id",
+          "type": "string"
+        },
+        "notification_id": {
+          "minLength": 1,
+          "title": "Notification Id",
+          "type": "string"
+        },
+        "run_id": {
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schedule_id": {
+          "minLength": 1,
+          "title": "Schedule Id",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "warning",
+            "error"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "status": {
+          "default": "unread",
+          "enum": [
+            "unread",
+            "acknowledged"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "acknowledged_at",
+        "created_at",
+        "detail",
+        "event_id",
+        "notification_id",
+        "run_id",
+        "schedule_id",
+        "severity",
+        "status",
+        "title"
+      ],
+      "title": "EngineMonitoringNotification",
+      "type": "object"
+    },
+    "EngineMonitoringRun": {
+      "properties": {
+        "effective_temporal_end": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective Temporal End"
+        },
+        "effective_temporal_start": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective Temporal Start"
+        },
+        "execution_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Id"
+        },
+        "failure_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Failure Type"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finished At"
+        },
+        "investigation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Investigation Id"
+        },
+        "lease_expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lease Expires At"
+        },
+        "missed_intervals": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Missed Intervals",
+          "type": "integer"
+        },
+        "mission_id": {
+          "minLength": 1,
+          "title": "Mission Id",
+          "type": "string"
+        },
+        "run_id": {
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "schedule_id": {
+          "minLength": 1,
+          "title": "Schedule Id",
+          "type": "string"
+        },
+        "schedule_revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Schedule Revision",
+          "type": "integer"
+        },
+        "scheduled_at": {
+          "format": "date-time",
+          "title": "Scheduled At",
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "running",
+            "completed",
+            "partial",
+            "failed",
+            "skipped"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "worker_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Worker Id"
+        }
+      },
+      "required": [
+        "effective_temporal_end",
+        "effective_temporal_start",
+        "execution_id",
+        "failure_type",
+        "finished_at",
+        "investigation_id",
+        "lease_expires_at",
+        "missed_intervals",
+        "mission_id",
+        "run_id",
+        "schedule_id",
+        "schedule_revision",
+        "scheduled_at",
+        "started_at",
+        "status",
+        "worker_id"
+      ],
+      "title": "EngineMonitoringRun",
+      "type": "object"
+    },
+    "EngineMonitoringSchedule": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "earth_query": {
+          "$ref": "#/$defs/EngineEarthQuery"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "interval_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Interval Seconds",
+          "type": "integer"
+        },
+        "mission_id": {
+          "minLength": 1,
+          "title": "Mission Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "next_run_at": {
+          "format": "date-time",
+          "title": "Next Run At",
+          "type": "string"
+        },
+        "overlap_policy": {
+          "default": "skip_while_running",
+          "enum": [
+            "skip_while_running",
+            "allow"
+          ],
+          "title": "Overlap Policy",
+          "type": "string"
+        },
+        "priority": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "rolling_window_seconds": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rolling Window Seconds"
+        },
+        "schedule_id": {
+          "minLength": 1,
+          "title": "Schedule Id",
+          "type": "string"
+        },
+        "trigger_policies": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EngineMonitoringTriggerPolicy"
+          },
+          "title": "Trigger Policies",
+          "type": "array"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "created_at",
+        "earth_query",
+        "enabled",
+        "interval_seconds",
+        "mission_id",
+        "name",
+        "next_run_at",
+        "overlap_policy",
+        "priority",
+        "revision",
+        "rolling_window_seconds",
+        "schedule_id",
+        "trigger_policies",
+        "updated_at"
+      ],
+      "title": "EngineMonitoringSchedule",
+      "type": "object"
+    },
+    "EngineMonitoringScheduleCreate": {
+      "properties": {
+        "earth_query": {
+          "$ref": "#/$defs/EngineEarthQuery"
+        },
+        "interval_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Interval Seconds",
+          "type": "integer"
+        },
+        "mission_id": {
+          "minLength": 1,
+          "title": "Mission Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "overlap_policy": {
+          "default": "skip_while_running",
+          "enum": [
+            "skip_while_running",
+            "allow"
+          ],
+          "title": "Overlap Policy",
+          "type": "string"
+        },
+        "priority": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "rolling_window_seconds": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rolling Window Seconds"
+        },
+        "trigger_policies": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EngineMonitoringTriggerPolicy"
+          },
+          "title": "Trigger Policies",
+          "type": "array"
+        }
+      },
+      "required": [
+        "earth_query",
+        "interval_seconds",
+        "mission_id",
+        "name",
+        "overlap_policy",
+        "priority",
+        "rolling_window_seconds",
+        "trigger_policies"
+      ],
+      "title": "EngineMonitoringScheduleCreate",
+      "type": "object"
+    },
+    "EngineMonitoringScheduleUpdate": {
+      "properties": {
+        "earth_query": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngineEarthQuery"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "interval_seconds": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interval Seconds"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "overlap_policy": {
+          "anyOf": [
+            {
+              "enum": [
+                "skip_while_running",
+                "allow"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Overlap Policy"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Priority"
+        },
+        "rolling_window_seconds": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rolling Window Seconds"
+        },
+        "trigger_policies": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/EngineMonitoringTriggerPolicy"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trigger Policies"
+        }
+      },
+      "required": [
+        "expected_revision"
+      ],
+      "title": "EngineMonitoringScheduleUpdate",
+      "type": "object"
+    },
+    "EngineMonitoringTriggerEvent": {
+      "properties": {
+        "event_id": {
+          "minLength": 1,
+          "title": "Event Id",
+          "type": "string"
+        },
+        "event_type": {
+          "enum": [
+            "trigger_evaluated",
+            "trigger_matched",
+            "trigger_suppressed_cooldown",
+            "trigger_investigation_created",
+            "trigger_investigation_completed",
+            "trigger_investigation_failed"
+          ],
+          "title": "Event Type",
+          "type": "string"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "schedule_id": {
+          "minLength": 1,
+          "title": "Schedule Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "event_type",
+        "occurred_at",
+        "payload",
+        "run_id",
+        "schedule_id"
+      ],
+      "title": "EngineMonitoringTriggerEvent",
+      "type": "object"
+    },
+    "EngineMonitoringTriggerHistory": {
+      "properties": {
+        "events": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EngineMonitoringTriggerEvent"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "has_more": {
+          "default": false,
+          "title": "Has More",
+          "type": "boolean"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Cursor"
+        },
+        "policies": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EngineMonitoringTriggerPolicy"
+          },
+          "title": "Policies",
+          "type": "array"
+        },
+        "schedule_id": {
+          "minLength": 1,
+          "title": "Schedule Id",
+          "type": "string"
+        },
+        "schedule_revision": {
+          "minimum": 1,
+          "title": "Schedule Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "events",
+        "has_more",
+        "next_cursor",
+        "policies",
+        "schedule_id",
+        "schedule_revision"
+      ],
+      "title": "EngineMonitoringTriggerHistory",
+      "type": "object"
+    },
+    "EngineMonitoringTriggerPolicy": {
+      "properties": {
+        "canonical_variable": {
+          "minLength": 1,
+          "title": "Canonical Variable",
+          "type": "string"
+        },
+        "cooldown_seconds": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Cooldown Seconds",
+          "type": "integer"
+        },
+        "follow_up_query": {
+          "$ref": "#/$defs/EngineEarthQuery"
+        },
+        "max_attempts": {
+          "default": 1,
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "operator": {
+          "enum": [
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "abs_gt",
+            "abs_gte"
+          ],
+          "title": "Operator",
+          "type": "string"
+        },
+        "policy_id": {
+          "minLength": 1,
+          "title": "Policy Id",
+          "type": "string"
+        },
+        "retry_safe": {
+          "default": false,
+          "title": "Retry Safe",
+          "type": "boolean"
+        },
+        "threshold": {
+          "title": "Threshold",
+          "type": "number"
+        },
+        "unit": {
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "canonical_variable",
+        "cooldown_seconds",
+        "follow_up_query",
+        "max_attempts",
+        "name",
+        "operator",
+        "policy_id",
+        "retry_safe",
+        "threshold",
+        "unit"
+      ],
+      "title": "EngineMonitoringTriggerPolicy",
       "type": "object"
     },
     "EvidenceRef": {
@@ -3983,8 +6421,62 @@
     "engine_agent_session": {
       "$ref": "#/$defs/EngineAgentSession"
     },
+    "engine_agent_tool_descriptor": {
+      "$ref": "#/$defs/EngineAgentToolDescriptor"
+    },
+    "engine_dataset_metadata": {
+      "$ref": "#/$defs/EngineDatasetMetadata"
+    },
+    "engine_discovery_response": {
+      "$ref": "#/$defs/EngineDiscoveryResponse"
+    },
+    "engine_earth_capability_snapshot": {
+      "$ref": "#/$defs/EngineEarthCapabilitySnapshot"
+    },
+    "engine_earth_object_geojson": {
+      "$ref": "#/$defs/EngineEarthObjectGeoJSON"
+    },
+    "engine_earth_query": {
+      "$ref": "#/$defs/EngineEarthQuery"
+    },
     "engine_health": {
       "$ref": "#/$defs/EngineHealth"
+    },
+    "engine_image_capability": {
+      "$ref": "#/$defs/EngineImageCapability"
+    },
+    "engine_investigation_event_page": {
+      "$ref": "#/$defs/EngineInvestigationEventPage"
+    },
+    "engine_investigation_report": {
+      "$ref": "#/$defs/EngineInvestigationReport"
+    },
+    "engine_mission": {
+      "$ref": "#/$defs/EngineMission"
+    },
+    "engine_mission_create": {
+      "$ref": "#/$defs/EngineMissionCreate"
+    },
+    "engine_monitoring_comparison": {
+      "$ref": "#/$defs/EngineMonitoringComparison"
+    },
+    "engine_monitoring_notification": {
+      "$ref": "#/$defs/EngineMonitoringNotification"
+    },
+    "engine_monitoring_run": {
+      "$ref": "#/$defs/EngineMonitoringRun"
+    },
+    "engine_monitoring_schedule": {
+      "$ref": "#/$defs/EngineMonitoringSchedule"
+    },
+    "engine_monitoring_schedule_create": {
+      "$ref": "#/$defs/EngineMonitoringScheduleCreate"
+    },
+    "engine_monitoring_schedule_update": {
+      "$ref": "#/$defs/EngineMonitoringScheduleUpdate"
+    },
+    "engine_monitoring_trigger_history": {
+      "$ref": "#/$defs/EngineMonitoringTriggerHistory"
     },
     "evidence": {
       "$ref": "#/$defs/EvidenceRef"
@@ -4033,7 +6525,25 @@
     "layer_spec",
     "evidence",
     "engine_health",
+    "engine_agent_tool_descriptor",
+    "engine_image_capability",
+    "engine_dataset_metadata",
+    "engine_earth_capability_snapshot",
+    "engine_discovery_response",
     "engine_agent_session",
+    "engine_earth_query",
+    "engine_mission",
+    "engine_mission_create",
+    "engine_monitoring_run",
+    "engine_monitoring_comparison",
+    "engine_monitoring_notification",
+    "engine_monitoring_trigger_history",
+    "engine_monitoring_schedule",
+    "engine_monitoring_schedule_create",
+    "engine_monitoring_schedule_update",
+    "engine_earth_object_geojson",
+    "engine_investigation_event_page",
+    "engine_investigation_report",
     "message",
     "model_info",
     "image_asset",

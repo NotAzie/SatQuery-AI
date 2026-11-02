@@ -1,18 +1,48 @@
 """HTTP adapter for SatQuery Engine's published Agent API."""
 
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, TypeVar
 from urllib.parse import quote
 
 import httpx
+from pydantic import BaseModel
 
 from earth_platform.engine.errors import EngineUnavailableError
-from earth_platform.engine.models import EngineAgentEvent, EngineAgentSession, EngineHealth
+from earth_platform.engine.models import (
+    EngineAgentEvent,
+    EngineAgentImage,
+    EngineAgentSession,
+    EngineAgentToolDescriptor,
+    EngineDatasetMetadata,
+    EngineEarthCapabilitySnapshot,
+    EngineEarthContext,
+    EngineEarthObjectGeoJSON,
+    EngineHealth,
+    EngineImageCapability,
+    EngineInvestigationEventPage,
+    EngineInvestigationReport,
+    EngineMission,
+    EngineMissionCreate,
+    EngineMonitoringComparison,
+    EngineMonitoringNotification,
+    EngineMonitoringRun,
+    EngineMonitoringSchedule,
+    EngineMonitoringScheduleCreate,
+    EngineMonitoringScheduleUpdate,
+    EngineMonitoringTriggerHistory,
+)
 from earth_platform.settings.models import EngineSettings
+from earth_platform.shared.errors import (
+    ConflictError,
+    NotFoundError,
+    ValidationFailedError,
+)
+
+ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 class HttpEngineClient:
-    """Forward Platform requests to the Engine without reimplementing its agent loop."""
+    """Forward Agent turns and read Engine-authored reports without duplicating Engine logic."""
 
     def __init__(
         self,
@@ -74,6 +104,33 @@ class HttpEngineClient:
             detail=None if body["ready"] else "SatQuery Engine reports that it is not ready",
         )
 
+    async def list_engine_datasets(self) -> list[EngineDatasetMetadata]:
+        response = await self._request("GET", "api/v1/platform/datasets")
+        return self._parse_list(response, EngineDatasetMetadata, "dataset metadata")
+
+    async def list_engine_image_capabilities(self) -> list[EngineImageCapability]:
+        response = await self._request("GET", "api/v1/capabilities")
+        return self._parse_list(
+            response, EngineImageCapability, "image-analysis capability"
+        )
+
+    async def list_engine_agent_tools(self) -> list[EngineAgentToolDescriptor]:
+        response = await self._request("GET", "api/v1/agent/tools")
+        return self._parse_list(
+            response, EngineAgentToolDescriptor, "Agent tool descriptor"
+        )
+
+    async def get_engine_earth_capabilities(self) -> EngineEarthCapabilitySnapshot:
+        response = await self._request(
+            "GET", "api/v1/platform/earth/capabilities"
+        )
+        try:
+            return EngineEarthCapabilitySnapshot.model_validate(response.json())
+        except (ValueError, TypeError) as exc:
+            raise EngineUnavailableError(
+                "SatQuery Engine returned an invalid Earth capability snapshot"
+            ) from exc
+
     async def create_agent_session(self) -> EngineAgentSession:
         response = await self._request("POST", "api/v1/agent/sessions")
         return self._parse_session(response)
@@ -82,6 +139,228 @@ class HttpEngineClient:
         response = await self._request("GET", f"api/v1/agent/sessions/{quote(session_id, safe='')}")
         return self._parse_session(response)
 
+    async def get_investigation_report(
+        self, investigation_id: str
+    ) -> EngineInvestigationReport:
+        response = await self._request(
+            "GET",
+            "api/v1/platform/investigations/"
+            f"{quote(investigation_id, safe='')}/report",
+        )
+        try:
+            body: Any = response.json()
+            if not isinstance(body, dict):
+                raise TypeError("report response must be an object")
+            investigation = body.get("investigation")
+            if (
+                not isinstance(investigation, dict)
+                or investigation.get("investigation_id") != investigation_id
+            ):
+                raise ValueError("report investigation does not match the request")
+            return EngineInvestigationReport.model_validate(
+                {
+                    "report_id": body.get("report_id"),
+                    "report_sha256": body.get("report_sha256"),
+                    "investigation_id": investigation_id,
+                    "markdown": body.get("markdown"),
+                }
+            )
+        except (ValueError, TypeError) as exc:
+            raise EngineUnavailableError(
+                "SatQuery Engine returned an invalid investigation report"
+            ) from exc
+
+    async def get_investigation_earth_objects(
+        self, investigation_id: str
+    ) -> EngineEarthObjectGeoJSON:
+        response = await self._request(
+            "GET",
+            "api/v1/platform/earth-objects/geojson",
+            params={"investigation_id": investigation_id},
+        )
+        try:
+            return EngineEarthObjectGeoJSON.model_validate(response.json())
+        except (ValueError, TypeError) as exc:
+            raise EngineUnavailableError(
+                "SatQuery Engine returned invalid investigation Earth Object GeoJSON"
+            ) from exc
+
+    async def get_investigation_events(
+        self,
+        session_id: str,
+        investigation_id: str,
+        *,
+        after_sequence: int = 0,
+        limit: int = 100,
+    ) -> EngineInvestigationEventPage:
+        response = await self._request(
+            "GET",
+            (
+                f"api/v1/agent/sessions/{quote(session_id, safe='')}"
+                f"/investigations/{quote(investigation_id, safe='')}/events"
+            ),
+            params={"after_sequence": after_sequence, "limit": limit},
+        )
+        try:
+            page = EngineInvestigationEventPage.model_validate(response.json())
+            if page.investigation_id != investigation_id:
+                raise ValueError("investigation id does not match the request")
+            return page
+        except (ValueError, TypeError) as exc:
+            raise EngineUnavailableError(
+                "SatQuery Engine returned an invalid investigation event page"
+            ) from exc
+
+    async def list_missions(self) -> list[EngineMission]:
+        response = await self._request("GET", "api/v1/platform/missions")
+        return self._parse_list(response, EngineMission, "mission")
+
+    async def create_mission(self, mission: EngineMissionCreate) -> EngineMission:
+        response = await self._request(
+            "POST",
+            "api/v1/platform/missions",
+            json=mission.model_dump(mode="json"),
+        )
+        try:
+            return EngineMission.model_validate(response.json())
+        except (ValueError, TypeError) as exc:
+            raise EngineUnavailableError(
+                "SatQuery Engine returned an invalid mission response"
+            ) from exc
+
+    async def list_monitoring_schedules(self) -> list[EngineMonitoringSchedule]:
+        response = await self._request("GET", "api/v1/platform/monitoring/schedules")
+        return self._parse_list(response, EngineMonitoringSchedule, "monitoring schedule")
+
+    async def create_monitoring_schedule(
+        self, schedule: EngineMonitoringScheduleCreate
+    ) -> EngineMonitoringSchedule:
+        response = await self._request(
+            "POST",
+            "api/v1/platform/monitoring/schedules",
+            json=schedule.model_dump(mode="json"),
+        )
+        try:
+            return EngineMonitoringSchedule.model_validate(response.json())
+        except (ValueError, TypeError) as exc:
+            raise EngineUnavailableError(
+                "SatQuery Engine returned an invalid monitoring schedule response"
+            ) from exc
+
+    async def revise_monitoring_schedule(
+        self, schedule_id: str, update: EngineMonitoringScheduleUpdate
+    ) -> EngineMonitoringSchedule:
+        response = await self._request(
+            "PATCH",
+            "api/v1/platform/monitoring/schedules/"
+            f"{quote(schedule_id, safe='')}",
+            json=update.model_dump(mode="json", exclude_unset=True),
+        )
+        try:
+            return EngineMonitoringSchedule.model_validate(response.json())
+        except (ValueError, TypeError) as exc:
+            raise EngineUnavailableError(
+                "SatQuery Engine returned an invalid monitoring schedule response"
+            ) from exc
+
+    async def set_monitoring_schedule_enabled(
+        self, schedule_id: str, enabled: bool
+    ) -> EngineMonitoringSchedule:
+        action = "enable" if enabled else "disable"
+        response = await self._request(
+            "POST",
+            "api/v1/platform/monitoring/schedules/"
+            f"{quote(schedule_id, safe='')}/{action}",
+        )
+        try:
+            return EngineMonitoringSchedule.model_validate(response.json())
+        except (ValueError, TypeError) as exc:
+            raise EngineUnavailableError(
+                "SatQuery Engine returned an invalid monitoring schedule response"
+            ) from exc
+
+    async def list_monitoring_runs(
+        self, schedule_id: str
+    ) -> list[EngineMonitoringRun]:
+        response = await self._request(
+            "GET",
+            "api/v1/platform/monitoring/schedules/"
+            f"{quote(schedule_id, safe='')}/runs",
+        )
+        return self._parse_list(response, EngineMonitoringRun, "monitoring run")
+
+    async def compare_monitoring_schedule(
+        self, schedule_id: str, *, limit: int = 10
+    ) -> EngineMonitoringComparison:
+        response = await self._request(
+            "GET",
+            "api/v1/platform/monitoring/schedules/"
+            f"{quote(schedule_id, safe='')}/comparison",
+            params={"limit": limit},
+        )
+        try:
+            return EngineMonitoringComparison.model_validate(response.json())
+        except (ValueError, TypeError) as exc:
+            raise EngineUnavailableError(
+                "SatQuery Engine returned an invalid monitoring comparison"
+            ) from exc
+
+    async def list_monitoring_notifications(
+        self,
+        *,
+        schedule_id: str | None = None,
+        unread_only: bool = False,
+        limit: int = 100,
+    ) -> list[EngineMonitoringNotification]:
+        params: dict[str, str | int | bool] = {
+            "unread_only": unread_only,
+            "limit": limit,
+        }
+        if schedule_id is not None:
+            params["schedule_id"] = schedule_id
+        response = await self._request(
+            "GET",
+            "api/v1/platform/monitoring/notifications",
+            params=params,
+        )
+        return self._parse_list(
+            response, EngineMonitoringNotification, "monitoring notification"
+        )
+
+    async def acknowledge_monitoring_notification(
+        self, notification_id: str
+    ) -> EngineMonitoringNotification:
+        response = await self._request(
+            "POST",
+            "api/v1/platform/monitoring/notifications/"
+            f"{quote(notification_id, safe='')}/acknowledge",
+        )
+        try:
+            return EngineMonitoringNotification.model_validate(response.json())
+        except (ValueError, TypeError) as exc:
+            raise EngineUnavailableError(
+                "SatQuery Engine returned an invalid monitoring notification"
+            ) from exc
+
+    async def get_monitoring_triggers(
+        self, schedule_id: str, *, limit: int = 100, cursor: str | None = None
+    ) -> EngineMonitoringTriggerHistory:
+        params: dict[str, str | int] = {"limit": limit}
+        if cursor is not None:
+            params["cursor"] = cursor
+        response = await self._request(
+            "GET",
+            "api/v1/platform/monitoring/schedules/"
+            f"{quote(schedule_id, safe='')}/triggers",
+            params=params,
+        )
+        try:
+            return EngineMonitoringTriggerHistory.model_validate(response.json())
+        except (ValueError, TypeError) as exc:
+            raise EngineUnavailableError(
+                "SatQuery Engine returned invalid monitoring trigger history"
+            ) from exc
+
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         try:
             response = await self._http().request(method, path, **kwargs)
@@ -89,6 +368,12 @@ class HttpEngineClient:
             raise EngineUnavailableError(f"Could not reach SatQuery Engine: {exc}") from exc
         if not response.is_success:
             detail = _response_detail(response)
+            if response.status_code == 404:
+                raise NotFoundError(detail)
+            if response.status_code == 409:
+                raise ConflictError(detail)
+            if response.status_code == 422:
+                raise ValidationFailedError(detail)
             raise EngineUnavailableError(
                 f"SatQuery Engine returned HTTP {response.status_code}: {detail}"
             )
@@ -103,6 +388,20 @@ class HttpEngineClient:
                 "SatQuery Engine returned an invalid Agent session response"
             ) from exc
 
+    @staticmethod
+    def _parse_list(
+        response: httpx.Response, model: type[ModelT], resource: str
+    ) -> list[ModelT]:
+        try:
+            body: Any = response.json()
+            if not isinstance(body, list):
+                raise TypeError("response must be a list")
+            return [model.model_validate(item) for item in body]
+        except (ValueError, TypeError) as exc:
+            raise EngineUnavailableError(
+                f"SatQuery Engine returned an invalid {resource} list"
+            ) from exc
+
     async def stream_agent_turn(
         self,
         session_id: str,
@@ -110,13 +409,21 @@ class HttpEngineClient:
         message: str,
         model_id: str,
         execution_authorized: bool = False,
+        earth_context: EngineEarthContext | None = None,
+        attachments: list[EngineAgentImage] | None = None,
     ) -> AsyncIterator[EngineAgentEvent]:
         path = f"api/v1/agent/sessions/{quote(session_id, safe='')}/turns"
-        body = {
+        body: dict[str, object] = {
             "message": message,
             "model_id": model_id,
             "execution_authorized": execution_authorized,
         }
+        if earth_context is not None:
+            body["earth_context"] = earth_context.model_dump(mode="json")
+        if attachments:
+            body["attachments"] = [
+                attachment.model_dump(mode="json") for attachment in attachments
+            ]
         try:
             async with self._http().stream(
                 "POST",
@@ -133,6 +440,8 @@ class HttpEngineClient:
                 if not response.is_success:
                     await response.aread()
                     detail = _response_detail(response)
+                    if response.status_code == 422:
+                        raise ValidationFailedError(detail)
                     raise EngineUnavailableError(
                         f"SatQuery Engine returned HTTP {response.status_code}: {detail}"
                     )
@@ -181,4 +490,7 @@ def _response_detail(response: httpx.Response) -> str:
             message = error.get("message")
             if isinstance(message, str):
                 return message
+        detail = body.get("detail")
+        if isinstance(detail, str):
+            return detail
     return "request was rejected"

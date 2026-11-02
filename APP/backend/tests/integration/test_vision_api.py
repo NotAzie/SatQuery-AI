@@ -267,3 +267,21 @@ def test_prepare_enforces_aggregate_attachment_size_limit(tmp_path):
         )
         assert prepared.status_code == 422
         assert "message size limit" in prepared.json()["error"]["message"]
+
+
+def test_deleting_platform_session_removes_its_image_assets(tmp_path):
+    settings = _settings(tmp_path)
+    with TestClient(create_app(settings)) as client:
+        session_id = client.post("/api/v1/sessions", json={}).json()["id"]
+        uploaded = client.post(
+            f"/api/v1/vision/sessions/{session_id}/assets",
+            files={"upload": ("capture.png", _png(), "image/png")},
+        )
+        assert uploaded.status_code == 201
+        asset_directory = settings.vision.store_path / uploaded.json()["id"]
+        assert asset_directory.is_dir()
+
+        deleted = client.delete(f"/api/v1/sessions/{session_id}")
+
+        assert deleted.status_code == 204
+        assert not asset_directory.exists()

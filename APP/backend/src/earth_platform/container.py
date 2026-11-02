@@ -51,10 +51,10 @@ class Container:
     _stack: AsyncExitStack = field(default_factory=AsyncExitStack)
 
     async def start(self) -> None:
-        await self.sessions.open()
         self._stack.push_async_callback(self.sessions.aclose)
         self._stack.push_async_callback(self.event_bus.aclose)
         self._stack.push_async_callback(self.engine.aclose)
+        await self.sessions.open()
         try:
             await self.engine.connect()
         except EngineUnavailableError as exc:
@@ -69,7 +69,10 @@ class Container:
 def build_container(settings: Settings) -> Container:
     sessions = SQLiteSessionStore(settings.sessions.dsn)
     engine = build_engine_client(settings.engine)
-    event_bus = InMemoryEventBus(sessions.events)
+    event_bus = InMemoryEventBus(
+        sessions.events,
+        replay_window_events=settings.streaming.replay_window_events,
+    )
     image_store = FilesystemImageStore(settings.vision.store_path)
     provider_factories = Registry[ProviderFactory]("llm provider factory")
     tool_sources = Registry[ToolSource]("tool source")

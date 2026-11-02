@@ -16,4 +16,5 @@ export interface TimelineController {
   pause(): void;
   getState(): TimelineState;
   onChange(listener: (state: TimelineState) => void): Unsubscribe;
+  destroy(): void;
 }

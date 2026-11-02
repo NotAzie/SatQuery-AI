@@ -15,6 +15,15 @@ export function EarthStage() {
   const splitView = useEarthStore((state) => state.splitView);
   const syncCameras = useEarthStore((state) => state.syncCameras);
   const setCamera = useEarthStore((state) => state.setCamera);
+  const setSecondaryCamera = useEarthStore((state) => state.setSecondaryCamera);
+  const setViewport = useEarthStore((state) => state.setViewport);
+  const setSecondaryViewport = useEarthStore((state) => state.setSecondaryViewport);
+  const setOverlays = useEarthStore((state) => state.setOverlays);
+  const setSecondaryOverlays = useEarthStore((state) => state.setSecondaryOverlays);
+  const setSelectedEvidenceIds = useEarthStore((state) => state.setSelectedEvidenceIds);
+  const setSecondarySelectedEvidenceIds = useEarthStore(
+    (state) => state.setSecondarySelectedEvidenceIds,
+  );
   const setTimeline = useEarthStore((state) => state.setTimeline);
   const setSelection = useEarthStore((state) => state.setSelection);
   const setDrawings = useEarthStore((state) => state.setDrawings);
@@ -32,15 +41,32 @@ export function EarthStage() {
           if (event.viewId === "primary") {
             setCamera(event.camera);
             recordCamera(event.camera);
+          } else {
+            setSecondaryCamera(event.camera);
           }
           if (syncCameras && splitView) {
             synchronizeCamera(event.viewId, event.camera, registry.controller, registry.secondaryController);
           }
           break;
+        case "earth.viewport.changed":
+          if (event.viewId === "primary") setViewport(event.viewport);
+          else setSecondaryViewport(event.viewport);
+          break;
         case "earth.timeline.changed":
           if (event.viewId === "primary") {
             setTimeline(event.timeline);
             if (splitView) synchronizeTimeline(event.timeline, registry.secondaryController);
+          }
+          break;
+        case "earth.overlays.changed":
+          if (event.viewId === "primary") setOverlays(event.overlays);
+          else setSecondaryOverlays(event.overlays);
+          break;
+        case "earth.evidence.highlighted":
+          if (event.viewId === "primary") {
+            setSelectedEvidenceIds(event.evidenceIds);
+          } else {
+            setSecondarySelectedEvidenceIds(event.evidenceIds);
           }
           break;
         case "earth.selection.changed":
@@ -63,6 +89,13 @@ export function EarthStage() {
     syncCameras,
     recordCamera,
     setCamera,
+    setSecondaryCamera,
+    setViewport,
+    setSecondaryViewport,
+    setOverlays,
+    setSecondaryOverlays,
+    setSelectedEvidenceIds,
+    setSecondarySelectedEvidenceIds,
     setTimeline,
     setSelection,
     setDrawings,
@@ -102,12 +135,31 @@ function EarthViewport({ viewId, events }: { viewId: EarthViewId; events: EarthC
 
     const viewer = createViewer(container);
     const controller = createEarthController(viewer, events, viewId);
+    const publishViewport = () => {
+      const bounds = container.getBoundingClientRect();
+      const width = Math.round(bounds.width);
+      const height = Math.round(bounds.height);
+      if (width <= 0 || height <= 0) return;
+      events.publish({
+        type: "earth.viewport.changed",
+        viewport: {
+          width_px: width,
+          height_px: height,
+          pixel_ratio: window.devicePixelRatio || 1,
+        },
+        viewId,
+      });
+    };
+    const resizeObserver = new ResizeObserver(publishViewport);
+    resizeObserver.observe(container);
+    publishViewport();
     if (viewId === "primary") {
       attach(controller);
       setInitialEarthState(controller);
     } else {
       attachSecondary(controller);
       const current = useEarthStore.getState();
+      current.setSecondaryCamera(controller.camera.getState());
       controller.workspace.replaceDrawings(current.drawings);
       if (current.timeline.range) {
         controller.timeline.setRange(current.timeline.range);
@@ -117,8 +169,16 @@ function EarthViewport({ viewId, events }: { viewId: EarthViewId; events: EarthC
     }
 
     return () => {
+      resizeObserver.disconnect();
       if (viewId === "primary") detach();
-      else detachSecondary();
+      else {
+        detachSecondary();
+        const store = useEarthStore.getState();
+        store.setSecondaryCamera(null);
+        store.setSecondaryViewport(null);
+        store.setSecondaryOverlays([]);
+        store.setSecondarySelectedEvidenceIds([]);
+      }
       controller.destroy();
       viewer.destroy();
     };

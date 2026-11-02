@@ -17,7 +17,7 @@ export function apiUrl(path: string): string {
   return `${API_BASE_URL}${API_PREFIX}${path}`;
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function apiResponse(path: string, init?: RequestInit): Promise<Response> {
   const response = await fetch(apiUrl(path), {
     ...init,
     headers: { Accept: "application/json", ...init?.headers },
@@ -33,5 +33,14 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       body?.error?.details,
     );
   }
+  return response;
+}
+
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await apiResponse(path, init);
   return (await response.json()) as T;
+}
+
+export async function apiFetchVoid(path: string, init?: RequestInit): Promise<void> {
+  await apiResponse(path, init);
 }

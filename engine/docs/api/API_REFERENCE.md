@@ -83,7 +83,9 @@ routes are called.
 | `GET` | `/api/v1/platform/intelligence/designs/{design_id}` | Retrieve a stored investigation design. |
 | `POST` | `/api/v1/platform/investigate` | Plan and design a natural-language investigation, create mission/investigation records, and attach tasks only when both plan and evidence strategy are ready. |
 | `POST` | `/api/v1/agent/sessions` | Create an in-memory or configured durable conversational session. Python SDK: `client.agents.create_session()`; CLI: `satquery agent create`. |
+| `GET` | `/api/v1/agent/tools` | List the registered Agent tool IDs, descriptions, JSON input schemas, availability, and model visibility with/without explicit execution consent. Python SDK: `client.agents.tools()`. Read-only; does not execute tools. |
 | `GET` | `/api/v1/agent/sessions/{session_id}` | Read persisted user, assistant, and tool messages and linked investigation IDs. Python SDK: `client.agents.get_session(id)`; CLI: `satquery agent show ID`. |
+| `GET` | `/api/v1/agent/sessions/{session_id}/investigations/{investigation_id}/events` | Read a bounded page of integrity-verified execution journal events for an investigation linked to this Agent session; use `after_sequence` and `limit` (1–200) to continue. Python SDK: `client.agents.investigation_events(...)`. |
 | `POST` | `/api/v1/agent/sessions/{session_id}/turns` | Stream a model-driven agent turn as SSE. Body: `message`, registered `model_id`, and optional `execution_authorized` (default `false`). Python SDK: `client.agents.stream_turn(...)`; CLI: `satquery agent turn ID --message TEXT --model-id MODEL`. |
 | `POST` | `/api/v1/agent/sessions/{session_id}/cancel` | Cooperatively cancel the active model turn and, when applicable, request cancellation through the existing investigation runtime. Python SDK: `client.agents.cancel_turn(id)`; CLI: `satquery agent cancel ID`. |
 | `POST` | `/api/v1/platform/missions` | Create a local mission. |
@@ -92,12 +94,12 @@ routes are called.
 | `POST` | `/api/v1/platform/missions/{mission_id}/investigations` | Create an Earth observation investigation from an `EarthQuery`. |
 | `GET` | `/api/v1/platform/missions/{mission_id}/investigations` | List investigations belonging to a mission. |
 | `GET` | `/api/v1/platform/investigations/{investigation_id}` | Inspect task, evidence, result, and lifecycle references. |
-| `POST` | `/api/v1/platform/monitoring/schedules` | Create a recurring EarthQuery schedule linked to an active mission. |
+| `POST` | `/api/v1/platform/monitoring/schedules` | Create a recurring EarthQuery schedule linked to an active mission. Optional `rolling_window_seconds` resolves a lookback window ending at each persisted run's start; it cannot be combined with fixed EarthQuery temporal bounds. |
 | `GET` | `/api/v1/platform/monitoring/schedules` | List schedules, optionally filtered by `mission_id`. |
-| `PATCH` | `/api/v1/platform/monitoring/schedules/{schedule_id}` | Revise query/cadence/policy with an `expected_revision`; stale edits return 409. |
+| `PATCH` | `/api/v1/platform/monitoring/schedules/{schedule_id}` | Revise query/cadence/policy, including optional `rolling_window_seconds` (set to `null` to disable), with an `expected_revision`; stale edits return 409. |
 | `POST` | `/api/v1/platform/monitoring/schedules/{schedule_id}/enable` | Enable a schedule without discarding run history. |
 | `POST` | `/api/v1/platform/monitoring/schedules/{schedule_id}/disable` | Disable a schedule without deleting it. |
-| `GET` | `/api/v1/platform/monitoring/schedules/{schedule_id}/runs` | Inspect persisted run, investigation, and execution links. |
+| `GET` | `/api/v1/platform/monitoring/schedules/{schedule_id}/runs` | Inspect persisted run, resolved temporal-window bounds, investigation, and execution links. |
 | `GET` | `/api/v1/platform/monitoring/schedules/{schedule_id}/triggers` | Inspect operator-authored trigger policies and a stable page of deterministic evaluations, cooldown suppressions, and linked follow-up investigations (`limit`, `cursor`). |
 | `POST` | `/api/v1/platform/monitoring/run-due` | Dispatch due schedules through the ordinary investigation DAG (`limit` defaults to 100). |
 | `GET` | `/api/v1/platform/monitoring/health` | Inspect scheduler counts and expired run leases. |
@@ -184,7 +186,7 @@ uncertainty as not propagated.
 | `GET` | `/api/v1/platform/investigations/{investigation_id}/temporal-differences` | Return reproducible consecutive-sample arithmetic diagnostics from exact-support raster stacks; no trend or uncertainty propagation is claimed. |
 | `POST` | `/api/v1/platform/investigations/{investigation_id}/earth-objects` | Materialize an Earth Object from an explicit identity/type declaration and source observations; every supplied evidence reference is validated. |
 | `GET` | `/api/v1/platform/earth-objects` | List current process/memory-restored Earth Object revisions; optional `investigation_id` filter. |
-| `GET` | `/api/v1/platform/earth-objects/geojson` | Export RFC 7946 GeoJSON for valid geometries with a declared WGS 84 CRS; optional `investigation_id` filter. Unknown/projected CRS and invalid geographic geometries are listed in `satquery:omitted_objects`, not silently transformed. |
+| `GET` | `/api/v1/platform/earth-objects/geojson` | Export RFC 7946 GeoJSON for valid geometries with a declared WGS 84 CRS and typed object, investigation, source-observation, and evidence IDs; optional `investigation_id` filter. Unknown/projected CRS and invalid geographic geometries are listed in `satquery:omitted_objects`, not silently transformed. |
 | `GET` | `/api/v1/platform/earth-objects/id/{object_id}` | Inspect one canonical object with its source records, measurements, provenance, uncertainty, and revision metadata. |
 | `POST` | `/api/v1/platform/earth-objects/id/{object_id}/transitions` | Create a reclassification or lifecycle revision with an exact prior object ID, actor, rationale, and already-linked observation/evidence support. |
 | `GET` | `/api/v1/platform/earth-objects/graph` | Read the selected Earth Object graph and evidence-backed relationships; optional `investigation_id` filter. |

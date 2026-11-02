@@ -2,6 +2,8 @@
 
 This document describes what starts, in what order, and which state each process owns. The
 Platform and SatQuery Engine remain separate services even when run from this repository.
+For clean-clone installation and exact integrated startup commands, use the repository's
+[authoritative startup guide](INSTALL.md).
 
 ## Which process starts first?
 
@@ -23,9 +25,13 @@ For live Engine-backed Platform chat:
    and tool execution. The Platform does not launch a local model process or agent loop.
 
 The Engine is optional for opening the Platform shell. If it is absent or unconfigured, Platform
-liveness remains available and `/readyz` reports `degraded`; Engine-backed chat cannot complete.
-For local development, Engine and Platform both default to port 8000, so start Engine on 9000 and
-set `EARTH_ENGINE__BASE_URL=http://127.0.0.1:9000`.
+liveness remains available and `/readyz` reports `degraded`. Readiness also mirrors the Engine's
+own readiness report, which can be degraded when the optional legacy image models have not been
+warmed even though Engine API discovery remains reachable. Verify the integration with
+`GET /api/v1/intelligence/engine-discovery`. For local development, Engine and Platform both
+default to port 8000, so start Engine on 9000 and set
+`EARTH_ENGINE__BASE_URL=http://127.0.0.1:9000`. The checked-in Engine does not register an Agent
+reasoning adapter by default, so live chat requires an externally supplied Engine adapter.
 
 ## Request, tools, evidence, and streaming
 

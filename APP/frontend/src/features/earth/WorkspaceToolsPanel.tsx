@@ -4,6 +4,7 @@ import { useEarthController } from "@/hooks/useEarth";
 import { useEarthStore, snapshotEarthContext } from "@/state/earthStore";
 import { useSessionStore } from "@/state/sessionStore";
 import type { DrawingKind, MeasurementKind } from "@/earth/workspace/types";
+import type { EarthSelection } from "@/shared/types";
 
 const drawingKinds: DrawingKind[] = ["point", "line", "polygon", "rectangle", "circle"];
 const measurementKinds: MeasurementKind[] = ["distance", "area", "coordinates", "elevation"];
@@ -12,10 +13,24 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : "The Earth workspace action failed.";
 }
 
+function selectedEvidenceIds(selection: EarthSelection | null): string[] {
+  const encoded = selection?.properties.evidence_ids;
+  if (typeof encoded !== "string") return [];
+  try {
+    const value: unknown = JSON.parse(encoded);
+    return Array.isArray(value) && value.every((item) => typeof item === "string")
+      ? value
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export function WorkspaceToolsPanel() {
   const controller = useEarthController();
   const camera = useEarthStore((state) => state.camera);
   const selection = useEarthStore((state) => state.selection);
+  const evidenceIds = selectedEvidenceIds(selection);
   const drawings = useEarthStore((state) => state.drawings);
   const measurement = useEarthStore((state) => state.measurement);
   const splitView = useEarthStore((state) => state.splitView);
@@ -179,11 +194,25 @@ export function WorkspaceToolsPanel() {
       <section aria-label="Earth selection" className="border-t border-white/10 py-3">
         <h3 className="mb-1 text-xs font-medium">Selection</h3>
         {selection ? (
-          <p className="break-all text-[10px] text-ink-dim">
-            {selection.entity_id}
-            {selection.position &&
-              ` · ${selection.position.lat.toFixed(4)}, ${selection.position.lng.toFixed(4)}`}
-          </p>
+          <div className="break-all text-[10px] text-ink-dim">
+            <p>
+              {selection.entity_id}
+              {selection.position &&
+                ` · ${selection.position.lat.toFixed(4)}, ${selection.position.lng.toFixed(4)}`}
+            </p>
+            {evidenceIds.length > 0 && (
+              <>
+                <p className="mt-1">Evidence: {evidenceIds.join(", ")}</p>
+                <button
+                  type="button"
+                  className="mt-2 rounded border border-white/10 px-2 py-1 text-[10px] text-ink hover:bg-white/5"
+                  onClick={() => run(() => controller?.overlays.highlight(evidenceIds))}
+                >
+                  Highlight linked evidence
+                </button>
+              </>
+            )}
+          </div>
         ) : (
           <p className="text-[10px] text-ink-dim">Select an entity on the globe.</p>
         )}

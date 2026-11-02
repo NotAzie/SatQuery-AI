@@ -26,7 +26,13 @@ the limits of every major capability. The
 The repository-level [installation guide](../../INSTALL.md) audits dependencies
 for both SatQuery Engine and Earth Intelligence Platform.
 
-## Install and run locally
+## Run the complete Engine + Platform product
+
+For the integrated local development setup, follow the repository-level
+[authoritative startup guide](../../INSTALL.md). It starts this Engine alongside the APP backend
+and frontend, and verifies the HTTP connection between them.
+
+## Run the Engine by itself
 
 The Engine requires Python 3.10 or later; the combined workspace uses Python
 3.12 (also used in CI). The repository-level

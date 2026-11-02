@@ -23,6 +23,17 @@ class LayerState(BaseModel):
     opacity: float = Field(default=1.0, ge=0, le=1)
 
 
+class EarthViewport(BaseModel):
+    width_px: int = Field(gt=0, le=16384)
+    height_px: int = Field(gt=0, le=16384)
+    pixel_ratio: float = Field(default=1.0, ge=0.1, le=8, allow_inf_nan=False)
+
+
+class EarthTimelinePlayback(BaseModel):
+    playing: bool = False
+    speed: float = Field(default=1.0, gt=0, le=10000, allow_inf_nan=False)
+
+
 class EarthSelection(BaseModel):
     entity_id: str
     position: LngLat | None = None
@@ -34,6 +45,51 @@ class EarthDrawing(BaseModel):
     name: str
     kind: Literal["point", "line", "polygon", "rectangle", "circle"]
     geometry: GeoJSONGeometry
+
+
+class EarthImageryRef(BaseModel):
+    asset_id: str = Field(min_length=1, max_length=128)
+    source: Literal["capture", "attachment"]
+    attached: bool = False
+    captured_at: datetime | None = None
+    region: BoundingBox | None = None
+    camera: CameraState | None = None
+    mime_type: Literal["image/png", "image/jpeg", "image/webp", "image/tiff"] | None = None
+    width: int | None = Field(default=None, ge=1)
+    height: int | None = Field(default=None, ge=1)
+
+
+class EarthOverlayFeature(BaseModel):
+    id: str = Field(min_length=1, max_length=256)
+    geometry: GeoJSONGeometry
+    properties: dict[str, object] = Field(default_factory=dict)
+
+
+class EarthOverlayOmission(BaseModel):
+    object_id: str = Field(min_length=1, max_length=256)
+    reason: str = Field(min_length=1, max_length=512)
+
+
+class EarthOverlay(BaseModel):
+    id: str = Field(min_length=1, max_length=128)
+    label: str | None = Field(default=None, max_length=256)
+    investigation_id: str | None = Field(default=None, min_length=1, max_length=128)
+    features: list[EarthOverlayFeature] = Field(default_factory=list, max_length=4096)
+    omitted_objects: list[EarthOverlayOmission] = Field(default_factory=list, max_length=4096)
+    geometry_policy: str | None = Field(default=None, max_length=512)
+
+
+class EarthSecondaryView(BaseModel):
+    camera: CameraState
+    viewport: EarthViewport | None = None
+    layers: list[LayerState] = Field(default_factory=list, max_length=64)
+    overlays: list[EarthOverlay] = Field(default_factory=list, max_length=32)
+    selected_evidence_ids: list[str] = Field(default_factory=list, max_length=64)
+
+
+class EarthInvestigationState(BaseModel):
+    known_ids: list[str] = Field(default_factory=list, max_length=64)
+    visible_ids: list[str] = Field(default_factory=list, max_length=64)
 
 
 class EarthCameraHistory(BaseModel):
@@ -97,14 +153,20 @@ class EarthCaptureMetadata(BaseModel):
 
 class EarthContext(BaseModel):
     camera: CameraState
-    layers: list[LayerState] = Field(default_factory=list)
+    viewport: EarthViewport | None = None
+    layers: list[LayerState] = Field(default_factory=list, max_length=64)
     time: TimeRange | None = None
     instant: datetime | None = None
+    timeline_playback: EarthTimelinePlayback = Field(default_factory=EarthTimelinePlayback)
     selection: EarthSelection | None = None
-    drawings: list[EarthDrawing] = Field(default_factory=list)
-    captures: list[EarthCaptureMetadata] = Field(default_factory=list)
-    selected_evidence_ids: list[str] = Field(default_factory=list)
-    bookmarks: list[EarthBookmarkRef] = Field(default_factory=list)
+    drawings: list[EarthDrawing] = Field(default_factory=list, max_length=32)
+    captures: list[EarthCaptureMetadata] = Field(default_factory=list, max_length=128)
+    imagery: list[EarthImageryRef] = Field(default_factory=list, max_length=128)
+    overlays: list[EarthOverlay] = Field(default_factory=list, max_length=32)
+    secondary_view: EarthSecondaryView | None = None
+    investigations: EarthInvestigationState = Field(default_factory=EarthInvestigationState)
+    selected_evidence_ids: list[str] = Field(default_factory=list, max_length=64)
+    bookmarks: list[EarthBookmarkRef] = Field(default_factory=list, max_length=32)
     camera_history: EarthCameraHistory = Field(default_factory=EarthCameraHistory)
     split_view: EarthSplitView = Field(default_factory=EarthSplitView)
     measurement: EarthMeasurement | None = None

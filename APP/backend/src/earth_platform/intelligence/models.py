@@ -3,6 +3,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from earth_platform.engine.models import (
+    EngineAgentToolDescriptor,
+    EngineDatasetMetadata,
+    EngineEarthCapabilitySnapshot,
+    EngineImageCapability,
+)
 from earth_platform.shared.earth import EarthContext
 from earth_platform.shared.geo import LngLat, TimeRange
 from earth_platform.vision.types import VisionContext
@@ -69,6 +75,13 @@ class CapabilitySnapshot(BaseModel):
     streaming: CapabilityEntry
     engine_tool_discovery: CapabilityEntry
     dataset_discovery: CapabilityEntry
+
+
+class EngineDiscoveryResponse(BaseModel):
+    image_capabilities: list[EngineImageCapability]
+    datasets: list[EngineDatasetMetadata]
+    earth_capabilities: EngineEarthCapabilitySnapshot
+    agent_tools: list[EngineAgentToolDescriptor]
 
 
 class Recommendation(BaseModel):

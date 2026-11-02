@@ -1201,6 +1201,7 @@ def test_monitoring_schedule_runs_and_records_a_linked_investigation():
                     "mission_id": "monitor-mission",
                     "name": "Hourly temperature observation",
                     "interval_seconds": 1,
+                    "rolling_window_seconds": 3600,
                     "next_run_at": (now - timedelta(seconds=10)).isoformat(),
                     "earth_query": {"requested_variables": ["air_temperature"]},
                     "trigger_policies": [{
@@ -1227,6 +1228,9 @@ def test_monitoring_schedule_runs_and_records_a_linked_investigation():
             assert len(runs) == 1
             assert runs[0]["status"] == "completed"
             assert runs[0]["execution_id"]
+            assert runs[0]["effective_temporal_start"]
+            assert runs[0]["effective_temporal_end"]
+            assert runs[0]["effective_temporal_end"] == runs[0]["started_at"]
             investigation_id = runs[0]["investigation_id"]
 
             investigation = client.get(

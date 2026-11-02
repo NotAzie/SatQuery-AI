@@ -40,8 +40,60 @@ distributed database.
 | Reasoning and methods | Evidence coverage diagnostics, hypotheses and lifecycle history, operator/rule registries, method manifests, sufficiency checks, explicit uncertainty inventories, certification ledger, benchmark runner, cited knowledge records, and configuration-only workflow templates. | No bundled domain method is certified to produce scientific conclusions. Reference metadata and passing exact-output replay do not establish scientific validity. No general causal inference or calibrated probability engine is active. |
 | Governance | Append-only investigation audit events, method certification transitions, plugin manifest compatibility/signature-verifier interfaces, reference benchmark execution, and versioned reproducibility exports with the capability snapshots used by planning and acquisition. SQLite audit and benchmark inputs can be supplied locally. | No benchmark truth data, external reviewer identity, signed institutional certification, package sandbox, or cryptographic protection against a storage administrator is bundled. Capability snapshots preserve the safe selection view, not raw provider data or acquired source data. |
 | Earth Memory | Deterministic artifact indexing and search, source links, Earth Object and observation lineage, capability snapshot artifacts, same-CRS envelope and exact GeoJSON-intersection filters, revision-bound cursors, and optional SQLite schema migrations. | Default memory is process-local. Spatial filters never reproject or repair geometry; exact geometry search requires the optional geospatial dependencies and valid indexed geometry. Semantic embedding search and learning are absent. |
-| Continuous observation | Mission-linked recurring EarthQuery schedules, durable local leases/events when configured, explicit run-due operation or opt-in local polling, recovery, bounded dispatch, overlap and retry policy, operational trigger rules, local notifications, history pages, and run comparisons. | Trigger thresholds are user-authored operational predicates, not validated change detection. No external notifications, exactly-once upstream acquisition, distributed scheduling, or guaranteed provider freshness. |
-| Agent interface | Model-neutral streaming reasoning protocol with finite per-round deadlines, explicit typed Earth tool registry, conversational tool/observation loop, SQLite or in-memory session state, SSE lifecycle events, cooperative cancellation, and delegation to the existing planner, runtime, execution journal, evidence, and Earth Memory services. | A compatible cancellation-aware provider adapter must be registered in the reasoner registry. Turn-level execution consent is not authentication. There is no built-in provider, multi-agent runtime, user/tenant isolation, durable event replay, or distributed session store. |
+| Continuous observation | Mission-linked recurring EarthQuery schedules, optional rolling windows resolved at persisted run start, durable local leases/events when configured, explicit run-due operation or opt-in local polling, recovery, bounded dispatch, overlap and retry policy, operational trigger rules, local notifications, history pages, and run comparisons. | Rolling windows cannot be combined with fixed query times; each effective interval is retained in the run and its investigation query. Trigger thresholds are user-authored operational predicates, not validated change detection. No external notifications, exactly-once upstream acquisition, distributed scheduling, or guaranteed provider freshness. |
+| Agent interface | Model-neutral streaming reasoning protocol with finite per-round deadlines, explicit typed Earth tool registry and read-only `GET /api/v1/agent/tools` descriptors, conversational tool/observation loop, SQLite or in-memory session state, SSE lifecycle events, cooperative cancellation, session-scoped bounded execution-journal history, and delegation to the existing planner, runtime, evidence, and Earth Memory services. Explicit presentation requests can emit `earth.command` SSE events for `fly_to` and session-linked `show_investigation`. | A compatible cancellation-aware provider adapter must be registered in the reasoner registry. Turn-level execution consent is not authentication. Agent turn SSE replay, user/tenant isolation, and distributed session/event storage are not implemented. Other Earth command types need corresponding Engine-owned data and ownership contracts. |
+
+### Agent Earth command event
+
+The Agent tool registry exposes `earth.command` for presentation-only actions. The provider must
+request the tool explicitly; assistant prose and ordinary scientific tool results never produce map
+actions. The Engine validates the command and emits the existing Agent event envelope:
+
+```json
+{
+  "kind": "earth.command",
+  "session_id": "agent-session-id",
+  "turn_id": "turn-id",
+  "sequence": 7,
+  "timestamp": "2026-11-02T00:00:00Z",
+  "payload": {
+    "command": {
+      "type": "show_investigation",
+      "investigation_id": "investigation-id"
+    }
+  }
+}
+```
+
+Currently accepted commands are `fly_to` with a WGS 84 longitude/latitude or bounding box, and
+`show_investigation` with an investigation ID already linked to the Agent session. The latter is
+checked both by the Engine before emission and by the Platform before it fetches report or map data.
+Layer visibility, arbitrary overlays, and evidence highlighting are not exposed through this tool.
+
+### Agent EarthContext input
+
+`POST /api/v1/agent/sessions/{id}/turns` accepts an optional typed `earth_context` alongside the
+user message. The bounded contract contains primary and optional secondary viewport dimensions and
+WGS 84 camera state, layer visibility state, temporal range/instant/playback, selected entity properties,
+user drawings, metadata-only imagery references, active overlay GeoJSON and omissions, evidence
+highlights, Engine investigation references, bookmarks, camera history, split-view state, and
+measurements. Overlay geometries are validated as WGS 84; the complete serialized EarthContext is
+capped at 512 KiB. The Engine validates this payload before starting the turn and presents it to the
+reasoning model as untrusted context, not verified evidence, instructions, or scientific conclusions.
+It is per-turn scope and is not stored as authoritative Agent transcript state. Image bytes remain
+in the separate attachment field.
+
+### Agent image attachments
+
+The same turn endpoint accepts up to eight typed image attachments. Each carries the Platform asset
+ID, supported MIME type, byte size, optional dimensions, SHA-256 digest, and strict base64 image
+bytes. Per-image size is capped at 20 MiB and aggregate size at 40 MiB. The Engine validates
+encoding, MIME signature, declared byte size, and digest before starting a turn. It persists only
+attachment references in the user transcript message and passes bytes transiently to the selected
+Agent model adapter. Adapters must explicitly set `supports_vision = True`; otherwise the Engine
+rejects the request with HTTP 422 before opening the SSE stream. The Platform remains the canonical
+image store and must resend bytes for each turn that needs image context. No provider-specific SDK
+or request format is included in the Engine core.
 | Interfaces | FastAPI/OpenAPI; grouped synchronous Python SDK resources for platform, Earth, agent sessions, missions, investigations, monitoring, objects, memory, and science; CLI commands for planning, observation, investigation, agent sessions/turns, objects (including GeoJSON export), reasoning inspection, memory, science catalogs, monitoring, and runtime; browser workspace exposes mission/investigation state, selected platform records, and an interactive SVG locator view of supported Earth Object geometries. | The client returns raw server JSON and does not negotiate schema versions or retry ambiguous writes. The locator is not a basemap or full GIS; it draws only valid geometries explicitly declared in WGS 84, uses an equirectangular view, and performs no reprojection, geometry repair, or measurement. Authentication, multi-user collaboration, and organization dashboards are absent. |
 
 ## Persistence and configuration

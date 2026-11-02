@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import tempfile
+from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
@@ -46,6 +47,7 @@ def test_sqlite_monitoring_schedule_claim_is_atomic_and_survives_reopen():
             name="Repeat observation",
             earth_query=EarthQuery(requested_variables=("air_temperature",)),
             interval_seconds=30,
+            rolling_window_seconds=900,
             next_run_at=now - timedelta(seconds=65),
             created_at=now - timedelta(seconds=70),
             updated_at=now - timedelta(seconds=70),
@@ -64,6 +66,8 @@ def test_sqlite_monitoring_schedule_claim_is_atomic_and_survives_reopen():
         run = claimed[0]
         assert run.missed_intervals == 2
         assert run.schedule_revision == 1
+        assert run.effective_temporal_start == now - timedelta(seconds=900)
+        assert run.effective_temporal_end == now
         assert first_repository.get(schedule.schedule_id).revision == 1
 
         completed = run.model_copy(update={
@@ -250,6 +254,54 @@ def test_scheduler_cancellation_finalizes_claimed_run():
     assert run.failure_type == "scheduler_cancelled"
 
 
+def test_scheduler_executes_the_resolved_rolling_earth_query():
+    import asyncio
+
+    now = utc_now()
+    missions = MissionService(
+        InMemoryMissionRepository(),
+        InvestigationService(InMemoryInvestigationRepository()),
+    )
+    mission = missions.create(
+        Mission(name="Rolling window", objective="Test rolling query bounds")
+    )
+    repository = InMemoryMonitoringRepository()
+    schedule = MonitoringSchedule(
+        schedule_id="schedule-window",
+        mission_id=mission.mission_id,
+        name="Recent observations",
+        earth_query=EarthQuery(
+            bbox=(-122, 35, -120, 37),
+            requested_variables=("air_temperature",),
+        ),
+        interval_seconds=3600,
+        rolling_window_seconds=7200,
+        next_run_at=now - timedelta(seconds=1),
+    )
+    repository.create(schedule)
+    service = MonitoringService(repository, missions, missions.investigations)
+    captured_query = None
+
+    async def execute(investigation_id):
+        nonlocal captured_query
+        investigation = missions.investigations.get(investigation_id)
+        captured_query = EarthQuery.model_validate(
+            investigation.tasks[0].parameters["earth_query"]
+        )
+        return SimpleNamespace(plan_id="execution-window")
+
+    runs = asyncio.run(service.run_due(execute, now=now))
+
+    assert len(runs) == 1
+    assert runs[0].effective_temporal_start == now - timedelta(seconds=7200)
+    assert runs[0].effective_temporal_end == now
+    assert captured_query is not None
+    assert captured_query.temporal_start == now - timedelta(seconds=7200)
+    assert captured_query.temporal_end == now
+    assert captured_query.bbox == (-122, 35, -120, 37)
+    assert captured_query.requested_variables == ("air_temperature",)
+
+
 def test_schedule_configuration_revisions_change_only_for_user_state_changes():
     repository = InMemoryMonitoringRepository()
     now = utc_now()
@@ -269,6 +321,41 @@ def test_schedule_configuration_revisions_change_only_for_user_state_changes():
     assert enabled.revision == 2
     assert repository.set_enabled(schedule.schedule_id, False, now) == enabled
     assert repository.get(schedule.schedule_id).revision == 2
+
+
+def test_rolling_window_is_revisioned_and_can_be_removed():
+    now = utc_now()
+    repository = InMemoryMonitoringRepository()
+    schedule = MonitoringSchedule(
+        schedule_id="schedule-window-revision",
+        mission_id="mission-window-revision",
+        name="Window revision",
+        earth_query=EarthQuery(),
+        interval_seconds=3600,
+        rolling_window_seconds=1800,
+        next_run_at=now,
+    )
+    repository.create(schedule)
+
+    revised = repository.revise(
+        schedule.schedule_id,
+        MonitoringScheduleUpdate(
+            expected_revision=1,
+            rolling_window_seconds=None,
+        ),
+        now,
+    )
+
+    assert revised.rolling_window_seconds is None
+    assert revised.revision == 2
+    with pytest.raises(ValueError, match="cannot be combined with fixed"):
+        MonitoringSchedule(
+            mission_id="mission-fixed-window",
+            name="Invalid window",
+            earth_query=EarthQuery(temporal_start=now - timedelta(hours=1)),
+            interval_seconds=3600,
+            rolling_window_seconds=1800,
+        )
 
 
 def test_schedule_edits_are_optimistic_versioned_and_runs_keep_their_revision():

@@ -4,7 +4,12 @@ import pytest
 
 from earth_platform.agent.runtime import AgentTurnRequest
 from earth_platform.earth.layers import LayerRegistry
-from earth_platform.engine.models import EngineAgentMessage, EngineAgentSession
+from earth_platform.engine.models import (
+    EngineAgentImageRef,
+    EngineAgentMessage,
+    EngineAgentSession,
+    EngineEarthContext,
+)
 from earth_platform.intelligence.capabilities import CapabilityDiscovery
 from earth_platform.intelligence.context import ConversationContextBuilder
 from earth_platform.intelligence.earth_context import EarthContextBuilder
@@ -22,6 +27,9 @@ from earth_platform.shared.earth import (
     EarthBookmark,
     EarthContext,
     EarthDrawing,
+    EarthOverlay,
+    EarthSecondaryView,
+    EarthViewport,
     EarthWorkspaceState,
 )
 from earth_platform.shared.geo import LngLat, TimeRange
@@ -90,8 +98,35 @@ def test_earth_context_builder_merges_live_and_persisted_workspace():
             geometry={"type": "Point", "coordinates": [10, 0]},
         )
     ]
+    supplied.viewport = EarthViewport(width_px=1200, height_px=800, pixel_ratio=2)
+    supplied.timeline_playback.playing = True
+    supplied.timeline_playback.speed = 4
+    supplied.overlays = [
+        EarthOverlay(
+            id="investigation:investigation-1",
+            label="investigation-1",
+            investigation_id="investigation-1",
+            features=[
+                {
+                    "id": "earth-object-1",
+                    "geometry": {"type": "Point", "coordinates": [10, 0]},
+                    "properties": {"evidence_ids": ["evidence-1"]},
+                }
+            ],
+            geometry_policy="WGS 84",
+        )
+    ]
+    supplied.secondary_view = EarthSecondaryView(
+        camera=_camera(-20),
+        viewport=EarthViewport(width_px=600, height_px=800),
+    )
+    supplied.split_view.enabled = True
 
-    result = EarthContextBuilder().build(session, supplied)
+    result = EarthContextBuilder().build(
+        session,
+        supplied,
+        engine_investigation_ids=["investigation-1"],
+    )
 
     assert result is not None
     assert result.camera == _camera(10)
@@ -100,6 +135,39 @@ def test_earth_context_builder_merges_live_and_persisted_workspace():
     assert result.captures[0].id == "capture-1"
     assert result.selected_evidence_ids == ["evidence-1"]
     assert result.drawings[0].name == "User marker"
+    assert result.viewport == EarthViewport(width_px=1200, height_px=800, pixel_ratio=2)
+    assert result.timeline_playback.playing
+    assert result.investigations.known_ids == ["investigation-1"]
+    assert result.investigations.visible_ids == ["investigation-1"]
+    assert result.overlays[0].features[0].properties["evidence_ids"] == ["evidence-1"]
+    assert result.imagery[0].asset_id == "asset-1"
+    assert result.secondary_view is not None
+    assert result.secondary_view.camera.position.lng == -20
+
+    forwarded = EngineEarthContext.from_workspace(
+        result,
+        attached_images=[
+            EngineAgentImageRef(
+                asset_id="asset-2",
+                mime_type="image/png",
+                size_bytes=128,
+                width=16,
+                height=8,
+                sha256="a" * 64,
+            )
+        ],
+    )
+    assert forwarded.viewport is not None
+    assert result.viewport is not None
+    assert forwarded.viewport.model_dump() == result.viewport.model_dump()
+    assert forwarded.timeline_playback.playing
+    assert forwarded.investigations.visible_ids == ["investigation-1"]
+    assert forwarded.overlays[0].features[0].id == "earth-object-1"
+    assert forwarded.secondary_view is not None
+    assert forwarded.secondary_view.camera.position.lng == -20
+    assert forwarded.imagery[0].asset_id == "asset-1"
+    assert forwarded.imagery[1].asset_id == "asset-2"
+    assert forwarded.imagery[1].attached
 
 
 def test_conversation_context_applies_history_limit_and_extractive_compression():
@@ -177,7 +245,7 @@ def test_prompt_assembler_compresses_low_ranked_context_to_token_budget():
         "bookmarks": [],
     }
 
-    assembled, tokens, compressed, dropped = PromptAssembler().assemble(
+    assembled, tokens, compressed, dropped, compacted_earth = PromptAssembler().assemble(
         "Review this workspace",
         earth_context=earth,
         vision_context=VisionContext(),
@@ -190,10 +258,12 @@ def test_prompt_assembler_compresses_low_ranked_context_to_token_budget():
     assert compressed
     assert dropped > 0
     assert "omitted_drawings_count" in assembled
+    assert compacted_earth is not None
+    assert compacted_earth["omitted_drawings_count"] == 28
 
 
 def test_prompt_assembler_keeps_vision_metadata_without_image_bytes():
-    assembled, _, _, _ = PromptAssembler().assemble(
+    assembled, _, _, _, _ = PromptAssembler().assemble(
         "Review metadata",
         earth_context=None,
         vision_context=VisionContext(metadata={"origin": "viewport"}),
@@ -327,7 +397,41 @@ async def test_workspace_memory_ranks_timeline_overlapping_bookmarks_higher(tmp_
 
 
 @pytest.mark.asyncio
-async def test_request_planner_builds_context_without_claiming_engine_support(tmp_path):
+async def test_workspace_memory_breaks_score_and_timestamp_ties_by_record_id(tmp_path):
+    store = SQLiteSessionStore(str(tmp_path / "platform.sqlite3"))
+    await store.open()
+    images = FilesystemImageStore(tmp_path / "images")
+    try:
+        now = utcnow()
+        bookmarks = [
+            EarthBookmark(
+                id=bookmark_id,
+                name="Riverside survey",
+                context=_context(0),
+                created_at=now,
+                updated_at=now,
+            )
+            for bookmark_id in ("bookmark-z", "bookmark-a")
+        ]
+        session = await store.sessions.create(
+            Session(earth_workspace=EarthWorkspaceState(bookmarks=bookmarks))
+        )
+
+        results = await WorkspaceMemory(store, images).search(
+            "Riverside survey",
+            context=_context(0),
+        )
+
+        assert [item.record.id for item in results] == [
+            f"bookmark:{session.id}:bookmark-a",
+            f"bookmark:{session.id}:bookmark-z",
+        ]
+    finally:
+        await store.aclose()
+
+
+@pytest.mark.asyncio
+async def test_request_planner_builds_context_for_structured_engine_delivery(tmp_path):
     store = SQLiteSessionStore(str(tmp_path / "platform.sqlite3"))
     await store.open()
     images = FilesystemImageStore(tmp_path / "images")
@@ -365,9 +469,10 @@ async def test_request_planner_builds_context_without_claiming_engine_support(tm
         assert plan.request.earth_context is not None
         assert plan.request.earth_context.camera.position.lng == 14
         assert "Platform workspace context" in plan.request.engine_message
-        assert not plan.engine_supports_earth_context
-        assert not plan.engine_supports_attachments
-        assert any("structured context" in item for item in plan.request.warnings)
+        assert '"earth_context"' not in plan.request.engine_message
+        assert plan.engine_supports_earth_context
+        assert plan.engine_supports_attachments
+        assert not any("structured context" in item for item in plan.request.warnings)
         assert any(
             item.record.id.endswith("prior-investigation") for item in plan.request.retrieved_memory
         )
@@ -393,7 +498,7 @@ async def test_request_planner_builds_context_without_claiming_engine_support(tm
             _engine_session(),
         )
         assert image_plan.request.vision_context.assets[0].id == asset.id
-        assert image_plan.request.attachments_supported_by_engine is False
+        assert image_plan.request.attachments_supported_by_engine is True
         assert "data_base64" not in image_plan.request.engine_message
     finally:
         await store.aclose()

@@ -6,10 +6,18 @@ import { useSessionStore } from "./sessionStore";
 afterEach(() => {
   useEarthStore.setState({
     camera: null,
+    secondaryCamera: null,
+    viewport: null,
+    secondaryViewport: null,
+    layers: [],
     timeline: { instant: null, range: null, playing: false, speed: 1 },
     selection: null,
     drawings: [],
     captures: [],
+    overlays: [],
+    selectedEvidenceIds: [],
+    secondaryOverlays: [],
+    secondarySelectedEvidenceIds: [],
     measurement: null,
     splitView: false,
     syncCameras: false,
@@ -43,6 +51,7 @@ describe("Earth context snapshot", () => {
     expect(snapshotEarthContext()).toMatchObject({
       time: range,
       instant: instant.toISOString(),
+      timeline_playback: { playing: false, speed: 1 },
     });
   });
 
@@ -98,7 +107,73 @@ describe("Earth context snapshot", () => {
       viewport_height_px: null,
     };
     useEarthStore.setState({ camera, captures: [capture] });
-    expect(snapshotEarthContext()?.captures).toEqual([capture]);
+    expect(snapshotEarthContext()).toMatchObject({
+      captures: [capture],
+      imagery: [
+        {
+          asset_id: "image-1",
+          source: "capture",
+          attached: false,
+          captured_at: capture.captured_at,
+          camera,
+        },
+      ],
+    });
+  });
+
+  it("includes the live viewport, rendered overlays, and highlighted evidence", () => {
+    const camera = {
+      position: { lng: 1, lat: 2 },
+      height_m: 1000,
+      heading_deg: 0,
+      pitch_deg: -90,
+      roll_deg: 0,
+      view_rect: null,
+    };
+    const overlay = {
+      id: "investigation:investigation-1",
+      label: "investigation-1",
+      investigation_id: "investigation-1",
+      features: [
+        {
+          id: "earth-object-1",
+          geometry: { type: "Point", coordinates: [1, 2] },
+          properties: { evidence_ids: ["evidence-1"] },
+        },
+      ],
+      omitted_objects: [],
+      geometry_policy: "WGS 84",
+    };
+    useEarthStore.setState({
+      camera,
+      viewport: { width_px: 1280, height_px: 720, pixel_ratio: 2 },
+      overlays: [overlay],
+      selectedEvidenceIds: ["evidence-1"],
+      secondaryCamera: {
+        position: { lng: 4, lat: 5 },
+        height_m: 2000,
+        heading_deg: 0,
+        pitch_deg: -90,
+        roll_deg: 0,
+        view_rect: null,
+      },
+      secondaryViewport: { width_px: 640, height_px: 720, pixel_ratio: 1 },
+      splitView: true,
+    });
+
+    expect(snapshotEarthContext()).toMatchObject({
+      viewport: { width_px: 1280, height_px: 720, pixel_ratio: 2 },
+      overlays: [overlay],
+      investigations: {
+        known_ids: [],
+        visible_ids: ["investigation-1"],
+      },
+      selected_evidence_ids: ["evidence-1"],
+      secondary_view: {
+        camera: { position: { lng: 4, lat: 5 } },
+        viewport: { width_px: 640, height_px: 720, pixel_ratio: 1 },
+      },
+    });
   });
 
   it("stores split-view and camera-sync preferences independently", () => {
@@ -118,12 +193,18 @@ describe("Earth context snapshot", () => {
     };
     const context = {
       camera,
+      secondary_view: null,
+      viewport: null,
       layers: [],
       time: null,
       instant: null,
+      timeline_playback: { playing: false, speed: 1 },
       selection: null,
       drawings: [],
       captures: [],
+      imagery: [],
+      overlays: [],
+      investigations: { known_ids: [], visible_ids: [] },
       selected_evidence_ids: [],
       bookmarks: [],
       camera_history: { past: [], present: camera, future: [] },

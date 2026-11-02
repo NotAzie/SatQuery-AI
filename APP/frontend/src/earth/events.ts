@@ -5,12 +5,15 @@ import type {
   EarthSelection,
   MeasurementResult,
 } from "./workspace/types";
-import type { CameraState } from "@/shared/types";
+import type { CameraState, EarthOverlay, EarthViewport } from "@/shared/types";
 import type { TimelineState } from "./timeline/types";
 
 export type EarthEvent =
   | { type: "earth.camera.changed"; camera: CameraState; viewId: EarthViewId }
+  | { type: "earth.viewport.changed"; viewport: EarthViewport; viewId: EarthViewId }
   | { type: "earth.timeline.changed"; timeline: TimelineState; viewId: EarthViewId }
+  | { type: "earth.overlays.changed"; overlays: EarthOverlay[]; viewId: EarthViewId }
+  | { type: "earth.evidence.highlighted"; evidenceIds: string[]; viewId: EarthViewId }
   | { type: "earth.selection.changed"; selection: EarthSelection | null }
   | { type: "earth.drawings.changed"; drawings: EarthDrawing[] }
   | { type: "earth.measurement.changed"; measurement: MeasurementResult | null };

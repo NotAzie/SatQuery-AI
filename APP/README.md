@@ -2,10 +2,10 @@
 
 > ChatGPT with direct access to the Earth.
 
-The Platform is the application users experience: natural-language conversation, image
-understanding and a live 3D globe that reacts to every question. It sits **entirely on top of
-SatQuery Engine**, which is finished, frozen, and treated like a database engine: the Platform calls
-it and never reimplements, patches or duplicates it.
+The Platform is the application users experience: natural-language conversation, image attachments,
+and a live 3D globe that reacts to user actions. It sits **entirely on top of SatQuery Engine**,
+which owns reasoning, scientific execution, evidence, and investigation state; the Platform calls
+its published APIs and does not reimplement or duplicate those responsibilities.
 
 ```
 User ─▶ Platform UI/API ─▶ Platform AgentRuntime ─▶ SatQuery Engine Agent API
@@ -13,20 +13,23 @@ User ─▶ Platform UI/API ─▶ Platform AgentRuntime ─▶ SatQuery Engine 
                                                      └─▶ Engine tools and scientific runtime
 ```
 
-The Platform delegates turns to the Engine's existing Agent Interface. The Engine-registered model
-handles language reasoning and invokes Engine tools; all scientific execution and evidence remain
-Engine-owned. The Platform persists UI events and visualizes results without recalculating science.
+The Platform delegates turns to the Engine's Agent Interface. The Engine-registered model handles
+language reasoning and invokes Engine tools; all scientific execution and evidence remain
+Engine-owned. The Platform persists UI events and visualizes Engine results without recalculating
+science.
 This separation is the project's central rule (see
 [ADR 0002](docs/adr/0002-llm-thinks-engine-executes.md)).
 
 ## Status
 
-The Phase 2 text-chat vertical slice is implemented against SatQuery Engine's existing Agent API.
-The Platform links sessions to Engine Agent sessions, streams and persists Engine events, and
-restores the Engine-owned transcript in the floating chat UI. The Earth Workspace foundation and
-Platform-owned Vision ingestion/preparation are implemented; Engine-backed investigation overlays
-and multimodal chat remain blocked by missing Engine event/request contracts. The Platform does not
-run a model/tool loop or duplicate scientific capabilities.
+The Phase 2 chat vertical slice is implemented against SatQuery Engine's Agent API. The Platform
+links sessions to Engine Agent sessions, streams and persists Engine events, and restores the
+Engine-owned transcript in the floating chat UI. The Earth Workspace foundation and Platform-owned
+Vision ingestion/preparation are implemented; Engine-authored investigation reports and WGS 84
+Earth Object overlays can be shown for investigations in the active transcript. Image attachments
+can be sent through the typed Engine request contract when the registered Engine adapter supports
+vision. Broader lifecycle geometry, production authentication, and multi-worker run recovery remain
+open boundaries. The Platform does not run a model/tool loop or duplicate scientific capabilities.
 
 | Area | State |
 |---|---|
@@ -34,17 +37,18 @@ run a model/tool loop or duplicate scientific capabilities.
 | Engine Agent API integration | HTTP adapter for sessions, turns, cancellation, and SSE; mock-transport contract tests |
 | Agent runtime | Platform session/event bridge to Engine-owned model and tool loop |
 | Reasoning model and tool execution | Owned by SatQuery Engine; configure a registered Engine `model_id` |
-| Vision intake, storage, metadata, neutral preparation | implemented; chat delivery blocked by the Engine's text-only Agent request |
+| Vision intake, storage, metadata, neutral preparation | implemented; typed chat attachments require a vision-capable Engine adapter |
 | LLM provider adapters, backend plugin host | interfaces; Engine owns the model execution and the backend host is not wired |
 | Platform sessions | SQLite metadata/event log; Engine Agent transcript remains authoritative for chat |
 | Event delivery | Durable event log + single-process live fan-out + resumable SSE and chat-turn streams |
 | Wire contracts (events, Earth commands, messages) | defined, exported, TypeScript generated |
 | Frontend shell, routing, state, Cesium viewer, camera, capture | working foundation |
-| Earth command dispatcher | Typed event dispatcher implemented; Engine command-event source not yet available |
+| Earth command dispatcher | Explicit Engine-issued `fly_to` and linked `show_investigation` events are validated and dispatched |
 | Frontend session UI | working sidebar backed by session REST routes |
 | Frontend chat UI | Engine transcript, streamed assistant text, tool/progress status, execution-consent checkbox |
 | Frontend camera history, bookmarks, selection, drawings, measurements, timeline, split view | implemented as presentation state |
-| Engine-backed investigation overlays and layer catalogue | blocked on Engine event/data contracts |
+| Investigation overlays | Engine-exported WGS 84 Earth Objects render for transcript-linked investigations; broader lifecycle geometry needs an Engine contract |
+| Scientific layer catalogue | blocked on an Engine-provided layer catalogue/source contract |
 
 Read [implementation status](docs/implementation-status.md) for phase completion and gaps, and the
 [roadmap](docs/roadmap.md) for Phase 3 scope. Phase 2 integration and deployment requirements are
@@ -74,23 +78,13 @@ benefit. Isolation is enforced instead by an import-linter contract that fails C
 import. "Providers" is the LLM provider abstraction and lives in `llm/`; React context providers live
 in `frontend/src/app/providers.tsx`.
 
-## Quick start
+## Run the integrated product
 
-See the repository-level [Quick Start](../README.md#quick-start-5-10-minutes) and
-[installation guide](../INSTALL.md) for Windows, Linux, macOS, Docker, and Colab. The Platform
-requires Python 3.12+ and Node 22; frontend dependencies are locked in `frontend/package-lock.json`.
-
-```bash
-python -m venv .venv
-.venv/bin/python -m pip install -e "backend[dev]"
-cd frontend && npm ci
-```
-
-On Windows, invoke `.venv\Scripts\python.exe` instead of `.venv/bin/python`. Start the Engine on
-port 9000, configure `EARTH_ENGINE__BASE_URL`, then run the backend from this directory and the
-frontend from `frontend/`; exact commands are in [INSTALL.md](../INSTALL.md). `/readyz` reports
-`degraded` when Engine is unconfigured or unavailable. Without `VITE_CESIUM_ION_TOKEN`, the globe
-starts without default Cesium imagery.
+Follow the repository-level [integrated startup guide](../INSTALL.md) for clean-clone dependency
+installation, the canonical Engine + Platform API + frontend startup order, connection checks,
+and troubleshooting. This README describes the Platform architecture; it is not a second setup
+guide. The Platform requires Python 3.12+ and Node 22; frontend dependencies are locked in
+`frontend/package-lock.json`.
 
 Common tasks: `make check` (lint, types, layering, tests), `make contracts` (regenerate wire types
 after changing a backend model). These Make targets are optional conveniences; the Python/npm

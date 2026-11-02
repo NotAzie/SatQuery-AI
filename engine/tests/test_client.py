@@ -98,8 +98,15 @@ def test_agent_sdk_covers_session_lifecycle_and_post_sse_turns():
     with SatQueryClient(
         transport=httpx.MockTransport(respond)
     ) as client:
+        assert client.agents.tools() == {"accepted": True}
         assert client.agents.create_session() == {"accepted": True}
         assert client.agents.get_session("session/one") == {"accepted": True}
+        assert client.agents.investigation_events(
+            "session/one",
+            "investigation/one",
+            after_sequence=5,
+            limit=25,
+        ) == {"accepted": True}
         streamed = list(client.agents.stream_turn(
             "session/one",
             message="Summarize evidence",
@@ -110,23 +117,31 @@ def test_agent_sdk_covers_session_lifecycle_and_post_sse_turns():
 
     assert streamed == [event]
     assert [request.method for request in requests] == [
+        "GET",
         "POST",
+        "GET",
         "GET",
         "POST",
         "POST",
     ]
-    assert requests[0].url.path == "/api/v1/agent/sessions"
-    assert requests[1].url.raw_path.endswith(b"/sessions/session%2Fone")
-    assert requests[2].url.raw_path.endswith(
+    assert requests[0].url.path == "/api/v1/agent/tools"
+    assert requests[0].headers["accept"] == "application/json"
+    assert requests[1].url.path == "/api/v1/agent/sessions"
+    assert requests[2].url.raw_path.endswith(b"/sessions/session%2Fone")
+    assert requests[3].url.raw_path.split(b"?")[0].endswith(
+        b"/sessions/session%2Fone/investigations/investigation%2Fone/events"
+    )
+    assert dict(requests[3].url.params) == {"after_sequence": "5", "limit": "25"}
+    assert requests[4].url.raw_path.endswith(
         b"/sessions/session%2Fone/turns"
     )
-    assert json.loads(requests[2].content) == {
+    assert json.loads(requests[4].content) == {
         "message": "Summarize evidence",
         "model_id": "fixture.reasoner",
         "execution_authorized": True,
     }
-    assert requests[2].headers["accept"] == "text/event-stream"
-    assert requests[3].url.raw_path.endswith(
+    assert requests[4].headers["accept"] == "text/event-stream"
+    assert requests[5].url.raw_path.endswith(
         b"/sessions/session%2Fone/cancel"
     )
 

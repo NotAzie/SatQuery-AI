@@ -52,3 +52,59 @@ async def test_event_bus_rejects_mismatched_session_and_invalid_resume_cursor(tm
         await anext(bus.subscribe("session-1", after_seq=-1))
     await bus.aclose()
     await store.aclose()
+
+
+@pytest.mark.asyncio
+async def test_event_bus_closes_subscriber_with_a_full_queue(tmp_path):
+    store = SQLiteSessionStore(str(tmp_path / "platform.sqlite3"))
+    await store.open()
+    session = await store.sessions.create(Session())
+    bus = InMemoryEventBus(store.events)
+    bus._subscriber_queue_size = 1
+    replay = bus.subscribe(session.id)
+    waiting = asyncio.create_task(anext(replay))
+    await asyncio.sleep(0)
+
+    event = RunCompleted(
+        session_id=session.id,
+        conversation_id="conversation-1",
+        run_id="run-1",
+    )
+    await bus.publish(session.id, event)
+    assert (await asyncio.wait_for(waiting, timeout=1)).seq == 1
+    await bus.publish(session.id, event.model_copy(update={"run_id": "run-2", "seq": None}))
+
+    await bus.aclose()
+    await bus.aclose()
+    with pytest.raises(StopAsyncIteration):
+        await anext(replay)
+
+    await store.aclose()
+
+
+@pytest.mark.asyncio
+async def test_event_bus_replays_in_bounded_pages_without_gaps_or_duplicates(tmp_path):
+    store = SQLiteSessionStore(str(tmp_path / "platform.sqlite3"))
+    await store.open()
+    session = await store.sessions.create(Session())
+    bus = InMemoryEventBus(store.events, replay_window_events=2)
+    event = RunCompleted(
+        session_id=session.id,
+        conversation_id="conversation-1",
+        run_id="run-0",
+    )
+    for index in range(5):
+        await bus.publish(
+            session.id,
+            event.model_copy(update={"run_id": f"run-{index}", "seq": None}),
+        )
+
+    replay = bus.subscribe(session.id, after_seq=0)
+    received = [await anext(replay) for _ in range(5)]
+    assert [item.seq for item in received] == [1, 2, 3, 4, 5]
+    assert [item.run_id for item in received] == [f"run-{index}" for index in range(5)]
+
+    await bus.aclose()
+    with pytest.raises(StopAsyncIteration):
+        await anext(replay)
+    await store.aclose()

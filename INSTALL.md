@@ -1,8 +1,9 @@
-# Installation and Reproducibility
+# Integrated Local Startup and Installation
 
 This guide is based on the checked-in Python manifests, npm lockfile, app settings, and CI
 workflows. The repository has two Python applications; install each into its own virtual
-environment.
+environment. This is the single authoritative startup procedure for running the Engine, Platform
+API, and frontend together from a clean clone.
 
 ## Required software
 
@@ -107,9 +108,10 @@ not use `npm install` as the reproducible CI/setup command.
 
 ## External services, binaries, and optional assets
 
-- **SatQuery Engine API:** optional for Platform shell development; required for live Engine-backed
-  chat. Configure the Platform's `EARTH_ENGINE__KIND=http` and `EARTH_ENGINE__BASE_URL`. The Engine
-  Agent API must have a compatible model registered and the Platform must use its model ID.
+- **SatQuery Engine API:** required for the integrated startup below. The Engine API and typed
+  discovery endpoints work without a reasoning model. The checked-in Engine application does not
+  register an Agent reasoning adapter by default, so live chat requires an Engine build or
+  deployment that registers one.
 - **Model provider and credentials:** not configured by default. A provider adapter/model must be
   available to the Engine; API keys belong in the environment, never in committed YAML. The
   Platform does not call model providers directly.
@@ -171,10 +173,15 @@ npm ci
 cd ../..
 ```
 
-## Start the services locally
+## Start the complete product locally
 
-The Engine and Platform backend both default to port 8000, so run the Engine on 9000. In terminal
-1 (from `engine/satquery-ai`):
+Use three PowerShell terminals (or three POSIX terminals). Keep each server running in its own
+terminal. The Engine and Platform API both default to port 8000, so this guide runs the Engine on
+9000 and the Platform API on 8000.
+
+### Terminal 1 — SatQuery Engine
+
+From `engine/satquery-ai`:
 
 ```powershell
 .\.venv\Scripts\python.exe -m satquery serve --port 9000
@@ -184,15 +191,15 @@ The Engine and Platform backend both default to port 8000, so run the Engine on 
 .venv/bin/python -m satquery serve --port 9000
 ```
 
-In terminal 2 (from repository root), set the Engine connection and start the Platform API. The
-`EARTH_AGENT__MODEL_ID` value must be an ID already registered with the Engine.
+### Terminal 2 — Platform API
+
+From the repository root, configure the Engine URL and start the API:
 
 PowerShell:
 
 ```powershell
 $env:EARTH_ENGINE__KIND = "http"
 $env:EARTH_ENGINE__BASE_URL = "http://127.0.0.1:9000"
-$env:EARTH_AGENT__MODEL_ID = "<registered-engine-model-id>"
 cd APP
 .\.venv\Scripts\python.exe -m uvicorn earth_platform.main:create_app --factory --reload --app-dir backend/src --host 127.0.0.1 --port 8000
 ```
@@ -202,14 +209,51 @@ POSIX shell:
 ```sh
 export EARTH_ENGINE__KIND=http
 export EARTH_ENGINE__BASE_URL=http://127.0.0.1:9000
-export EARTH_AGENT__MODEL_ID='<registered-engine-model-id>'
 cd APP
 .venv/bin/python -m uvicorn earth_platform.main:create_app --factory --reload --app-dir backend/src --host 127.0.0.1 --port 8000
 ```
 
-In terminal 3, run `npm run dev` from `APP/frontend`, then open <http://localhost:5173>. For a
-Platform-only shell, omit Engine settings; `/readyz` will report degraded and Engine-backed chat
-will be unavailable. Start a test-free frontend build with `npm run build`.
+### Terminal 3 — Frontend
+
+From `APP/frontend`:
+
+```powershell
+npm run dev -- --host 127.0.0.1
+```
+
+```sh
+npm run dev -- --host 127.0.0.1
+```
+
+Open <http://127.0.0.1:5173>.
+
+### Verify the integrated connection
+
+From any terminal, these endpoints verify Engine health, Platform liveness/readiness, and the
+typed Engine discovery request forwarded through the Platform:
+
+```powershell
+curl.exe -i http://127.0.0.1:9000/api/v1/health
+curl.exe -i http://127.0.0.1:8000/healthz
+curl.exe -i http://127.0.0.1:8000/readyz
+curl.exe -i http://127.0.0.1:8000/api/v1/intelligence/engine-discovery
+```
+
+`/readyz` may return HTTP 200 with `"status":"degraded"` when the Engine's optional legacy image
+models have not been warmed. This does not mean the Engine API is unreachable; the discovery
+request above is the integration check. Cesium imagery is also optional without
+`VITE_CESIUM_ION_TOKEN`.
+
+The default Engine application currently registers no Agent reasoning adapter, so a clean clone
+can start and connect the complete workspace, create sessions, and load Engine discovery, but
+cannot complete an AI chat turn. To enable chat, supply an Engine deployment/build that registers
+an `AgentModel`, then set `EARTH_AGENT__MODEL_ID` in the Platform API terminal to that exact
+registered model ID. Provider credentials alone do not register an adapter. Image chat additionally
+requires an adapter that declares vision support.
+
+For Platform-shell-only UI work, the Engine can be omitted and `EARTH_ENGINE__KIND` and
+`EARTH_ENGINE__BASE_URL` left unset; the Platform starts with Engine-dependent features degraded.
+This is not the integrated setup.
 
 ## Docker development stack
 
@@ -222,10 +266,11 @@ docker compose up --build
 This runs the Engine, Platform API, and Vite development server; it is **not a production
 deployment**. It binds web ports to loopback, has no authentication/TLS, uses an in-memory Engine
 event/model runtime by default, and has no provider credentials or registered reasoning model.
-The Engine's health endpoint succeeds, but Platform `/readyz` remains `degraded` until the Engine
-reports ready. Configure a real Engine model adapter/model ID separately before expecting chat
-responses. The
-`platform-data` named volume persists the Platform SQLite database and image files. The stack
+The Engine health endpoint checks Engine readiness, not Agent model registration; Platform
+`/readyz` can therefore be degraded while Engine API discovery remains available. The checked-in
+Engine also does not register an Agent reasoning adapter, so the stack does not provide chat
+responses by itself. The `platform-data` named volume persists the Platform SQLite database and
+image files. The stack
 installs Engine raster/geospatial extras but intentionally omits optional Torch/Transformers
 weights and GPU support.
 
@@ -253,8 +298,8 @@ jobs.
 | `python3.12`/`py -3.12` not found | Install CPython 3.12; on Windows use the Python Launcher or the explicit interpreter path |
 | Vite reports an unsupported Node version | Verify `node --version` is 22.x and rerun `npm ci` |
 | Cesium globe has no default imagery | Expected without `VITE_CESIUM_ION_TOKEN`; configure a scoped token if desired |
-| Platform `/readyz` is degraded | Check Engine URL, Engine health, and that Engine is running; app liveness can still be healthy |
-| Chat rejects model ID | Register a compatible reasoning model in the Engine and set `EARTH_AGENT__MODEL_ID` to that exact ID |
+| Platform `/readyz` is degraded | Call `/api/v1/intelligence/engine-discovery` to test Engine API connectivity; Engine readiness can remain degraded until its optional image backend is warmed |
+| Chat rejects model ID | The default Engine has no Agent reasoning adapter; provide a compatible adapter, then set `EARTH_AGENT__MODEL_ID` to its exact registered ID |
 | Rasterio import/build failure | Use a supported Python/platform wheel and the Engine `raster` extra; native source builds may need upstream GDAL toolchain instructions |
 | Docker says port is in use | Stop the conflicting service or edit the host-side port mapping in `docker-compose.yml` |
 | PowerShell activation is blocked | Do not activate; invoke `.\.venv\Scripts\python.exe` directly |

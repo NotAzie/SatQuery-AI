@@ -45,6 +45,14 @@ function propertySnapshot(entity: Entity, viewer: Viewer): EarthSelection["prope
   for (const name of names) {
     const value: unknown = entity.properties?.[name]?.getValue(viewer.clock.currentTime);
     if (
+      name === "evidence_ids" &&
+      Array.isArray(value) &&
+      value.every((item) => typeof item === "string")
+    ) {
+      result[name] = JSON.stringify(value);
+      continue;
+    }
+    if (
       value === null ||
       typeof value === "string" ||
       typeof value === "number" ||
@@ -156,6 +164,7 @@ export function createCesiumWorkspaceController(
     drawings = [...drawings, drawing];
     renderDrawing(viewer, drawing);
     renderedDrawingIds.add(drawing.id);
+    viewer.scene.requestRender();
     interaction = null;
     publishDrawings();
   }
@@ -203,6 +212,7 @@ export function createCesiumWorkspaceController(
       renderDrawing(viewer, drawing);
       renderedDrawingIds.add(drawing.id);
     }
+    viewer.scene.requestRender();
   }
 
   handler.setInputAction(({ position }: { position: Cartesian2 }) => {
