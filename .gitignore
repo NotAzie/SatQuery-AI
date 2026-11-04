@@ -42,8 +42,11 @@ dist/
 
 # Local runtime state and logs (never source or reproducibility assets)
 *.log
+*.sqlite-shm
+*.sqlite-wal
 /SAT_QUERY/monitoring.sqlite
 /SAT_QUERY/satquery-ai/monitoring.sqlite
+/monitoring.sqlite
 SAT_QUERY/satquery-ai/data/fetched_images/
 /engine/satquery-ai/monitoring.sqlite
 /engine/satquery-ai/.satquery/

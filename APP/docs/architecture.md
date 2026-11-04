@@ -5,8 +5,9 @@
 1. **The Engine is a dependency, not part of the Platform.** All contact goes through
    `engine.EngineClient`. Nothing else imports Engine code. (ADR 0001)
 2. **The LLM thinks, the Engine executes.** No science runs in the Platform or in a prompt. (ADR 0002)
-3. **The Earth is the workspace.** The globe is mounted once and persists; the UI floats above it, and
-   the backend can drive it with typed commands. (ADR 0003)
+3. **The Earth is the workspace.** The Cesium-backed globe loads as a separate frontend chunk, is
+   mounted once, and persists; the UI floats above it, and the backend can drive it with typed
+   commands. Project and investigation routes are also loaded on navigation. (ADR 0003)
 4. **One wire contract.** Events, Earth commands and shared models are defined once in pydantic,
    exported to `contracts/schema.json`, and generated into TypeScript. The two sides cannot drift.
 5. **Extension points use registries.** Backend plugin loading and frontend module loading remain
@@ -389,6 +390,102 @@ for findings, method-input sufficiency, limitations, and exported artifacts. The
 the requested investigation identity and recomputes the bundle's canonical SHA-256 digest before
 returning it; the UI presents the Engine response and permits downloading the verified JSON bundle.
 The Platform does not infer a conclusion, assess scientific sufficiency, or modify the export.
+
+## Phase 8 Project research search
+
+`GET /api/v1/projects/{project_id}/search` helps users retrieve previously saved work inside a
+Project. The Platform search layer reads only records already owned by that Project: its metadata,
+linked session titles and typed focus/bookmark references, notes, saved Earth views, saved
+comparisons, explicit investigation relationship rationale and endpoint identifiers, and researcher-
+authored investigation template titles, descriptions, and steps. It pages through the existing
+Project repository APIs and rebuilds the complete Project search set per request, tokenizes titles
+and stored text deterministically, and ranks by weighted term overlap.
+Matched terms and fields are returned so users can understand why a record appeared; ties use
+record time, type, and stable ID. Offsets and result limits provide stable page boundaries for an
+unchanged record set.
+
+Search results navigate to existing session, investigation, comparison, relationship, or Project
+artifact sections. The Platform does not fetch, parse, or rank Engine reports, investigation
+output, or opaque transcript content. Search is not semantic retrieval and does not infer Earth
+conditions, dataset suitability, or scientific recommendations. A durable full-text/vector index is
+deferred until measured usage demonstrates a need; the current local workspace rebuilds results at
+query time.
+
+## Phase 8 Investigation relationships
+
+`/api/v1/projects/{project_id}/investigation-relationships` stores explicit, directional associations
+between Engine-issued investigation references. A create request names both
+`{session_id, investigation_id}` endpoints, one of the contract's workflow labels, and a nonblank
+researcher rationale. The Platform accepts an endpoint only when its session belongs to the Project
+and the Engine transcript confirms that investigation identity; it does not inspect scientific
+results to create or explain a relationship.
+
+Relationship records are Platform-owned and persisted in SQLite. Creation and deletion are
+transactionally recorded in the existing Project activity journal; the ordered endpoint pair and
+label are unique, while a reverse link is a distinct explicit association. Researchers can browse,
+create, and remove links in the Project workspace, navigate to either investigation, and search the
+stored rationale. Labels and rationale describe researcher organization only: they are not Engine
+findings, evidence, or inferred scientific claims.
+
+## Phase 8 Investigation timeline
+
+The Project activity journal remains the durable source of workflow events. Each activity item can
+carry the exact session-qualified Engine investigation references already present on its source
+note, saved Earth view, comparison, or relationship. Event creation and the normalized
+`project_activity_investigations` filter index are written in the same SQLite transaction as the
+underlying activity, and deletion events retain the same references as the removed artifact.
+
+`GET /api/v1/projects/{project_id}/activity` optionally accepts both `session_id` and
+`investigation_id`; supplying only one is rejected. Filtered results use the journal's stable
+timestamp/ID order and normal offset pagination. The Project workspace can filter the timeline by
+the exact investigation reference and navigate to associated investigations. The timeline is
+Platform workflow provenance, not a reconstruction of Engine activity or scientific chronology.
+On database initialization, a one-time migration backfills references from retained, explicitly
+scoped artifacts. A legacy deletion event whose source record is already gone has no recoverable
+association and is not guessed.
+
+## Phase 8 Investigation templates
+
+Investigation templates are Project-owned reusable checklists consisting only of a researcher-
+authored title, optional description, and bounded list of titled steps. Templates do not encode
+scientific methods, call Engine APIs, create prompt text, or claim to be Engine plans.
+`POST /api/v1/projects/{project_id}/investigation-templates/{template_id}/apply` creates a new
+Platform session, links it to the Project, snapshots the template steps into a workflow run, and
+records both the session link and template application in the activity journal in one SQLite
+transaction.
+
+Runs preserve their original template title and step IDs/titles even if the source template is
+deleted. Run history keeps the session ID as provenance even if the source session is later deleted.
+Researchers can update completed step IDs with an expected revision; unknown steps and stale
+revisions are rejected. The run snapshot, revision, and activity event are committed transactionally.
+Templates and their descriptions/steps participate in deterministic Project search and link back
+to the template section; progress remains associated with the created session.
+
+Researchers can revise a template's title, description, or full checklist with an expected revision.
+Replacing steps assigns new step IDs. Each run stores the template revision, title, and exact step
+snapshot used at application time; later template edits never rewrite past or active runs. Template
+updates and their activity event are committed transactionally.
+
+## Phase 8 Investigation collections
+
+Investigation collections are Project-owned, researcher-authored subsets of exact Engine
+`{session_id, investigation_id}` references. They support campaign or review grouping without
+changing Project ownership, creating Engine state, or inferring scientific relationships.
+`GET/POST /api/v1/projects/{project_id}/investigation-collections` lists or creates them;
+revision-checked `PATCH` routes update metadata and add/remove membership.
+
+Membership additions verify the Platform session is linked to the Project and that the Engine
+transcript contains the referenced investigation. Removals operate only on existing stored
+references, so provenance can still be cleaned up if the Engine session is no longer available.
+Collections are bounded to 500 members and preserve researcher insertion order. SQLite commits
+collection state, revision, and activity event transactionally. Each membership event carries the
+exact investigation reference into the existing indexed Project activity timeline; collection
+deletion records all members that were present. Deleted collections do not alter Engine data.
+
+Collection title, description, and member investigation IDs are included in deterministic Project
+search. Search links to the collection section, where members navigate to the existing durable
+investigation workspace. There is no cross-Project sharing or authenticated user ownership in the
+current Platform; adding those requires a tenancy and authorization design.
 
 ## Failure model
 

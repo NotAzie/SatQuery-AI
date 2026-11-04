@@ -42,6 +42,18 @@ an explicit `reasoning_model_timeout` event. Adapters must cooperate with
 async task cancellation as well as the supplied cancellation event so an
 expired request can release its resources promptly.
 
+The optional `satquery.agent_openai.OpenAIChatAgentModel` adapter implements
+OpenAI Chat Completions streaming, function calls, and image data URLs using
+the existing `httpx` dependency. It registers at Engine startup only when
+`SATQUERY_AGENT_OPENAI_MODEL` and either `SATQUERY_AGENT_OPENAI_API_KEY` or
+`OPENAI_API_KEY` are set. Its stable model ID is `openai/<model-name>`; set
+the Platform's `EARTH_AGENT__MODEL_ID` to that exact value. Image turns are
+rejected unless `SATQUERY_AGENT_OPENAI_SUPPORTS_VISION=true` is explicitly
+configured and the selected provider model actually accepts images. The flag
+is an operator declaration, not provider capability discovery. The adapter
+does not provide an OpenAI Responses API integration or a local model server
+integration; other providers still require their own `AgentModel` adapter.
+
 ## Tool boundary
 
 The default tool registry is a strict, explicit allowlist:

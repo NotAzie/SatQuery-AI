@@ -9,7 +9,7 @@ from earth_platform.agent.events import AgentEvent
 from earth_platform.sessions.repository import EventLog
 from earth_platform.streaming.bus import EventBus
 
-_EVENT_ADAPTER = TypeAdapter(AgentEvent)
+_EVENT_ADAPTER: TypeAdapter[AgentEvent] = TypeAdapter(AgentEvent)
 
 
 class InMemoryEventBus(EventBus):

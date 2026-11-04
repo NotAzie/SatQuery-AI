@@ -1,12 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { EarthContext, ProjectEarthView } from "@/shared/types";
+import type {
+  EarthContext,
+  ProjectInvestigationCollectionCreate,
+  ProjectInvestigationCollectionMemberUpdate,
+  ProjectEarthView,
+  ProjectInvestigationRelationshipCreate,
+  ProjectInvestigationTemplateCreate,
+  ProjectInvestigationTemplateUpdate,
+  ProjectInvestigationCollectionUpdate,
+} from "@/shared/types";
 import {
+  createProjectInvestigationCollection,
   createProjectNote,
   createProjectInvestigationComparison,
+  createProjectInvestigationRelationship,
+  createProjectInvestigationTemplate,
+  applyProjectInvestigationTemplate,
   createProjectView,
   deleteProjectNote,
   deleteProjectInvestigationComparison,
+  deleteProjectInvestigationCollection,
+  deleteProjectInvestigationRelationship,
+  deleteProjectInvestigationTemplate,
   deleteProjectView,
   getProjectInvestigation,
   getProjectInvestigationComparison,
@@ -16,11 +32,20 @@ import {
   listProjectMonitoringLinks,
   listProjectNotes,
   listProjectInvestigationComparisons,
+  listProjectInvestigationCollections,
+  listProjectInvestigationRelationships,
+  listProjectInvestigationTemplates,
+  listProjectInvestigationTemplateRuns,
   listProjectViews,
   listProjectWorkPage,
   restoreProjectEarthView,
+  searchProject,
   unlinkProjectMonitoringSchedule,
   updateProjectNote,
+  updateProjectInvestigationCollection,
+  updateProjectInvestigationCollectionMembers,
+  updateProjectInvestigationTemplate,
+  updateProjectInvestigationTemplateRun,
 } from "./projects";
 import { apiUrl } from "./client";
 
@@ -80,8 +105,10 @@ describe("Project work-item API", () => {
   });
 
   it("requests notes scoped to an Engine investigation and source session", async () => {
-    const fetch = vi.fn().mockResolvedValue(
-      new Response("[]", { headers: { "Content-Type": "application/json" } }),
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response("[]", { headers: { "Content-Type": "application/json" } }),
+      ),
     );
     vi.stubGlobal("fetch", fetch);
 
@@ -228,6 +255,72 @@ describe("Project work-item API", () => {
     );
   });
 
+  it("creates, lists, and deletes explicit investigation relationships", async () => {
+    const relationship = {
+      id: "relationship-1",
+      project_id: "project/1",
+      from_investigation: {
+        investigation_id: "investigation-1",
+        session_id: "session-1",
+      },
+      to_investigation: {
+        investigation_id: "investigation-2",
+        session_id: "session-2",
+      },
+      relationship_type: "follow_up_to" as const,
+      rationale: "Revisit the same focus area later.",
+      created_at: "2026-11-04T10:00:00Z",
+    };
+    const body: ProjectInvestigationRelationshipCreate = {
+      from_investigation: relationship.from_investigation,
+      to_investigation: relationship.to_investigation,
+      relationship_type: relationship.relationship_type,
+      rationale: relationship.rationale,
+    };
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([relationship]), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(relationship), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      listProjectInvestigationRelationships("project/1", undefined, 10, 20),
+    ).resolves.toEqual([relationship]);
+    await expect(
+      createProjectInvestigationRelationship("project/1", body),
+    ).resolves.toEqual(relationship);
+    await expect(
+      deleteProjectInvestigationRelationship("project/1", "relationship/1"),
+    ).resolves.toBeUndefined();
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      apiUrl(
+        "/projects/project%2F1/investigation-relationships?limit=10&offset=20",
+      ),
+      expect.objectContaining({ headers: { Accept: "application/json" } }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      apiUrl("/projects/project%2F1/investigation-relationships"),
+      expect.objectContaining({ method: "POST", body: JSON.stringify(body) }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      apiUrl(
+        "/projects/project%2F1/investigation-relationships/relationship%2F1",
+      ),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
   it("creates a saved Earth view from a linked-session bookmark reference", async () => {
     const view = {
       id: "view-1",
@@ -367,6 +460,222 @@ describe("Project work-item API", () => {
     await expect(listProjectActivity("project-1", undefined, 25, 50)).resolves.toEqual([]);
     expect(fetch).toHaveBeenCalledWith(
       apiUrl("/projects/project-1/activity?limit=25&offset=50"),
+      expect.objectContaining({ headers: { Accept: "application/json" } }),
+    );
+  });
+
+  it("filters Project activity by a session-qualified investigation reference", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response("[]", { headers: { "Content-Type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      listProjectActivity("project-1", undefined, 10, 5, {
+        investigation_id: "investigation/1",
+        session_id: "session/1",
+      }),
+    ).resolves.toEqual([]);
+    expect(fetch).toHaveBeenCalledWith(
+      apiUrl(
+        "/projects/project-1/activity?limit=10&offset=5&investigation_id=investigation%2F1&session_id=session%2F1",
+      ),
+      expect.objectContaining({ headers: { Accept: "application/json" } }),
+    );
+  });
+
+  it("creates, revises, and curates explicit investigation collections", async () => {
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response("[]", { headers: { "Content-Type": "application/json" } }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      listProjectInvestigationCollections("project-1", undefined, 10, 20),
+    ).resolves.toEqual([]);
+    expect(fetch).toHaveBeenLastCalledWith(
+      apiUrl("/projects/project-1/investigation-collections?limit=10&offset=20"),
+      expect.objectContaining({ headers: { Accept: "application/json" } }),
+    );
+
+    const create: ProjectInvestigationCollectionCreate = {
+      title: "Coastal campaign",
+      description: "Researcher-organized investigations",
+    };
+    await createProjectInvestigationCollection("project-1", create);
+    expect(fetch).toHaveBeenLastCalledWith(
+      apiUrl("/projects/project-1/investigation-collections"),
+      expect.objectContaining({ method: "POST", body: JSON.stringify(create) }),
+    );
+
+    const update: ProjectInvestigationCollectionUpdate = {
+      expected_revision: 1,
+      title: "Coastal campaign 2026",
+    };
+    await updateProjectInvestigationCollection("project-1", "collection-1", update);
+    expect(fetch).toHaveBeenLastCalledWith(
+      apiUrl("/projects/project-1/investigation-collections/collection-1"),
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify(update) }),
+    );
+
+    const member: ProjectInvestigationCollectionMemberUpdate = {
+      expected_revision: 2,
+      operation: "add",
+      investigation: { session_id: "session-1", investigation_id: "investigation-1" },
+    };
+    await updateProjectInvestigationCollectionMembers(
+      "project-1",
+      "collection-1",
+      member,
+    );
+    expect(fetch).toHaveBeenLastCalledWith(
+      apiUrl("/projects/project-1/investigation-collections/collection-1/members"),
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify(member) }),
+    );
+
+    await deleteProjectInvestigationCollection("project-1", "collection-1");
+    expect(fetch).toHaveBeenLastCalledWith(
+      apiUrl("/projects/project-1/investigation-collections/collection-1"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("creates and reuses revisioned researcher-authored investigation templates", async () => {
+    const template: ProjectInvestigationTemplateCreate = {
+      title: "Seasonal shoreline review",
+      description: "Researcher-authored checklist",
+      steps: [{ title: "Record the observation window" }],
+    };
+    const saved = {
+      ...template,
+      id: "template-1",
+      project_id: "project-1",
+      created_at: "2026-11-04T10:00:00Z",
+      updated_at: "2026-11-04T10:00:00Z",
+      steps: [{ id: "step-1", title: template.steps[0].title }],
+      revision: 1,
+    };
+    const templateUpdate: ProjectInvestigationTemplateUpdate = {
+      expected_revision: 1,
+      title: "Revised workflow",
+      description: "Updated checklist",
+      steps: [{ title: "Check new evidence" }],
+    };
+    const revised = {
+      ...saved,
+      title: templateUpdate.title,
+      description: templateUpdate.description,
+      revision: 2,
+      steps: [{ id: "step-2", title: "Check new evidence" }],
+    };
+    const run = {
+      id: "run-1",
+      project_id: "project-1",
+      template_id: saved.id,
+      template_revision: 1,
+      template_title: saved.title,
+      session_id: "session-1",
+      steps: [{ ...saved.steps[0], completed: false }],
+      created_at: saved.created_at,
+      updated_at: saved.updated_at,
+      revision: 1,
+    };
+    const updatedRun = {
+      ...run,
+      revision: 2,
+      steps: [{ ...run.steps[0], completed: true }],
+    };
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([saved]), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(saved), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(revised), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(run), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([run]), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(updatedRun), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(listProjectInvestigationTemplates("project-1")).resolves.toEqual([saved]);
+    await expect(createProjectInvestigationTemplate("project-1", template)).resolves.toEqual(saved);
+    await expect(
+      updateProjectInvestigationTemplate("project-1", saved.id, templateUpdate),
+    ).resolves.toEqual(revised);
+    await expect(applyProjectInvestigationTemplate("project-1", saved.id)).resolves.toEqual(run);
+    await expect(listProjectInvestigationTemplateRuns("project-1")).resolves.toEqual([run]);
+    await expect(
+      updateProjectInvestigationTemplateRun("project-1", run.id, {
+        expected_revision: 1,
+        completed_step_ids: ["step-1"],
+      }),
+    ).resolves.toEqual(updatedRun);
+    await expect(
+      deleteProjectInvestigationTemplate("project-1", saved.id),
+    ).resolves.toBeUndefined();
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      apiUrl("/projects/project-1/investigation-templates/template-1"),
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify(templateUpdate) }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      4,
+      apiUrl("/projects/project-1/investigation-templates/template-1/apply"),
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+      6,
+      apiUrl("/projects/project-1/investigation-template-runs/run-1"),
+      expect.objectContaining({ method: "PATCH" }),
+    );
+  });
+
+  it("searches saved Project work with a typed paginated query", async () => {
+    const response = {
+      project_id: "project/1",
+      query: "shoreline change",
+      results: [],
+      total_count: 0,
+      limit: 10,
+      offset: 20,
+    };
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(response), {
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      searchProject("project/1", "shoreline change", undefined, 10, 20),
+    ).resolves.toEqual(response);
+    expect(fetch).toHaveBeenCalledWith(
+      apiUrl(
+        "/projects/project%2F1/search?query=shoreline+change&limit=10&offset=20",
+      ),
       expect.objectContaining({ headers: { Accept: "application/json" } }),
     );
   });

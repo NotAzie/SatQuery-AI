@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-11-04
+Last updated: 2026-11-05
 
 ## Platform scope
 
@@ -21,16 +21,15 @@ generation, or scientific reasoning.
 | Phase 6 — Earth Intelligence | Platform context/planning and Engine dataset/image-capability/Earth modality/Agent tool discovery implemented | Canonical EarthContext snapshots, bounded transcript context, searchable Platform memory, retrieval, prompt assembly, capability reporting, recommendations, pre-turn planning, and a user-facing Engine catalogue with read-only Agent tool descriptors and consent visibility |
 | V1 Phase 7 — Recurring monitoring | Engine-backed management and review workflow implemented; external delivery blocked | Mission/schedule creation, revision-checked schedule editing, optional Engine-executed rolling temporal windows, run history, comparisons, cursor-paged trigger activity, and operational notification acknowledgement are available; external delivery remains blocked |
 | V2 Phase 7 — Investigation Workspace | Implemented within the defined scope | Durable Projects, sessions, Engine-backed investigation review, Project activity, investigation-scoped notes and Earth views, Engine-authored saved comparisons, monitoring references, Engine-owned hypothesis lifecycle review, Engine-authored reasoning review, and verified reproducibility exports exist. |
+| Phase 8 — Platform Intelligence | Complete for the current Project-scoped Platform boundary | Researchers can find Project work, connect validated investigations, filter provenance-bearing workflow history, evolve reusable checklists without changing prior runs, and curate explicit investigation subsets as campaigns or review groups. The Platform does not generate Engine plans, scientific methods, or inferred group membership. |
 
 ## Current phase reassessment (2026-11-04)
 
-The estimates below are goal-relative judgments based on capabilities currently
-implemented in this repository. They are not test coverage or production
-readiness. The eight Platform roadmap groups are equally weighted, giving an
-overall Platform estimate of 89%. Across the ten Engine phases and eight
-Platform roadmap groups, the unweighted overall product estimate is 66%; this
-low score reflects the much broader long-term intelligence vision, not the
-completion of the current local V1 runtime.
+The estimates below are the V1/V2 Phase 7 completion baseline, before Phase 8.
+They are goal-relative judgments, not test coverage or production readiness.
+The eight then-current Platform roadmap groups were equally weighted, giving an
+overall Platform estimate of 89%. Phase 8 is tracked separately below and is
+not included in that baseline.
 
 | Phase | Estimate | Missing capability | Primary classification |
 |---|---:|---|---|
@@ -351,21 +350,51 @@ Provider image-adapter support and frontend command-handler availability remain 
 Platform does not guess them. The Engine's conversation history is authoritative
 and cannot be compressed by the Platform without a separate replacement-history contract.
 
-## Validation results (2026-11-04)
+## Phase 8 — Platform Intelligence
+
+| Capability | Status | Boundary |
+|---|---|---|
+| Project research search | Implemented | `GET /api/v1/projects/{project_id}/search` scans paginated records owned by that Project: Project metadata, linked session titles and typed workspace references, notes, saved Earth views, saved comparisons, researcher-authored relationship rationale, template text, and collection descriptions/member IDs. Results include deterministic lexical scores, matched terms/fields, concise excerpts, stable tie ordering, and offset pagination. The Project workspace links results to existing destinations. It does not search Engine scientific reports or opaque transcripts, recommend scientific outcomes, or create a duplicate scientific index. |
+| Investigation relationships | Implemented | Researchers can create, list, and delete directional relationships between investigations already associated with Project-linked Engine sessions. The Platform verifies session membership and Engine transcript identity, requires a rationale, enforces ordered endpoint/type uniqueness, records activity transactionally, and indexes relationship rationale for Project search. Links and labels are researcher-authored organization, not scientific claims or Engine reasoning. |
+| Investigation timeline | Implemented | Project activity events for scoped notes, saved Earth views, comparisons, and relationships carry the exact session-qualified Engine investigation references from their source artifacts. `GET /api/v1/projects/{project_id}/activity` filters by a complete investigation reference and returns stable paginated events; the UI presents provenance links. Indexed references and the event payload are committed transactionally. A one-time migration backfills references for retained scoped artifacts; already-deleted legacy records cannot safely supply missing provenance. |
+| Investigation templates and revisioning | Implemented | Project-scoped templates store researcher-authored titles, descriptions, and bounded checklist steps. Expected-revision updates can change metadata and replace steps; new steps receive new IDs. Applying a template atomically creates a Project session and a frozen title/step/revision snapshot; progress is revision-checked. Template text is discoverable through Project search. Deleting a template or its source session leaves run history intact. No Engine reasoning, scientific method, or planning behavior is reproduced. |
+| Investigation collections | Implemented | Project-scoped, researcher-authored collections group up to 500 exact Engine investigation references. Adding a member validates its linked Project session and Engine transcript; metadata and membership use expected revisions, changes are transactionally journaled with investigation provenance, and collection text/member IDs participate in deterministic Project search. Collections can be edited and deleted without changing Engine state. |
+
+### Remaining Phase 8 gaps
+
+- Cross-Project sharing and organization-level collections/templates are blocked on authentication,
+  tenancy, and ownership decisions not present in the current local Platform.
+- Scientific planning, scientific memory, and scientific dataset/analysis recommendations remain
+  Engine-owned and require Engine contracts plus scientific validation. Phase 6 Platform memory,
+  context planning, capability discovery, and existing-record recommendations are already
+  implemented; this phase does not duplicate them.
+- Semantic/vector retrieval is not justified without measured workload and requires deployment and
+  identity-isolation decisions. Deterministic Project search and on-demand Phase 6 workspace memory
+  remain the current retrieval surfaces.
+- An interactive graph visualization is deferred unless observed navigation needs show value beyond
+  the existing explicit relationships, collections, and durable investigation routes.
+
+The endpoint accepts a nonblank query of at most 200 characters, `limit` 1–100, and a nonnegative
+offset. Ranking is transparent token overlap (title matches are weighted above content matches),
+then record update time, type, and stable ID. Search rebuilds its Project record set for each request;
+large-scale full-text or vector indexing remains a separate workload-driven decision. As elsewhere
+in the local Platform, Project scope is organizational rather than authenticated-user isolation.
+
+## Validation results (2026-11-05)
 
 | Check | Result |
 |---|---|
-| Backend Ruff | Passed |
-| Backend mypy | Passed; 89 source files |
-| Backend pytest | Passed; 77 tests, 1 upstream Starlette/httpx deprecation warning |
-| Import-linter | Passed; 89 files and 274 dependencies analyzed |
+| Backend Ruff | Passed; all backend source and tests |
+| Backend mypy | Passed; all 90 backend source files |
+| Backend pytest | Passed; 100 tests |
+| Import-linter | Passed; 90 files and 278 dependencies analyzed |
 | Frontend lint | Passed |
 | Frontend typecheck | Passed |
-| Frontend tests | Passed; 88 tests in 22 files |
-| Frontend production build | Passed |
-| Contract schema and generated TypeScript | Passed; both generators completed |
+| Frontend tests | Passed; 113 tests in 27 files, including all `.test.tsx` UI suites |
+| Frontend production build | Passed; route and Cesium-backed Earth chunks are split; initial JavaScript chunk is 421.44 kB (123.48 kB gzip), below Vite's 500 kB advisory threshold |
+| Contract schema and generated TypeScript | Passed; schema exported and generated types pass typecheck |
 | `git diff --check` | Passed; Git reported only existing LF-to-CRLF working-copy warnings |
-| Engine regression suite | Passed; 559 tests, 2 skipped, 8 warnings |
+| Engine regression suite | Passed in prior full verification of unchanged Engine code; 559 tests, 2 skipped, 5 warnings |
 
 The Engine regression suite now passes after addressing the multipart trace default, Pillow's
 16-bit fixture compatibility, and schedule interval revisions retaining a stale due time. The
@@ -373,4 +402,6 @@ remaining warnings include unregistered markers in the separate `SAT_QUERY` test
 third-party deprecations.
 
 Engine report, GeoJSON, EarthContext, mission, monitoring, and discovery boundary models are
-exported through the shared contract and generated TypeScript types.
+exported through the shared contract and generated TypeScript types. Phase 8 relationship, search,
+investigation-timeline provenance, revisioned investigation-template/run, and investigation-
+collection models are included in the same generated contract.

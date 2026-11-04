@@ -7,13 +7,25 @@ import type {
   ProjectEarthViewCreate,
   ProjectInvestigationComparison,
   ProjectInvestigationComparisonCreate,
+  ProjectInvestigationCollection,
+  ProjectInvestigationCollectionCreate,
+  ProjectInvestigationCollectionMemberUpdate,
+  ProjectInvestigationCollectionUpdate,
   ProjectInvestigationRef,
+  ProjectInvestigationRelationship,
+  ProjectInvestigationRelationshipCreate,
+  ProjectInvestigationTemplate,
+  ProjectInvestigationTemplateCreate,
+  ProjectInvestigationTemplateRun,
+  ProjectInvestigationTemplateRunUpdate,
+  ProjectInvestigationTemplateUpdate,
   EngineInvestigationComparison,
   ProjectNote,
   ProjectNoteCreate,
   ProjectNoteUpdate,
   ProjectMonitoringLink,
   ProjectSessionLink,
+  ProjectSearchResponse,
   ProjectUpdate,
   Session,
 } from "@/shared/types";
@@ -71,6 +83,218 @@ export function listProjectInvestigations(
   return apiFetch<ProjectInvestigationRef[]>(
     `/projects/${encodeURIComponent(projectId)}/investigations?${query}`,
     { signal },
+  );
+}
+
+export function searchProject(
+  projectId: string,
+  query: string,
+  signal?: AbortSignal,
+  limit = 20,
+  offset = 0,
+): Promise<ProjectSearchResponse> {
+  const params = new URLSearchParams({
+    query,
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return apiFetch<ProjectSearchResponse>(
+    `/projects/${encodeURIComponent(projectId)}/search?${params}`,
+    { signal },
+  );
+}
+
+export function listProjectInvestigationRelationships(
+  projectId: string,
+  signal?: AbortSignal,
+  limit = 50,
+  offset = 0,
+): Promise<ProjectInvestigationRelationship[]> {
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  return apiFetch<ProjectInvestigationRelationship[]>(
+    `/projects/${encodeURIComponent(projectId)}/investigation-relationships?${query}`,
+    { signal },
+  );
+}
+
+export function createProjectInvestigationRelationship(
+  projectId: string,
+  body: ProjectInvestigationRelationshipCreate,
+): Promise<ProjectInvestigationRelationship> {
+  return apiFetch<ProjectInvestigationRelationship>(
+    `/projects/${encodeURIComponent(projectId)}/investigation-relationships`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export function deleteProjectInvestigationRelationship(
+  projectId: string,
+  relationshipId: string,
+): Promise<void> {
+  return apiFetchVoid(
+    `/projects/${encodeURIComponent(projectId)}/investigation-relationships/${encodeURIComponent(relationshipId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function listProjectInvestigationCollections(
+  projectId: string,
+  signal?: AbortSignal,
+  limit = 50,
+  offset = 0,
+): Promise<ProjectInvestigationCollection[]> {
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  return apiFetch<ProjectInvestigationCollection[]>(
+    `/projects/${encodeURIComponent(projectId)}/investigation-collections?${query}`,
+    { signal },
+  );
+}
+
+export function createProjectInvestigationCollection(
+  projectId: string,
+  body: ProjectInvestigationCollectionCreate,
+): Promise<ProjectInvestigationCollection> {
+  return apiFetch<ProjectInvestigationCollection>(
+    `/projects/${encodeURIComponent(projectId)}/investigation-collections`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export function updateProjectInvestigationCollection(
+  projectId: string,
+  collectionId: string,
+  body: ProjectInvestigationCollectionUpdate,
+): Promise<ProjectInvestigationCollection> {
+  return apiFetch<ProjectInvestigationCollection>(
+    `/projects/${encodeURIComponent(projectId)}/investigation-collections/${encodeURIComponent(collectionId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export function updateProjectInvestigationCollectionMembers(
+  projectId: string,
+  collectionId: string,
+  body: ProjectInvestigationCollectionMemberUpdate,
+): Promise<ProjectInvestigationCollection> {
+  return apiFetch<ProjectInvestigationCollection>(
+    `/projects/${encodeURIComponent(projectId)}/investigation-collections/${encodeURIComponent(collectionId)}/members`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export function deleteProjectInvestigationCollection(
+  projectId: string,
+  collectionId: string,
+): Promise<void> {
+  return apiFetchVoid(
+    `/projects/${encodeURIComponent(projectId)}/investigation-collections/${encodeURIComponent(collectionId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function listProjectInvestigationTemplates(
+  projectId: string,
+  signal?: AbortSignal,
+  limit = 50,
+  offset = 0,
+): Promise<ProjectInvestigationTemplate[]> {
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  return apiFetch<ProjectInvestigationTemplate[]>(
+    `/projects/${encodeURIComponent(projectId)}/investigation-templates?${query}`,
+    { signal },
+  );
+}
+
+export function createProjectInvestigationTemplate(
+  projectId: string,
+  body: ProjectInvestigationTemplateCreate,
+): Promise<ProjectInvestigationTemplate> {
+  return apiFetch<ProjectInvestigationTemplate>(
+    `/projects/${encodeURIComponent(projectId)}/investigation-templates`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export function updateProjectInvestigationTemplate(
+  projectId: string,
+  templateId: string,
+  body: ProjectInvestigationTemplateUpdate,
+): Promise<ProjectInvestigationTemplate> {
+  return apiFetch<ProjectInvestigationTemplate>(
+    `/projects/${encodeURIComponent(projectId)}/investigation-templates/${encodeURIComponent(templateId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export function deleteProjectInvestigationTemplate(
+  projectId: string,
+  templateId: string,
+): Promise<void> {
+  return apiFetchVoid(
+    `/projects/${encodeURIComponent(projectId)}/investigation-templates/${encodeURIComponent(templateId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function applyProjectInvestigationTemplate(
+  projectId: string,
+  templateId: string,
+): Promise<ProjectInvestigationTemplateRun> {
+  return apiFetch<ProjectInvestigationTemplateRun>(
+    `/projects/${encodeURIComponent(projectId)}/investigation-templates/${encodeURIComponent(templateId)}/apply`,
+    { method: "POST" },
+  );
+}
+
+export function listProjectInvestigationTemplateRuns(
+  projectId: string,
+  signal?: AbortSignal,
+  limit = 50,
+  offset = 0,
+): Promise<ProjectInvestigationTemplateRun[]> {
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  return apiFetch<ProjectInvestigationTemplateRun[]>(
+    `/projects/${encodeURIComponent(projectId)}/investigation-template-runs?${query}`,
+    { signal },
+  );
+}
+
+export function updateProjectInvestigationTemplateRun(
+  projectId: string,
+  runId: string,
+  body: ProjectInvestigationTemplateRunUpdate,
+): Promise<ProjectInvestigationTemplateRun> {
+  return apiFetch<ProjectInvestigationTemplateRun>(
+    `/projects/${encodeURIComponent(projectId)}/investigation-template-runs/${encodeURIComponent(runId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
   );
 }
 
@@ -164,8 +388,13 @@ export function listProjectActivity(
   signal?: AbortSignal,
   limit = 50,
   offset = 0,
+  investigation?: ProjectInvestigationRef,
 ): Promise<ProjectActivity[]> {
-  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  const query = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    ...(investigation ?? {}),
+  });
   return apiFetch<ProjectActivity[]>(
     `/projects/${encodeURIComponent(projectId)}/activity?${query}`,
     { signal },

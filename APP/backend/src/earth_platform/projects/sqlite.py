@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
@@ -13,7 +14,15 @@ from earth_platform.projects.models import (
     ProjectActivity,
     ProjectActivityAction,
     ProjectEarthView,
+    ProjectInvestigationCollection,
+    ProjectInvestigationCollectionMemberUpdate,
     ProjectInvestigationComparison,
+    ProjectInvestigationRef,
+    ProjectInvestigationRelationship,
+    ProjectInvestigationTemplate,
+    ProjectInvestigationTemplateRun,
+    ProjectInvestigationTemplateRunStep,
+    ProjectInvestigationTemplateRunUpdate,
     ProjectMonitoringLink,
     ProjectNote,
     ProjectSessionLink,
@@ -36,7 +45,15 @@ async def _record_activity(
     session_id: str | None = None,
     label: str | None = None,
     occurred_at: datetime | None = None,
+    investigations: Sequence[ProjectInvestigationRef] = (),
 ) -> None:
+    related_investigations = list(dict.fromkeys(
+        (item.session_id, item.investigation_id) for item in investigations
+    ))
+    references = [
+        ProjectInvestigationRef(session_id=session_id, investigation_id=investigation_id)
+        for session_id, investigation_id in related_investigations
+    ]
     activity = ProjectActivity(
         project_id=project_id,
         action=action,
@@ -44,6 +61,7 @@ async def _record_activity(
         session_id=session_id,
         label=label,
         occurred_at=occurred_at or utcnow(),
+        investigations=references,
     )
     await db.execute(
         "INSERT INTO project_activity(id, project_id, occurred_at, data) "
@@ -55,6 +73,125 @@ async def _record_activity(
             activity.model_dump_json(),
         ),
     )
+    await db.executemany(
+        "INSERT INTO project_activity_investigations("
+        "project_id, activity_id, session_id, investigation_id"
+        ") VALUES (?, ?, ?, ?)",
+        [
+            (project_id, activity.id, reference.session_id, reference.investigation_id)
+            for reference in references
+        ],
+    )
+
+
+async def _backfill_activity_investigations(db: aiosqlite.Connection) -> None:
+    migration = await db.execute(
+        "SELECT 1 FROM project_migrations WHERE name = ?",
+        ("investigation_activity_provenance_v1",),
+    )
+    if await migration.fetchone() is not None:
+        return
+    await db.execute("BEGIN IMMEDIATE")
+    try:
+        migration = await db.execute(
+            "SELECT 1 FROM project_migrations WHERE name = ?",
+            ("investigation_activity_provenance_v1",),
+        )
+        if await migration.fetchone() is not None:
+            await db.commit()
+            return
+        references_by_subject: dict[
+            tuple[str, str], list[ProjectInvestigationRef]
+        ] = {}
+        note_cursor = await db.execute(
+            "SELECT project_id, id, investigation_session_id, investigation_id "
+            "FROM project_notes WHERE investigation_session_id IS NOT NULL "
+            "AND investigation_id IS NOT NULL"
+        )
+        for row in await note_cursor.fetchall():
+            references_by_subject[(row["project_id"], row["id"])] = [
+                ProjectInvestigationRef(
+                    session_id=row["investigation_session_id"],
+                    investigation_id=row["investigation_id"],
+                )
+            ]
+        view_cursor = await db.execute(
+            "SELECT project_id, id, source_session_id, investigation_id "
+            "FROM project_views WHERE investigation_id IS NOT NULL"
+        )
+        for row in await view_cursor.fetchall():
+            references_by_subject[(row["project_id"], row["id"])] = [
+                ProjectInvestigationRef(
+                    session_id=row["source_session_id"],
+                    investigation_id=row["investigation_id"],
+                )
+            ]
+        comparison_cursor = await db.execute(
+            "SELECT project_id, id, data FROM project_investigation_comparisons"
+        )
+        for row in await comparison_cursor.fetchall():
+            comparison = ProjectInvestigationComparison.model_validate_json(row["data"])
+            references_by_subject[(row["project_id"], row["id"])] = [
+                comparison.left,
+                comparison.right,
+            ]
+        relationship_cursor = await db.execute(
+            "SELECT project_id, id, data FROM project_investigation_relationships"
+        )
+        for row in await relationship_cursor.fetchall():
+            relationship = ProjectInvestigationRelationship.model_validate_json(row["data"])
+            references_by_subject[(row["project_id"], row["id"])] = [
+                relationship.from_investigation,
+                relationship.to_investigation,
+            ]
+
+        actions = {
+            "note.created",
+            "note.updated",
+            "earth_view.saved",
+            "investigation_comparison.created",
+            "investigation_relationship.created",
+        }
+        activity_cursor = await db.execute(
+            "SELECT id, project_id, data FROM project_activity"
+        )
+        rows = await activity_cursor.fetchall()
+        for row in rows:
+            activity = ProjectActivity.model_validate_json(row["data"])
+            if activity.action not in actions or activity.subject_id is None:
+                continue
+            references = references_by_subject.get(
+                (row["project_id"], activity.subject_id)
+            )
+            if not references:
+                continue
+            activity = activity.model_copy(update={"investigations": references})
+            await db.execute(
+                "UPDATE project_activity SET data = ? WHERE id = ?",
+                (activity.model_dump_json(), row["id"]),
+            )
+            await db.executemany(
+                "INSERT OR IGNORE INTO project_activity_investigations("
+                "project_id, activity_id, session_id, investigation_id"
+                ") VALUES (?, ?, ?, ?)",
+                [
+                    (
+                        activity.project_id,
+                        activity.id,
+                        reference.session_id,
+                        reference.investigation_id,
+                    )
+                    for reference in references
+                ],
+            )
+        await db.execute(
+            "INSERT INTO project_migrations(name) VALUES (?)",
+            ("investigation_activity_provenance_v1",),
+        )
+        await db.commit()
+    except BaseException:
+        await db.rollback()
+        raise
 
 
 class SQLiteProjectRepository:
@@ -117,14 +254,78 @@ class SQLiteProjectRepository:
                 occurred_at TEXT NOT NULL,
                 data TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS project_activity_investigations (
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                activity_id TEXT NOT NULL REFERENCES project_activity(id) ON DELETE CASCADE,
+                session_id TEXT NOT NULL,
+                investigation_id TEXT NOT NULL,
+                PRIMARY KEY (activity_id, session_id, investigation_id)
+            );
+            CREATE INDEX IF NOT EXISTS project_activity_investigations_by_ref
+                ON project_activity_investigations(
+                    project_id, session_id, investigation_id, activity_id
+                );
+            CREATE TABLE IF NOT EXISTS project_migrations (
+                name TEXT PRIMARY KEY
+            );
             CREATE TABLE IF NOT EXISTS project_investigation_comparisons (
                 id TEXT PRIMARY KEY,
                 project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
                 created_at TEXT NOT NULL,
                 data TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS project_investigation_relationships (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                from_session_id TEXT NOT NULL,
+                from_investigation_id TEXT NOT NULL,
+                to_session_id TEXT NOT NULL,
+                to_investigation_id TEXT NOT NULL,
+                relationship_type TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                data TEXT NOT NULL,
+                UNIQUE (
+                    project_id,
+                    from_session_id,
+                    from_investigation_id,
+                    to_session_id,
+                    to_investigation_id,
+                    relationship_type
+                )
+            );
+            CREATE TABLE IF NOT EXISTS project_investigation_collections (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                data TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS project_investigation_templates (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL,
+                data TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS project_investigation_template_runs (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                template_id TEXT NOT NULL,
+                session_id TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                data TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS project_investigation_comparisons_by_project
                 ON project_investigation_comparisons(project_id, created_at DESC, id);
+            CREATE INDEX IF NOT EXISTS project_investigation_relationships_by_project
+                ON project_investigation_relationships(project_id, created_at DESC, id);
+            CREATE INDEX IF NOT EXISTS project_investigation_collections_by_project
+                ON project_investigation_collections(project_id, created_at DESC, id);
+            CREATE INDEX IF NOT EXISTS project_investigation_templates_by_project
+                ON project_investigation_templates(project_id, created_at DESC, id);
+            CREATE INDEX IF NOT EXISTS project_investigation_template_runs_by_project
+                ON project_investigation_template_runs(project_id, created_at DESC, id);
             CREATE INDEX IF NOT EXISTS project_activity_by_project
                 ON project_activity(project_id, occurred_at DESC, id);
             CREATE TABLE IF NOT EXISTS project_monitoring_links (
@@ -162,6 +363,7 @@ class SQLiteProjectRepository:
             "ON project_views(project_id, source_session_id, investigation_id, created_at DESC, id)"
         )
         await self._db.commit()
+        await _backfill_activity_investigations(self._db)
 
     async def aclose(self) -> None:
         if self._db is not None:
@@ -502,6 +704,7 @@ class SQLiteProjectRepository:
                     subject_id=comparison.id,
                     label=comparison.title,
                     occurred_at=comparison.created_at,
+                    investigations=(comparison.left, comparison.right),
                 )
                 await db.commit()
             except BaseException:
@@ -574,11 +777,745 @@ class SQLiteProjectRepository:
                     action="investigation_comparison.deleted",
                     subject_id=comparison_id,
                     label=comparison.title,
+                    investigations=(comparison.left, comparison.right),
                 )
                 await db.commit()
             except BaseException:
                 await db.rollback()
                 raise
+
+    async def create_investigation_relationship(
+        self, project_id: str, relationship: ProjectInvestigationRelationship
+    ) -> ProjectInvestigationRelationship:
+        if relationship.project_id != project_id:
+            raise ValueError("relationship project_id must match the requested Project")
+        async with self._lock:
+            db = self._connection()
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                project_cursor = await db.execute(
+                    "SELECT archived FROM projects WHERE id = ?", (project_id,)
+                )
+                project = await project_cursor.fetchone()
+                if project is None:
+                    raise NotFoundError(f"Project '{project_id}' was not found")
+                if project["archived"]:
+                    raise ConflictError(
+                        "Cannot create an investigation relationship in an archived Project"
+                    )
+                await db.execute(
+                    "INSERT INTO project_investigation_relationships("
+                    "id, project_id, from_session_id, from_investigation_id, "
+                    "to_session_id, to_investigation_id, relationship_type, created_at, data"
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        relationship.id,
+                        project_id,
+                        relationship.from_investigation.session_id,
+                        relationship.from_investigation.investigation_id,
+                        relationship.to_investigation.session_id,
+                        relationship.to_investigation.investigation_id,
+                        relationship.relationship_type,
+                        relationship.created_at.isoformat(),
+                        relationship.model_dump_json(),
+                    ),
+                )
+                await _record_activity(
+                    db,
+                    project_id=project_id,
+                    action="investigation_relationship.created",
+                    subject_id=relationship.id,
+                    session_id=relationship.from_investigation.session_id,
+                    label=relationship.relationship_type,
+                    occurred_at=relationship.created_at,
+                    investigations=(
+                        relationship.from_investigation,
+                        relationship.to_investigation,
+                    ),
+                )
+                await db.commit()
+            except aiosqlite.IntegrityError as exc:
+                await db.rollback()
+                raise ConflictError(
+                    "This investigation relationship already exists or its ID is already used"
+                ) from exc
+            except BaseException:
+                await db.rollback()
+                raise
+        return relationship
+
+    async def list_investigation_relationships(
+        self, project_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[ProjectInvestigationRelationship]:
+        if not 1 <= limit <= 500 or offset < 0:
+            raise ValueError("limit must be between 1 and 500 and offset must be non-negative")
+        async with self._lock:
+            db = self._connection()
+            project = await db.execute("SELECT id FROM projects WHERE id = ?", (project_id,))
+            if await project.fetchone() is None:
+                raise NotFoundError(f"Project '{project_id}' was not found")
+            cursor = await db.execute(
+                "SELECT data FROM project_investigation_relationships "
+                "WHERE project_id = ? ORDER BY created_at DESC, id LIMIT ? OFFSET ?",
+                (project_id, limit, offset),
+            )
+            rows = await cursor.fetchall()
+        return [
+            ProjectInvestigationRelationship.model_validate_json(row["data"])
+            for row in rows
+        ]
+
+    async def delete_investigation_relationship(
+        self, project_id: str, relationship_id: str
+    ) -> None:
+        async with self._lock:
+            db = self._connection()
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                cursor = await db.execute(
+                    "SELECT data FROM project_investigation_relationships "
+                    "WHERE project_id = ? AND id = ?",
+                    (project_id, relationship_id),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    raise NotFoundError(
+                        f"Project investigation relationship '{relationship_id}' was not found"
+                    )
+                relationship = ProjectInvestigationRelationship.model_validate_json(row["data"])
+                await db.execute(
+                    "DELETE FROM project_investigation_relationships "
+                    "WHERE project_id = ? AND id = ?",
+                    (project_id, relationship_id),
+                )
+                await _record_activity(
+                    db,
+                    project_id=project_id,
+                    action="investigation_relationship.deleted",
+                    subject_id=relationship_id,
+                    session_id=relationship.from_investigation.session_id,
+                    label=relationship.relationship_type,
+                    investigations=(
+                        relationship.from_investigation,
+                        relationship.to_investigation,
+                    ),
+                )
+                await db.commit()
+            except BaseException:
+                await db.rollback()
+                raise
+
+    async def create_investigation_collection(
+        self, collection: ProjectInvestigationCollection
+    ) -> ProjectInvestigationCollection:
+        db = self._connection()
+        async with self._lock:
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                project_cursor = await db.execute(
+                    "SELECT archived FROM projects WHERE id = ?", (collection.project_id,)
+                )
+                project = await project_cursor.fetchone()
+                if project is None:
+                    raise NotFoundError(f"Project '{collection.project_id}' was not found")
+                if project["archived"]:
+                    raise ConflictError("Cannot create a collection in an archived Project")
+                await db.execute(
+                    "INSERT INTO project_investigation_collections("
+                    "id, project_id, created_at, updated_at, revision, data"
+                    ") VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        collection.id,
+                        collection.project_id,
+                        collection.created_at.isoformat(),
+                        collection.updated_at.isoformat(),
+                        collection.revision,
+                        collection.model_dump_json(),
+                    ),
+                )
+                await _record_activity(
+                    db,
+                    project_id=collection.project_id,
+                    action="investigation_collection.created",
+                    subject_id=collection.id,
+                    label=collection.title,
+                    occurred_at=collection.created_at,
+                    investigations=collection.investigations,
+                )
+                await db.commit()
+            except aiosqlite.IntegrityError as exc:
+                await db.rollback()
+                raise ConflictError(
+                    f"Investigation collection '{collection.id}' already exists"
+                ) from exc
+            except BaseException:
+                await db.rollback()
+                raise
+        return collection
+
+    async def get_investigation_collection(
+        self, project_id: str, collection_id: str
+    ) -> ProjectInvestigationCollection:
+        async with self._lock:
+            db = self._connection()
+            cursor = await db.execute(
+                "SELECT data FROM project_investigation_collections "
+                "WHERE project_id = ? AND id = ?",
+                (project_id, collection_id),
+            )
+            row = await cursor.fetchone()
+        if row is None:
+            raise NotFoundError(
+                f"Project investigation collection '{collection_id}' was not found"
+            )
+        return ProjectInvestigationCollection.model_validate_json(row["data"])
+
+    async def list_investigation_collections(
+        self, project_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[ProjectInvestigationCollection]:
+        if not 1 <= limit <= 500 or offset < 0:
+            raise ValueError("limit must be between 1 and 500 and offset must be non-negative")
+        async with self._lock:
+            db = self._connection()
+            project = await db.execute("SELECT id FROM projects WHERE id = ?", (project_id,))
+            if await project.fetchone() is None:
+                raise NotFoundError(f"Project '{project_id}' was not found")
+            cursor = await db.execute(
+                "SELECT data FROM project_investigation_collections "
+                "WHERE project_id = ? ORDER BY created_at DESC, id LIMIT ? OFFSET ?",
+                (project_id, limit, offset),
+            )
+            rows = await cursor.fetchall()
+        return [
+            ProjectInvestigationCollection.model_validate_json(row["data"])
+            for row in rows
+        ]
+
+    async def update_investigation_collection(
+        self,
+        collection: ProjectInvestigationCollection,
+        *,
+        expected_revision: int,
+    ) -> ProjectInvestigationCollection:
+        db = self._connection()
+        async with self._lock:
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                project_cursor = await db.execute(
+                    "SELECT archived FROM projects WHERE id = ?", (collection.project_id,)
+                )
+                project = await project_cursor.fetchone()
+                if project is None:
+                    raise NotFoundError(f"Project '{collection.project_id}' was not found")
+                if project["archived"]:
+                    raise ConflictError("Cannot update a collection in an archived Project")
+                cursor = await db.execute(
+                    "SELECT revision FROM project_investigation_collections "
+                    "WHERE project_id = ? AND id = ?",
+                    (collection.project_id, collection.id),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    raise NotFoundError(
+                        f"Project investigation collection '{collection.id}' was not found"
+                    )
+                if row["revision"] != expected_revision:
+                    raise ConflictError("Investigation collection was changed by another request")
+                updated = collection.model_copy(
+                    update={"revision": expected_revision + 1}
+                )
+                await db.execute(
+                    "UPDATE project_investigation_collections "
+                    "SET updated_at = ?, revision = ?, data = ? "
+                    "WHERE project_id = ? AND id = ?",
+                    (
+                        updated.updated_at.isoformat(),
+                        updated.revision,
+                        updated.model_dump_json(),
+                        updated.project_id,
+                        updated.id,
+                    ),
+                )
+                await _record_activity(
+                    db,
+                    project_id=updated.project_id,
+                    action="investigation_collection.updated",
+                    subject_id=updated.id,
+                    label=updated.title,
+                    investigations=updated.investigations,
+                )
+                await db.commit()
+            except BaseException:
+                await db.rollback()
+                raise
+        return updated
+
+    async def update_investigation_collection_members(
+        self,
+        project_id: str,
+        collection_id: str,
+        update: ProjectInvestigationCollectionMemberUpdate,
+    ) -> ProjectInvestigationCollection:
+        db = self._connection()
+        async with self._lock:
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                project_cursor = await db.execute(
+                    "SELECT archived FROM projects WHERE id = ?", (project_id,)
+                )
+                project = await project_cursor.fetchone()
+                if project is None:
+                    raise NotFoundError(f"Project '{project_id}' was not found")
+                if project["archived"]:
+                    raise ConflictError("Cannot change a collection in an archived Project")
+                cursor = await db.execute(
+                    "SELECT revision, data FROM project_investigation_collections "
+                    "WHERE project_id = ? AND id = ?",
+                    (project_id, collection_id),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    raise NotFoundError(
+                        f"Project investigation collection '{collection_id}' was not found"
+                    )
+                if row["revision"] != update.expected_revision:
+                    raise ConflictError("Investigation collection was changed by another request")
+                collection = ProjectInvestigationCollection.model_validate_json(row["data"])
+                members = list(collection.investigations)
+                action: ProjectActivityAction = (
+                    "investigation_collection.member_added"
+                    if update.operation == "add"
+                    else "investigation_collection.member_removed"
+                )
+                if update.operation == "add":
+                    if update.investigation in members:
+                        raise ConflictError("Investigation is already in this collection")
+                    if len(members) >= 500:
+                        raise ConflictError("Investigation collection is limited to 500 members")
+                    members.append(update.investigation)
+                else:
+                    if update.investigation not in members:
+                        raise ConflictError("Investigation is not in this collection")
+                    members.remove(update.investigation)
+                updated = collection.model_copy(
+                    update={
+                        "investigations": members,
+                        "updated_at": utcnow(),
+                        "revision": update.expected_revision + 1,
+                    }
+                )
+                await db.execute(
+                    "UPDATE project_investigation_collections "
+                    "SET updated_at = ?, revision = ?, data = ? "
+                    "WHERE project_id = ? AND id = ?",
+                    (
+                        updated.updated_at.isoformat(),
+                        updated.revision,
+                        updated.model_dump_json(),
+                        project_id,
+                        collection_id,
+                    ),
+                )
+                await _record_activity(
+                    db,
+                    project_id=project_id,
+                    action=action,
+                    subject_id=collection_id,
+                    session_id=update.investigation.session_id,
+                    label=updated.title,
+                    investigations=(update.investigation,),
+                )
+                await db.commit()
+            except BaseException:
+                await db.rollback()
+                raise
+        return updated
+
+    async def delete_investigation_collection(
+        self, project_id: str, collection_id: str
+    ) -> None:
+        async with self._lock:
+            db = self._connection()
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                project_cursor = await db.execute(
+                    "SELECT archived FROM projects WHERE id = ?", (project_id,)
+                )
+                project = await project_cursor.fetchone()
+                if project is None:
+                    raise NotFoundError(f"Project '{project_id}' was not found")
+                if project["archived"]:
+                    raise ConflictError("Cannot delete a collection from an archived Project")
+                cursor = await db.execute(
+                    "SELECT data FROM project_investigation_collections "
+                    "WHERE project_id = ? AND id = ?",
+                    (project_id, collection_id),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    raise NotFoundError(
+                        f"Project investigation collection '{collection_id}' was not found"
+                    )
+                collection = ProjectInvestigationCollection.model_validate_json(row["data"])
+                await db.execute(
+                    "DELETE FROM project_investigation_collections "
+                    "WHERE project_id = ? AND id = ?",
+                    (project_id, collection_id),
+                )
+                await _record_activity(
+                    db,
+                    project_id=project_id,
+                    action="investigation_collection.deleted",
+                    subject_id=collection_id,
+                    label=collection.title,
+                    investigations=collection.investigations,
+                )
+                await db.commit()
+            except BaseException:
+                await db.rollback()
+                raise
+
+    async def create_investigation_template(
+        self, template: ProjectInvestigationTemplate
+    ) -> ProjectInvestigationTemplate:
+        db = self._connection()
+        async with self._lock:
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                project = await db.execute(
+                    "SELECT archived FROM projects WHERE id = ?", (template.project_id,)
+                )
+                row = await project.fetchone()
+                if row is None:
+                    raise NotFoundError(f"Project '{template.project_id}' was not found")
+                if row["archived"]:
+                    raise ConflictError("Cannot create a template in an archived Project")
+                await db.execute(
+                    "INSERT INTO project_investigation_templates"
+                    "(id, project_id, created_at, data) VALUES (?, ?, ?, ?)",
+                    (
+                        template.id,
+                        template.project_id,
+                        template.created_at.isoformat(),
+                        template.model_dump_json(),
+                    ),
+                )
+                await _record_activity(
+                    db,
+                    project_id=template.project_id,
+                    action="investigation_template.created",
+                    subject_id=template.id,
+                    label=template.title,
+                    occurred_at=template.created_at,
+                )
+                await db.commit()
+            except aiosqlite.IntegrityError as exc:
+                await db.rollback()
+                raise ConflictError(f"Template '{template.id}' already exists") from exc
+            except BaseException:
+                await db.rollback()
+                raise
+        return template
+
+    async def list_investigation_templates(
+        self, project_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[ProjectInvestigationTemplate]:
+        if not 1 <= limit <= 500 or offset < 0:
+            raise ValueError("limit must be between 1 and 500 and offset must be non-negative")
+        async with self._lock:
+            db = self._connection()
+            project = await db.execute("SELECT id FROM projects WHERE id = ?", (project_id,))
+            if await project.fetchone() is None:
+                raise NotFoundError(f"Project '{project_id}' was not found")
+            cursor = await db.execute(
+                "SELECT data FROM project_investigation_templates "
+                "WHERE project_id = ? ORDER BY created_at DESC, id LIMIT ? OFFSET ?",
+                (project_id, limit, offset),
+            )
+            rows = await cursor.fetchall()
+        return [
+            ProjectInvestigationTemplate.model_validate_json(row["data"])
+            for row in rows
+        ]
+
+    async def get_investigation_template(
+        self, project_id: str, template_id: str
+    ) -> ProjectInvestigationTemplate:
+        async with self._lock:
+            db = self._connection()
+            cursor = await db.execute(
+                "SELECT data FROM project_investigation_templates "
+                "WHERE project_id = ? AND id = ?",
+                (project_id, template_id),
+            )
+            row = await cursor.fetchone()
+        if row is None:
+            raise NotFoundError(f"Project template '{template_id}' was not found")
+        return ProjectInvestigationTemplate.model_validate_json(row["data"])
+
+    async def update_investigation_template(
+        self,
+        template: ProjectInvestigationTemplate,
+        *,
+        expected_revision: int,
+    ) -> ProjectInvestigationTemplate:
+        db = self._connection()
+        async with self._lock:
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                project_cursor = await db.execute(
+                    "SELECT archived FROM projects WHERE id = ?", (template.project_id,)
+                )
+                project = await project_cursor.fetchone()
+                if project is None:
+                    raise NotFoundError(f"Project '{template.project_id}' was not found")
+                if project["archived"]:
+                    raise ConflictError("Cannot update a template in an archived Project")
+                cursor = await db.execute(
+                    "SELECT data FROM project_investigation_templates "
+                    "WHERE project_id = ? AND id = ?",
+                    (template.project_id, template.id),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    raise NotFoundError(f"Project template '{template.id}' was not found")
+                existing = ProjectInvestigationTemplate.model_validate_json(row["data"])
+                if existing.revision != expected_revision:
+                    raise ConflictError("Investigation template was changed by another request")
+                updated = template.model_copy(
+                    update={"revision": expected_revision + 1}
+                )
+                await db.execute(
+                    "UPDATE project_investigation_templates SET data = ? "
+                    "WHERE project_id = ? AND id = ?",
+                    (updated.model_dump_json(), updated.project_id, updated.id),
+                )
+                await _record_activity(
+                    db,
+                    project_id=updated.project_id,
+                    action="investigation_template.updated",
+                    subject_id=updated.id,
+                    label=updated.title,
+                )
+                await db.commit()
+            except BaseException:
+                await db.rollback()
+                raise
+        return updated
+
+    async def delete_investigation_template(self, project_id: str, template_id: str) -> None:
+        async with self._lock:
+            db = self._connection()
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                project = await db.execute(
+                    "SELECT archived FROM projects WHERE id = ?", (project_id,)
+                )
+                project_row = await project.fetchone()
+                if project_row is None:
+                    raise NotFoundError(f"Project '{project_id}' was not found")
+                if project_row["archived"]:
+                    raise ConflictError("Cannot delete a template from an archived Project")
+                cursor = await db.execute(
+                    "SELECT data FROM project_investigation_templates "
+                    "WHERE project_id = ? AND id = ?",
+                    (project_id, template_id),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    raise NotFoundError(f"Project template '{template_id}' was not found")
+                template = ProjectInvestigationTemplate.model_validate_json(row["data"])
+                await db.execute(
+                    "DELETE FROM project_investigation_templates "
+                    "WHERE project_id = ? AND id = ?",
+                    (project_id, template_id),
+                )
+                await _record_activity(
+                    db,
+                    project_id=project_id,
+                    action="investigation_template.deleted",
+                    subject_id=template_id,
+                    label=template.title,
+                )
+                await db.commit()
+            except BaseException:
+                await db.rollback()
+                raise
+
+    async def apply_investigation_template(
+        self, project_id: str, template_id: str
+    ) -> ProjectInvestigationTemplateRun:
+        async with self._lock:
+            db = self._connection()
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                project_cursor = await db.execute(
+                    "SELECT archived FROM projects WHERE id = ?", (project_id,)
+                )
+                project = await project_cursor.fetchone()
+                if project is None:
+                    raise NotFoundError(f"Project '{project_id}' was not found")
+                if project["archived"]:
+                    raise ConflictError("Cannot apply a template in an archived Project")
+                template_cursor = await db.execute(
+                    "SELECT data FROM project_investigation_templates "
+                    "WHERE project_id = ? AND id = ?",
+                    (project_id, template_id),
+                )
+                template_row = await template_cursor.fetchone()
+                if template_row is None:
+                    raise NotFoundError(f"Project template '{template_id}' was not found")
+                template = ProjectInvestigationTemplate.model_validate_json(
+                    template_row["data"]
+                )
+                session = Session(title=template.title)
+                linked_at = utcnow()
+                await db.execute(
+                    "INSERT INTO sessions(id, updated_at, archived, data) "
+                    "VALUES (?, ?, ?, ?)",
+                    (
+                        session.id,
+                        session.updated_at.isoformat(),
+                        int(session.archived),
+                        session.model_dump_json(),
+                    ),
+                )
+                await db.execute(
+                    "INSERT INTO project_sessions(project_id, session_id, linked_at) "
+                    "VALUES (?, ?, ?)",
+                    (project_id, session.id, linked_at.isoformat()),
+                )
+                run = ProjectInvestigationTemplateRun(
+                    project_id=project_id,
+                    template_id=template.id,
+                    template_revision=template.revision,
+                    template_title=template.title,
+                    session_id=session.id,
+                    steps=[
+                        ProjectInvestigationTemplateRunStep(
+                            id=step.id,
+                            title=step.title,
+                        )
+                        for step in template.steps
+                    ],
+                    created_at=linked_at,
+                    updated_at=linked_at,
+                )
+                await db.execute(
+                    "INSERT INTO project_investigation_template_runs("
+                    "id, project_id, template_id, session_id, created_at, revision, data"
+                    ") VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        run.id,
+                        project_id,
+                        template.id,
+                        session.id,
+                        run.created_at.isoformat(),
+                        run.revision,
+                        run.model_dump_json(),
+                    ),
+                )
+                await _record_activity(
+                    db,
+                    project_id=project_id,
+                    action="session.linked",
+                    subject_id=session.id,
+                    session_id=session.id,
+                    label=session.title or "Untitled session",
+                    occurred_at=linked_at,
+                )
+                await _record_activity(
+                    db,
+                    project_id=project_id,
+                    action="investigation_template.applied",
+                    subject_id=run.id,
+                    session_id=session.id,
+                    label=template.title,
+                    occurred_at=linked_at,
+                )
+                await db.commit()
+            except BaseException:
+                await db.rollback()
+                raise
+        return run
+
+    async def list_investigation_template_runs(
+        self, project_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[ProjectInvestigationTemplateRun]:
+        if not 1 <= limit <= 500 or offset < 0:
+            raise ValueError("limit must be between 1 and 500 and offset must be non-negative")
+        async with self._lock:
+            db = self._connection()
+            project = await db.execute("SELECT id FROM projects WHERE id = ?", (project_id,))
+            if await project.fetchone() is None:
+                raise NotFoundError(f"Project '{project_id}' was not found")
+            cursor = await db.execute(
+                "SELECT data FROM project_investigation_template_runs "
+                "WHERE project_id = ? ORDER BY created_at DESC, id LIMIT ? OFFSET ?",
+                (project_id, limit, offset),
+            )
+            rows = await cursor.fetchall()
+        return [
+            ProjectInvestigationTemplateRun.model_validate_json(row["data"])
+            for row in rows
+        ]
+
+    async def update_investigation_template_run(
+        self,
+        project_id: str,
+        run_id: str,
+        update: ProjectInvestigationTemplateRunUpdate,
+    ) -> ProjectInvestigationTemplateRun:
+        async with self._lock:
+            db = self._connection()
+            try:
+                await db.execute("BEGIN IMMEDIATE")
+                cursor = await db.execute(
+                    "SELECT revision, data FROM project_investigation_template_runs "
+                    "WHERE project_id = ? AND id = ?",
+                    (project_id, run_id),
+                )
+                row = await cursor.fetchone()
+                if row is None:
+                    raise NotFoundError(f"Template run '{run_id}' was not found")
+                if row["revision"] != update.expected_revision:
+                    raise ConflictError(
+                        f"Template run '{run_id}' revision changed from "
+                        f"{update.expected_revision} to {row['revision']}"
+                    )
+                run = ProjectInvestigationTemplateRun.model_validate_json(row["data"])
+                completed = set(update.completed_step_ids)
+                known = {step.id for step in run.steps}
+                if not completed <= known:
+                    raise ConflictError("Completed steps must belong to this template run")
+                updated = run.model_copy(
+                    update={
+                        "steps": [
+                            step.model_copy(update={"completed": step.id in completed})
+                            for step in run.steps
+                        ],
+                        "revision": run.revision + 1,
+                        "updated_at": utcnow(),
+                    }
+                )
+                await db.execute(
+                    "UPDATE project_investigation_template_runs "
+                    "SET revision = ?, data = ? WHERE project_id = ? AND id = ?",
+                    (updated.revision, updated.model_dump_json(), project_id, run_id),
+                )
+                await _record_activity(
+                    db,
+                    project_id=project_id,
+                    action="investigation_template_run.updated",
+                    subject_id=run_id,
+                    session_id=updated.session_id,
+                    label=updated.template_title,
+                )
+                await db.commit()
+            except BaseException:
+                await db.rollback()
+                raise
+        return updated
 
     async def create_note(self, project_id: str, note: ProjectNote) -> ProjectNote:
         db = self._connection()
@@ -616,6 +1553,17 @@ class SQLiteProjectRepository:
                     subject_id=note.id,
                     label=note.title,
                     occurred_at=note.created_at,
+                    investigations=(
+                        [
+                            ProjectInvestigationRef(
+                                session_id=note.investigation_session_id,
+                                investigation_id=note.investigation_id,
+                            )
+                        ]
+                        if note.investigation_id is not None
+                        and note.investigation_session_id is not None
+                        else []
+                    ),
                 )
                 await db.commit()
             except aiosqlite.IntegrityError as exc:
@@ -712,6 +1660,17 @@ class SQLiteProjectRepository:
                     subject_id=updated.id,
                     label=updated.title,
                     occurred_at=updated.updated_at,
+                    investigations=(
+                        [
+                            ProjectInvestigationRef(
+                                session_id=updated.investigation_session_id,
+                                investigation_id=updated.investigation_id,
+                            )
+                        ]
+                        if updated.investigation_id is not None
+                        and updated.investigation_session_id is not None
+                        else []
+                    ),
                 )
                 await db.commit()
             except BaseException:
@@ -742,6 +1701,17 @@ class SQLiteProjectRepository:
                     action="note.deleted",
                     subject_id=note_id,
                     label=note.title,
+                    investigations=(
+                        [
+                            ProjectInvestigationRef(
+                                session_id=note.investigation_session_id,
+                                investigation_id=note.investigation_id,
+                            )
+                        ]
+                        if note.investigation_id is not None
+                        and note.investigation_session_id is not None
+                        else []
+                    ),
                 )
                 await db.commit()
             except BaseException:
@@ -821,6 +1791,16 @@ class SQLiteProjectRepository:
                     session_id=session_id,
                     label=view.title,
                     occurred_at=view.created_at,
+                    investigations=(
+                        [
+                            ProjectInvestigationRef(
+                                session_id=session_id,
+                                investigation_id=view.investigation_id,
+                            )
+                        ]
+                        if view.investigation_id is not None
+                        else []
+                    ),
                 )
                 await db.commit()
             except aiosqlite.IntegrityError as exc:
@@ -897,6 +1877,16 @@ class SQLiteProjectRepository:
                     subject_id=view_id,
                     session_id=view.source_session_id,
                     label=view.title,
+                    investigations=(
+                        [
+                            ProjectInvestigationRef(
+                                session_id=view.source_session_id,
+                                investigation_id=view.investigation_id,
+                            )
+                        ]
+                        if view.investigation_id is not None
+                        else []
+                    ),
                 )
                 await db.commit()
             except BaseException:
@@ -904,7 +1894,12 @@ class SQLiteProjectRepository:
                 raise
 
     async def list_activity(
-        self, project_id: str, *, limit: int = 50, offset: int = 0
+        self,
+        project_id: str,
+        *,
+        investigation: ProjectInvestigationRef | None = None,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[ProjectActivity]:
         if not 1 <= limit <= 500 or offset < 0:
             raise ValueError("limit must be between 1 and 500 and offset must be non-negative")
@@ -913,11 +1908,29 @@ class SQLiteProjectRepository:
             project = await db.execute("SELECT id FROM projects WHERE id = ?", (project_id,))
             if await project.fetchone() is None:
                 raise NotFoundError(f"Project '{project_id}' was not found")
-            cursor = await db.execute(
-                "SELECT data FROM project_activity WHERE project_id = ? "
-                "ORDER BY occurred_at DESC, id LIMIT ? OFFSET ?",
-                (project_id, limit, offset),
-            )
+            if investigation is None:
+                cursor = await db.execute(
+                    "SELECT data FROM project_activity WHERE project_id = ? "
+                    "ORDER BY occurred_at DESC, id LIMIT ? OFFSET ?",
+                    (project_id, limit, offset),
+                )
+            else:
+                cursor = await db.execute(
+                    "SELECT activity.data FROM project_activity AS activity "
+                    "WHERE activity.project_id = ? AND EXISTS ("
+                    "SELECT 1 FROM project_activity_investigations AS reference "
+                    "WHERE reference.project_id = activity.project_id "
+                    "AND reference.activity_id = activity.id "
+                    "AND reference.session_id = ? AND reference.investigation_id = ?"
+                    ") ORDER BY activity.occurred_at DESC, activity.id LIMIT ? OFFSET ?",
+                    (
+                        project_id,
+                        investigation.session_id,
+                        investigation.investigation_id,
+                        limit,
+                        offset,
+                    ),
+                )
             rows = await cursor.fetchall()
         return [ProjectActivity.model_validate_json(row["data"]) for row in rows]
 

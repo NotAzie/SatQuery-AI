@@ -1,5 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -80,10 +81,14 @@ function dataFor(investigationId: string, evidenceId: string) {
 describe("investigation comparison", () => {
   it("presents Engine reports, source IDs, evidence IDs, and journal context without synthesis", () => {
     const markup = renderToStaticMarkup(
-      createElement(InvestigationComparisonColumn, {
-        side: "First",
-        data: dataFor("investigation-1", "evidence-1"),
-      }),
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(InvestigationComparisonColumn, {
+          side: "First",
+          data: dataFor("investigation-1", "evidence-1"),
+        }),
+      ),
     );
 
     expect(markup).toContain("Report for investigation-1");

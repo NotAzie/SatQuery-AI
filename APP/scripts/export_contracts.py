@@ -63,13 +63,28 @@ from earth_platform.projects.models import (
     ProjectCreate,
     ProjectEarthView,
     ProjectEarthViewCreate,
+    ProjectInvestigationCollection,
+    ProjectInvestigationCollectionCreate,
+    ProjectInvestigationCollectionMemberUpdate,
+    ProjectInvestigationCollectionUpdate,
     ProjectInvestigationComparison,
     ProjectInvestigationComparisonCreate,
     ProjectInvestigationRef,
+    ProjectInvestigationRelationship,
+    ProjectInvestigationRelationshipCreate,
+    ProjectInvestigationTemplate,
+    ProjectInvestigationTemplateCreate,
+    ProjectInvestigationTemplateRun,
+    ProjectInvestigationTemplateRunUpdate,
+    ProjectInvestigationTemplateStep,
+    ProjectInvestigationTemplateStepCreate,
+    ProjectInvestigationTemplateUpdate,
     ProjectMonitoringLink,
     ProjectNote,
     ProjectNoteCreate,
     ProjectNoteUpdate,
+    ProjectSearchHit,
+    ProjectSearchResponse,
     ProjectSessionLink,
     ProjectUpdate,
 )
@@ -146,11 +161,26 @@ class Contracts(BaseModel):
     project_activity: ProjectActivity
     project_create: ProjectCreate
     project_investigation_ref: ProjectInvestigationRef
+    project_investigation_relationship: ProjectInvestigationRelationship
+    project_investigation_relationship_create: ProjectInvestigationRelationshipCreate
+    project_investigation_collection: ProjectInvestigationCollection
+    project_investigation_collection_create: ProjectInvestigationCollectionCreate
+    project_investigation_collection_member_update: ProjectInvestigationCollectionMemberUpdate
+    project_investigation_collection_update: ProjectInvestigationCollectionUpdate
+    project_investigation_template: ProjectInvestigationTemplate
+    project_investigation_template_create: ProjectInvestigationTemplateCreate
+    project_investigation_template_run: ProjectInvestigationTemplateRun
+    project_investigation_template_run_update: ProjectInvestigationTemplateRunUpdate
+    project_investigation_template_step: ProjectInvestigationTemplateStep
+    project_investigation_template_step_create: ProjectInvestigationTemplateStepCreate
+    project_investigation_template_update: ProjectInvestigationTemplateUpdate
     project_investigation_comparison: ProjectInvestigationComparison
     project_investigation_comparison_create: ProjectInvestigationComparisonCreate
     project_note: ProjectNote
     project_note_create: ProjectNoteCreate
     project_note_update: ProjectNoteUpdate
+    project_search_hit: ProjectSearchHit
+    project_search_response: ProjectSearchResponse
     project_monitoring_link: ProjectMonitoringLink
     project_earth_view: ProjectEarthView
     project_earth_view_create: ProjectEarthViewCreate
@@ -178,7 +208,13 @@ def _require_defaulted_fields(schema: dict) -> None:
         if name == "ProjectEarthViewCreate":
             definition["required"] = ["source_bookmark_id", "source_session_id", "title"]
             continue
-        if name in {"EngineMonitoringScheduleUpdate", "ProjectUpdate", "ProjectNoteUpdate"}:
+        if name in {
+            "EngineMonitoringScheduleUpdate",
+            "ProjectUpdate",
+            "ProjectNoteUpdate",
+            "ProjectInvestigationCollectionUpdate",
+            "ProjectInvestigationTemplateUpdate",
+        }:
             definition["required"] = ["expected_revision"]
             continue
         if name == "ImagePart":

@@ -25,6 +25,7 @@ from .backends.hf_practical import PracticalVisionFactory
 from .backends.rsvlm import RSVLMVision
 from .backends.geochat import GeoChatVision
 from .agent import AgentTurnService
+from .agent_openai import OpenAIChatAgentModel
 from .config import Settings, get_settings
 from .errors import (
     QueryError,
@@ -124,6 +125,12 @@ class SatQueryEngine:
                 self.platform_runtime.config.agent.model_timeout_seconds
             ),
         )
+        hosted_agent = OpenAIChatAgentModel.from_environment()
+        if hosted_agent is not None:
+            self.platform_registries.reasoners.register(
+                hosted_agent.model_id,
+                hosted_agent,
+            )
         self.connector_manager = self.platform_runtime.connector_manager
         self._practical = PracticalVisionFactory(self.registry, self.settings)
         self._rsvlm: Optional[RSVLMVision] = None

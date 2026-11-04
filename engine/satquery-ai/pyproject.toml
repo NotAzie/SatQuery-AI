@@ -26,9 +26,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Required to answer any question about an image. Kept separate so that the
-# service, the CLI, and `satquery doctor` all install and run on a machine
-# that does not yet have torch, and can report what is missing.
+# Required by legacy Engine-local image-analysis models. Kept separate so that
+# the service and CLI work without torch; hosted Agent vision uses the selected
+# Agent adapter and does not depend on these local model packages.
 vision = ["torch>=2.1", "transformers>=4.38"]
 large = ["accelerate", "sentencepiece"]
 dev = ["pytest>=8.0"]

@@ -18,5 +18,8 @@ export default defineConfig({
       "/readyz": apiProxyTarget,
     },
   },
-  test: { environment: "node", include: ["src/**/*.test.ts", "tests/**/*.test.ts"] },
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.{ts,tsx}"],
+  },
 });

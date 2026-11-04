@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "@/services/api/client";
@@ -22,12 +22,16 @@ import {
   listProjectViews,
   listUnlinkedSessions,
   restoreProjectEarthView,
+  searchProject,
   updateProjectNote,
   updateProject,
   unlinkProjectMonitoringSchedule,
 } from "@/services/api/projects";
 import { listMonitoringRuns, listMonitoringSchedules } from "@/services/api/monitoring";
 import { imageContentUrl } from "@/services/api/vision";
+import { InvestigationRelationships } from "@/features/projects/InvestigationRelationships";
+import { InvestigationCollections } from "@/features/projects/InvestigationCollections";
+import { InvestigationTemplates } from "@/features/projects/InvestigationTemplates";
 import type {
   Project,
   ProjectActivity,
@@ -37,6 +41,7 @@ import type {
   ProjectNote,
   ProjectMonitoringLink,
   ProjectSessionLink,
+  ProjectSearchHit,
   Session,
   EngineMonitoringRun,
   EngineMonitoringSchedule,
@@ -44,6 +49,24 @@ import type {
 import { useSessionStore } from "@/state/sessionStore";
 
 const PROJECT_PAGE_SIZE = 50;
+
+function getProjectSearchHref(projectId: string, hit: ProjectSearchHit): string {
+  if (hit.kind === "project") return "#project-header";
+  if (hit.kind === "comparison") {
+    return `/p/${encodeURIComponent(projectId)}/comparisons/${encodeURIComponent(hit.id)}`;
+  }
+  if (hit.kind === "investigation_template") return "#project-investigation-templates";
+  if (hit.kind === "investigation_collection") return "#project-investigation-collections";
+  if (hit.kind === "session" && hit.session_id) {
+    return `/s/${encodeURIComponent(hit.session_id)}`;
+  }
+  if (hit.session_id && hit.investigation_id) {
+    return `/p/${encodeURIComponent(projectId)}/investigations/${encodeURIComponent(hit.session_id)}/${encodeURIComponent(hit.investigation_id)}`;
+  }
+  if (hit.session_id) return `/s/${encodeURIComponent(hit.session_id)}`;
+  if (hit.kind === "relationship") return "#project-investigation-relationships";
+  return hit.kind === "note" ? "#project-notes" : "#project-earth-views";
+}
 
 const PROJECT_ACTIVITY_LABELS: Record<ProjectActivity["action"], string> = {
   "project.created": "Project created",
@@ -58,18 +81,35 @@ const PROJECT_ACTIVITY_LABELS: Record<ProjectActivity["action"], string> = {
   "earth_view.deleted": "Earth view deleted",
   "investigation_comparison.created": "Investigation comparison saved",
   "investigation_comparison.deleted": "Investigation comparison removed",
+  "investigation_relationship.created": "Investigation relationship recorded",
+  "investigation_relationship.deleted": "Investigation relationship removed",
+  "investigation_collection.created": "Investigation collection created",
+  "investigation_collection.updated": "Investigation collection updated",
+  "investigation_collection.deleted": "Investigation collection deleted",
+  "investigation_collection.member_added": "Investigation added to a collection",
+  "investigation_collection.member_removed": "Investigation removed from a collection",
+  "investigation_template.created": "Investigation template saved",
+  "investigation_template.updated": "Investigation template revised",
+  "investigation_template.deleted": "Investigation template removed",
+  "investigation_template.applied": "Investigation template applied",
+  "investigation_template_run.updated": "Template workflow progress updated",
   "monitoring.linked": "Monitoring schedule linked",
   "monitoring.unlinked": "Monitoring schedule unlinked",
 };
 
 export function ProjectRoute() {
   const { projectId = "" } = useParams();
+  return <ProjectWorkspace key={projectId} projectId={projectId} />;
+}
+
+function ProjectWorkspace({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
   const [sessions, setSessions] = useState<ProjectSessionLink[]>([]);
   const [investigations, setInvestigations] = useState<ProjectInvestigationRef[]>([]);
   const [comparisons, setComparisons] = useState<ProjectInvestigationComparison[]>([]);
   const [activity, setActivity] = useState<ProjectActivity[]>([]);
+  const [activityInvestigationKey, setActivityInvestigationKey] = useState("");
   const [monitoringLinks, setMonitoringLinks] = useState<ProjectMonitoringLink[]>([]);
   const [monitoringSchedules, setMonitoringSchedules] = useState<EngineMonitoringSchedule[]>([]);
   const [monitoringRuns, setMonitoringRuns] = useState<
@@ -112,6 +152,19 @@ export function ProjectRoute() {
   const [linkingMonitoring, setLinkingMonitoring] = useState(false);
   const [loadingMonitoringRuns, setLoadingMonitoringRuns] = useState<string | null>(null);
   const [monitoringSchedulesLoading, setMonitoringSchedulesLoading] = useState(true);
+  const [projectSearchQuery, setProjectSearchQuery] = useState("");
+  const [searchedProjectQuery, setSearchedProjectQuery] = useState("");
+  const [projectSearchResults, setProjectSearchResults] = useState<ProjectSearchHit[]>([]);
+  const [projectSearchTotal, setProjectSearchTotal] = useState(0);
+  const [projectSearchLoading, setProjectSearchLoading] = useState(false);
+  const [projectSearchLoadingMore, setProjectSearchLoadingMore] = useState(false);
+  const [projectSearchError, setProjectSearchError] = useState<string | null>(null);
+  const projectSearchController = useRef<AbortController | null>(null);
+  const activityInvestigation = investigations.find(
+    (reference) =>
+      JSON.stringify([reference.session_id, reference.investigation_id]) ===
+      activityInvestigationKey,
+  );
   const [hasMoreMonitoringLinks, setHasMoreMonitoringLinks] = useState(false);
   const sortedMonitoringSchedules = [...monitoringSchedules].sort(
     (left, right) =>
@@ -120,6 +173,80 @@ export function ProjectRoute() {
   const linkedMonitoringScheduleIds = new Set(
     monitoringLinks.map((link) => link.schedule_id),
   );
+
+  async function handleProjectSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (projectSearchLoading || projectSearchLoadingMore) return;
+    const query = projectSearchQuery.trim();
+    if (!query) {
+      setProjectSearchError("Enter a search term.");
+      return;
+    }
+    setProjectSearchLoading(true);
+    setProjectSearchError(null);
+    setSearchedProjectQuery("");
+    setProjectSearchResults([]);
+    setProjectSearchTotal(0);
+    projectSearchController.current?.abort();
+    const controller = new AbortController();
+    projectSearchController.current = controller;
+    try {
+      const response = await searchProject(
+        projectId,
+        query,
+        controller.signal,
+        PROJECT_PAGE_SIZE,
+        0,
+      );
+      if (controller.signal.aborted) return;
+      setSearchedProjectQuery(query);
+      setProjectSearchResults(response.results);
+      setProjectSearchTotal(response.total_count);
+    } catch (reason) {
+      if (controller.signal.aborted) return;
+      setProjectSearchError(
+        reason instanceof ApiError
+          ? reason.message
+          : "Could not search this Project's saved work.",
+      );
+    } finally {
+      if (!controller.signal.aborted) setProjectSearchLoading(false);
+    }
+  }
+
+  async function handleLoadMoreProjectSearch() {
+    if (!searchedProjectQuery || projectSearchLoadingMore) return;
+    setProjectSearchLoadingMore(true);
+    setProjectSearchError(null);
+    projectSearchController.current?.abort();
+    const controller = new AbortController();
+    projectSearchController.current = controller;
+    try {
+      const response = await searchProject(
+        projectId,
+        searchedProjectQuery,
+        controller.signal,
+        PROJECT_PAGE_SIZE,
+        projectSearchResults.length,
+      );
+      if (controller.signal.aborted) return;
+      setProjectSearchResults((current) => [...current, ...response.results]);
+      setProjectSearchTotal(response.total_count);
+    } catch (reason) {
+      if (controller.signal.aborted) return;
+      setProjectSearchError(
+        reason instanceof ApiError
+          ? reason.message
+          : "Could not load more Project search results.",
+      );
+    } finally {
+      if (!controller.signal.aborted) setProjectSearchLoadingMore(false);
+    }
+  }
+
+  useEffect(() => {
+    return () => projectSearchController.current?.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -414,7 +541,13 @@ export function ProjectRoute() {
 
   async function refreshProjectActivity() {
     try {
-      const current = await listProjectActivity(projectId, undefined, PROJECT_PAGE_SIZE);
+      const current = await listProjectActivity(
+        projectId,
+        undefined,
+        PROJECT_PAGE_SIZE,
+        0,
+        activityInvestigation,
+      );
       setActivity(current);
       setHasMoreActivity(current.length === PROJECT_PAGE_SIZE);
       setActivityError(null);
@@ -433,6 +566,7 @@ export function ProjectRoute() {
         undefined,
         PROJECT_PAGE_SIZE,
         activity.length,
+        activityInvestigation,
       );
       setActivity((current) => [...current, ...next]);
       setHasMoreActivity(next.length === PROJECT_PAGE_SIZE);
@@ -440,6 +574,37 @@ export function ProjectRoute() {
     } catch (reason) {
       setActivityError(
         reason instanceof ApiError ? reason.message : "Could not load more Project activity.",
+      );
+    } finally {
+      setActivityLoading(false);
+    }
+  }
+
+  async function handleActivityInvestigationChange(value: string) {
+    const selected = investigations.find(
+      (reference) =>
+        JSON.stringify([reference.session_id, reference.investigation_id]) === value,
+    );
+    setActivityInvestigationKey(value);
+    setActivity([]);
+    setHasMoreActivity(false);
+    setActivityLoading(true);
+    setActivityError(null);
+    try {
+      const current = await listProjectActivity(
+        projectId,
+        undefined,
+        PROJECT_PAGE_SIZE,
+        0,
+        selected,
+      );
+      setActivity(current);
+      setHasMoreActivity(current.length === PROJECT_PAGE_SIZE);
+    } catch (reason) {
+      setActivityError(
+        reason instanceof ApiError
+          ? reason.message
+          : "Could not load the investigation timeline.",
       );
     } finally {
       setActivityLoading(false);
@@ -767,6 +932,7 @@ export function ProjectRoute() {
 
   return (
     <section
+      id="project-header"
       aria-label={`${project.title} Project`}
       className="pointer-events-auto absolute right-4 top-4 max-h-[min(60vh,40rem)] w-[min(28rem,calc(100%-2rem))] overflow-y-auto rounded-2xl border border-white/10 bg-surface p-5 shadow-2xl shadow-black/40 backdrop-blur-xl"
     >
@@ -843,6 +1009,74 @@ export function ProjectRoute() {
       )}
       <div className="mt-5 border-t border-white/10 pt-4">
         <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-ink-dim">
+          Search Project work
+        </h3>
+        <p className="mt-2 text-[10px] leading-4 text-ink-dim">
+          Search saved notes, Earth views, comparisons, collections, sessions, and Project details.
+          Engine-authored scientific content is not searched or reinterpreted here.
+        </p>
+        <form onSubmit={(event) => void handleProjectSearch(event)} className="mt-3 flex gap-2">
+          <input
+            aria-label="Search Project work"
+            type="search"
+            maxLength={200}
+            value={projectSearchQuery}
+            onChange={(event) => setProjectSearchQuery(event.target.value)}
+            placeholder="Search notes, places, or IDs..."
+            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-ink outline-none focus:border-accent/60"
+          />
+          <button
+            type="submit"
+            disabled={projectSearchLoading || projectSearchLoadingMore}
+            className="rounded-lg border border-white/10 px-3 py-2 text-xs text-ink disabled:opacity-50"
+          >
+            {projectSearchLoading ? "Searching..." : "Search"}
+          </button>
+        </form>
+        {projectSearchError && (
+          <p className="mt-2 text-xs text-rose-200" role="alert">
+            {projectSearchError}
+          </p>
+        )}
+        {searchedProjectQuery && !projectSearchLoading && (
+          <p className="mt-2 text-[10px] text-ink-dim" role="status">
+            {projectSearchTotal} saved {projectSearchTotal === 1 ? "record" : "records"} for
+            {" "}{searchedProjectQuery}
+          </p>
+        )}
+        {projectSearchResults.length > 0 && (
+          <ul className="mt-2 space-y-2">
+            {projectSearchResults.map((hit) => (
+              <li key={`${hit.kind}:${hit.id}`} className="rounded-lg bg-black/20 p-3">
+                <Link
+                  to={getProjectSearchHref(projectId, hit)}
+                  className="break-words text-xs font-medium text-accent hover:text-ink"
+                >
+                  {hit.title}
+                </Link>
+                <p className="mt-1 break-words text-[10px] leading-4 text-ink-dim">
+                  {hit.summary}
+                </p>
+                <p className="mt-1 text-[9px] text-ink-dim">
+                  {hit.kind.replace("_", " ")} · Matched: {hit.matched_terms.join(", ")}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+        {projectSearchResults.length < projectSearchTotal && (
+          <button
+            type="button"
+            onClick={() => void handleLoadMoreProjectSearch()}
+            disabled={projectSearchLoadingMore}
+            className="mt-2 text-xs text-ink-dim hover:text-ink disabled:opacity-50"
+          >
+            {projectSearchLoadingMore ? "Loading..." : "Load more search results"}
+          </button>
+        )}
+      </div>
+      <div className="mt-5 border-t border-white/10 pt-4">
+        <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-ink-dim">
           Investigations
         </h3>
         {catalogLoading ? (
@@ -891,6 +1125,26 @@ export function ProjectRoute() {
           </ul>
         )}
       </div>
+      {!catalogLoading && !catalogError && (
+        <InvestigationRelationships
+          projectId={projectId}
+          investigations={investigations}
+          sessions={sessions}
+          archived={project.archived}
+        />
+      )}
+      <InvestigationCollections
+        projectId={projectId}
+        investigations={investigations}
+        sessions={sessions}
+        archived={project.archived}
+        onActivityChange={() => void refreshProjectActivity()}
+      />
+      <InvestigationTemplates
+        projectId={projectId}
+        archived={project.archived}
+        onActivityChange={() => void refreshProjectActivity()}
+      />
       <div className="mt-5 border-t border-white/10 pt-4">
         <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-ink-dim">
           Investigation comparisons
@@ -1034,15 +1288,43 @@ export function ProjectRoute() {
       </div>
       <div className="mt-5 border-t border-white/10 pt-4">
         <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-ink-dim">
-          Project timeline
+          Investigation timeline
         </h3>
         <p className="mt-2 text-[10px] leading-4 text-ink-dim">
-          Ordered Platform actions are recorded alongside the Engine journals above. Session
-          messages are not treated as scientific events.
+          Filter durable Project actions by an explicitly linked Engine investigation. These are
+          Platform workflow events; session messages are not treated as scientific events.
         </p>
+        {investigations.length > 0 && (
+          <label className="mt-3 grid max-w-xl gap-1 text-[10px] text-ink-dim">
+            Investigation
+            <select
+              aria-label="Filter investigation timeline"
+              value={activityInvestigationKey}
+              onChange={(event) => void handleActivityInvestigationChange(event.target.value)}
+              disabled={activityLoading}
+              className="rounded-lg border border-white/10 bg-black/20 px-2 py-2 text-xs text-ink disabled:opacity-50"
+            >
+              <option value="">All Project activity</option>
+              {investigations.map((reference) => {
+                const key = JSON.stringify([
+                  reference.session_id,
+                  reference.investigation_id,
+                ]);
+                const sessionTitle =
+                  sessions.find((item) => item.session_id === reference.session_id)?.session
+                    .title || reference.session_id;
+                return (
+                  <option key={key} value={key}>
+                    {reference.investigation_id} · {sessionTitle}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+        )}
         {activityError ? (
           <div className="mt-3 text-xs text-rose-200" role="alert">
-            <p>Project activity could not be loaded: {activityError}</p>
+            <p>Investigation timeline could not be loaded: {activityError}</p>
             <button
               type="button"
               onClick={() => void refreshProjectActivity()}
@@ -1051,8 +1333,12 @@ export function ProjectRoute() {
               Retry
             </button>
           </div>
+        ) : activityLoading && activity.length === 0 ? (
+          <p className="mt-3 text-sm text-ink-dim" role="status">
+            Loading investigation timeline...
+          </p>
         ) : activity.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-dim">No Project activity has been recorded.</p>
+          <p className="mt-3 text-sm text-ink-dim">No matching Project activity has been recorded.</p>
         ) : (
           <ol className="mt-3 space-y-2">
             {activity.map((item) => {
@@ -1087,6 +1373,20 @@ export function ProjectRoute() {
                         Session reference {item.session_id}
                       </p>
                     ))}
+                  {item.investigations.length > 0 && (
+                    <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[10px]">
+                      <span className="text-ink-dim">Investigations:</span>
+                      {item.investigations.map((reference) => (
+                        <Link
+                          key={`${reference.session_id}:${reference.investigation_id}`}
+                          to={`/p/${encodeURIComponent(projectId)}/investigations/${encodeURIComponent(reference.session_id)}/${encodeURIComponent(reference.investigation_id)}`}
+                          className="break-all text-accent hover:text-ink"
+                        >
+                          {reference.investigation_id}
+                        </Link>
+                      ))}
+                    </p>
+                  )}
                 </li>
               );
             })}
@@ -1249,7 +1549,7 @@ export function ProjectRoute() {
           </button>
         )}
       </div>
-      <div className="mt-5 border-t border-white/10 pt-4">
+      <div id="project-notes" className="mt-5 border-t border-white/10 pt-4">
         <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-ink-dim">
           Project notes
         </h3>
@@ -1381,7 +1681,7 @@ export function ProjectRoute() {
           </button>
         )}
       </div>
-      <div className="mt-5 border-t border-white/10 pt-4">
+      <div id="project-earth-views" className="mt-5 border-t border-white/10 pt-4">
         <h3 className="text-xs font-medium uppercase tracking-[0.14em] text-ink-dim">
           Saved Earth views
         </h3>

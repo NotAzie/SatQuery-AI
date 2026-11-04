@@ -6,7 +6,14 @@ from earth_platform.projects.models import (
     Project,
     ProjectActivity,
     ProjectEarthView,
+    ProjectInvestigationCollection,
+    ProjectInvestigationCollectionMemberUpdate,
     ProjectInvestigationComparison,
+    ProjectInvestigationRef,
+    ProjectInvestigationRelationship,
+    ProjectInvestigationTemplate,
+    ProjectInvestigationTemplateRun,
+    ProjectInvestigationTemplateRunUpdate,
     ProjectMonitoringLink,
     ProjectNote,
     ProjectSessionLink,
@@ -46,6 +53,67 @@ class ProjectRepository(Protocol):
     async def delete_investigation_comparison(
         self, project_id: str, comparison_id: str
     ) -> None: ...
+    async def create_investigation_relationship(
+        self, project_id: str, relationship: ProjectInvestigationRelationship
+    ) -> ProjectInvestigationRelationship: ...
+    async def list_investigation_relationships(
+        self, project_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[ProjectInvestigationRelationship]: ...
+    async def delete_investigation_relationship(
+        self, project_id: str, relationship_id: str
+    ) -> None: ...
+    async def create_investigation_collection(
+        self, collection: ProjectInvestigationCollection
+    ) -> ProjectInvestigationCollection: ...
+    async def get_investigation_collection(
+        self, project_id: str, collection_id: str
+    ) -> ProjectInvestigationCollection: ...
+    async def list_investigation_collections(
+        self, project_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[ProjectInvestigationCollection]: ...
+    async def update_investigation_collection(
+        self,
+        collection: ProjectInvestigationCollection,
+        *,
+        expected_revision: int,
+    ) -> ProjectInvestigationCollection: ...
+    async def update_investigation_collection_members(
+        self,
+        project_id: str,
+        collection_id: str,
+        update: ProjectInvestigationCollectionMemberUpdate,
+    ) -> ProjectInvestigationCollection: ...
+    async def delete_investigation_collection(
+        self, project_id: str, collection_id: str
+    ) -> None: ...
+    async def create_investigation_template(
+        self, template: ProjectInvestigationTemplate
+    ) -> ProjectInvestigationTemplate: ...
+    async def list_investigation_templates(
+        self, project_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[ProjectInvestigationTemplate]: ...
+    async def get_investigation_template(
+        self, project_id: str, template_id: str
+    ) -> ProjectInvestigationTemplate: ...
+    async def update_investigation_template(
+        self,
+        template: ProjectInvestigationTemplate,
+        *,
+        expected_revision: int,
+    ) -> ProjectInvestigationTemplate: ...
+    async def delete_investigation_template(self, project_id: str, template_id: str) -> None: ...
+    async def apply_investigation_template(
+        self, project_id: str, template_id: str
+    ) -> ProjectInvestigationTemplateRun: ...
+    async def list_investigation_template_runs(
+        self, project_id: str, *, limit: int = 50, offset: int = 0
+    ) -> list[ProjectInvestigationTemplateRun]: ...
+    async def update_investigation_template_run(
+        self,
+        project_id: str,
+        run_id: str,
+        update: ProjectInvestigationTemplateRunUpdate,
+    ) -> ProjectInvestigationTemplateRun: ...
     async def create_note(self, project_id: str, note: ProjectNote) -> ProjectNote: ...
     async def get_note(self, project_id: str, note_id: str) -> ProjectNote: ...
     async def list_notes(
@@ -80,7 +148,12 @@ class ProjectRepository(Protocol):
     ) -> list[ProjectEarthView]: ...
     async def delete_view(self, project_id: str, view_id: str) -> None: ...
     async def list_activity(
-        self, project_id: str, *, limit: int = 50, offset: int = 0
+        self,
+        project_id: str,
+        *,
+        investigation: ProjectInvestigationRef | None = None,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[ProjectActivity]: ...
     async def link_monitoring_schedule(
         self, project_id: str, schedule_id: str, mission_id: str

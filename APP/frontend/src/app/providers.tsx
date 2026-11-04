@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 
-import { EarthProvider } from "@/earth";
+import { EarthProvider } from "@/earth/EarthProvider";
 import { AgentChat } from "@/features/chat/AgentChat";
 import { SessionSidebar } from "@/features/sessions/SessionSidebar";
 import { TimelinePanel } from "@/features/timeline/TimelinePanel";

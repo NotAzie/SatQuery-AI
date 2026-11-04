@@ -321,6 +321,13 @@ def test_project_investigation_comparison_validates_and_persists_references(tmp_
         ]
         assert client.get(comparisons_url).json() == [comparison]
         assert client.get(f"{comparisons_url}/{comparison['id']}").json() == comparison
+        comparison_search = client.get(
+            f"/api/v1/projects/{project['id']}/search",
+            params={"query": "investigation-left"},
+        )
+        assert comparison_search.status_code == 200
+        assert comparison_search.json()["results"][0]["kind"] == "comparison"
+        assert comparison_search.json()["results"][0]["id"] == comparison["id"]
 
         engine_result = client.get(
             f"{comparisons_url}/{comparison['id']}/engine-result"
@@ -576,6 +583,16 @@ def test_project_view_api_snapshots_linked_session_bookmarks(tmp_path):
                 "source_session_id": session_id,
             },
         ).json() == [view]
+        view_search = client.get(
+            f"/api/v1/projects/{project['id']}/search",
+            params={"query": "distance"},
+        )
+        assert view_search.status_code == 200
+        assert {item["kind"] for item in view_search.json()["results"]} == {"earth_view"}
+        assert {item["id"] for item in view_search.json()["results"]} == {
+            view["id"],
+            unscoped.json()["id"],
+        }
         assert (
             client.get(views_url, params={"investigation_id": "investigation-1"}).status_code == 422
         )
@@ -707,6 +724,28 @@ def test_project_investigation_route_requires_project_session_ownership(tmp_path
         assert (
             client.get(note_url, params={"investigation_id": "investigation-1"}).status_code == 422
         )
+        note = scoped_note.json()
+        updated_note = client.patch(
+            f"{note_url}/{note['id']}",
+            json={"expected_revision": note["revision"], "title": "Boundary review"},
+        )
+        assert updated_note.status_code == 200
+        assert client.delete(f"{note_url}/{note['id']}").status_code == 204
+        timeline = client.get(
+            f"/api/v1/projects/{project['id']}/activity",
+            params={"investigation_id": "investigation-1", "session_id": session_id},
+        )
+        note_events = [event for event in timeline.json() if event["subject_id"] == note["id"]]
+        assert {event["action"] for event in note_events} == {
+            "note.created",
+            "note.updated",
+            "note.deleted",
+        }
+        assert all(
+            event["investigations"]
+            == [{"investigation_id": "investigation-1", "session_id": session_id}]
+            for event in note_events
+        )
         assert (
             client.post(
                 note_url,
@@ -719,3 +758,531 @@ def test_project_investigation_route_requires_project_session_ownership(tmp_path
             ).status_code
             == 404
         )
+
+
+def test_project_investigation_relationships_are_explicit_and_session_validated(tmp_path):
+    settings = Settings(
+        _env_file=None,
+        sessions=SessionSettings(dsn=str(tmp_path / "platform.sqlite3")),
+    )
+    app = create_app(settings)
+    runtime = InvestigationRuntimeStub(
+        {
+            "source-session": ["source-investigation"],
+            "target-session": ["target-investigation"],
+            "other-session": ["other-investigation"],
+        }
+    )
+    app.dependency_overrides[get_agent_runtime] = lambda: runtime
+    with TestClient(app) as client:
+        project = client.post(
+            "/api/v1/projects",
+            json={"title": "Relationship workspace"},
+        ).json()
+        other_project = client.post(
+            "/api/v1/projects",
+            json={"title": "Other workspace"},
+        ).json()
+        source_session_id = client.post(
+            f"/api/v1/projects/{project['id']}/sessions", json={}
+        ).json()["session_id"]
+        target_session_id = client.post(
+            f"/api/v1/projects/{project['id']}/sessions", json={}
+        ).json()["session_id"]
+        other_session_id = client.post(
+            f"/api/v1/projects/{other_project['id']}/sessions", json={}
+        ).json()["session_id"]
+        store = app.state.container.sessions.sessions
+        for session_id in (source_session_id, target_session_id, other_session_id):
+            asyncio.run(
+                store.mutate(
+                    session_id,
+                    lambda session, engine_id=f"engine-{session_id}": setattr(
+                        session, "engine_agent_session_id", engine_id
+                    ),
+                )
+            )
+        runtime.investigation_ids_by_session = {
+            source_session_id: ["source-investigation"],
+            target_session_id: ["target-investigation"],
+            other_session_id: ["other-investigation"],
+        }
+        url = f"/api/v1/projects/{project['id']}/investigation-relationships"
+        request = {
+            "from_investigation": {
+                "investigation_id": "source-investigation",
+                "session_id": source_session_id,
+            },
+            "to_investigation": {
+                "investigation_id": "target-investigation",
+                "session_id": target_session_id,
+            },
+            "relationship_type": "follow_up_to",
+            "rationale": "Revisit the same user-declared focus area in a later session.",
+        }
+        created = client.post(url, json=request)
+        assert created.status_code == 201
+        relationship = created.json()
+        assert relationship["from_investigation"] == request["from_investigation"]
+        assert relationship["to_investigation"] == request["to_investigation"]
+        assert relationship["rationale"] == request["rationale"]
+        assert client.get(url).json() == [relationship]
+        activity_url = f"/api/v1/projects/{project['id']}/activity"
+        timeline = client.get(
+            activity_url,
+            params={
+                "investigation_id": "target-investigation",
+                "session_id": target_session_id,
+            },
+        )
+        assert timeline.status_code == 200
+        matching = [
+            item
+            for item in timeline.json()
+            if item["action"] == "investigation_relationship.created"
+        ]
+        assert len(matching) == 1
+        assert matching[0]["investigations"] == [
+            request["from_investigation"],
+            request["to_investigation"],
+        ]
+        assert client.get(
+            activity_url,
+            params={"investigation_id": "target-investigation"},
+        ).status_code == 422
+        search = client.get(
+            f"/api/v1/projects/{project['id']}/search",
+            params={"query": "user declared"},
+        )
+        assert search.status_code == 200
+        assert search.json()["results"][0]["kind"] == "relationship"
+        assert search.json()["results"][0]["id"] == relationship["id"]
+        assert client.post(url, json=request).status_code == 409
+        assert client.delete(f"{url}/{relationship['id']}").status_code == 204
+        assert client.get(url).json() == []
+        deleted_timeline = client.get(
+            activity_url,
+            params={
+                "investigation_id": "target-investigation",
+                "session_id": target_session_id,
+            },
+        )
+        assert {
+            item["action"]
+            for item in deleted_timeline.json()
+            if item["subject_id"] == relationship["id"]
+        } == {
+            "investigation_relationship.created",
+            "investigation_relationship.deleted",
+        }
+
+        invalid_engine_reference = {
+            **request,
+            "to_investigation": {
+                "investigation_id": "not-in-transcript",
+                "session_id": target_session_id,
+            },
+        }
+        assert client.post(url, json=invalid_engine_reference).status_code == 404
+        invalid_project_reference = {
+            **request,
+            "to_investigation": {
+                "investigation_id": "other-investigation",
+                "session_id": other_session_id,
+            },
+        }
+        assert client.post(url, json=invalid_project_reference).status_code == 404
+        assert client.post(
+            url,
+            json={
+                **request,
+                "to_investigation": request["from_investigation"],
+            },
+        ).status_code == 422
+        assert client.post(url, json={**request, "rationale": "  "}).status_code == 422
+        assert client.delete(f"{url}/missing").status_code == 404
+
+        archived_project = client.patch(
+            f"/api/v1/projects/{project['id']}",
+            json={"expected_revision": 1, "archived": True},
+        ).json()
+        assert archived_project["archived"] is True
+        assert client.post(url, json=request).status_code == 409
+
+
+def test_project_investigation_collections_validate_members_and_preserve_provenance(tmp_path):
+    settings = Settings(
+        _env_file=None,
+        sessions=SessionSettings(dsn=str(tmp_path / "platform.sqlite3")),
+    )
+    app = create_app(settings)
+    runtime = InvestigationRuntimeStub(
+        {
+            "first-session": ["investigation-1"],
+            "second-session": ["investigation-2"],
+            "other-session": ["other-investigation"],
+        }
+    )
+    app.dependency_overrides[get_agent_runtime] = lambda: runtime
+    with TestClient(app) as client:
+        project = client.post(
+            "/api/v1/projects",
+            json={"title": "Campaign workspace"},
+        ).json()
+        other_project = client.post(
+            "/api/v1/projects",
+            json={"title": "Outside workspace"},
+        ).json()
+        first_session_id = client.post(
+            f"/api/v1/projects/{project['id']}/sessions", json={}
+        ).json()["session_id"]
+        second_session_id = client.post(
+            f"/api/v1/projects/{project['id']}/sessions", json={}
+        ).json()["session_id"]
+        other_session_id = client.post(
+            f"/api/v1/projects/{other_project['id']}/sessions", json={}
+        ).json()["session_id"]
+        store = app.state.container.sessions.sessions
+        for session_id in (first_session_id, second_session_id, other_session_id):
+            asyncio.run(
+                store.mutate(
+                    session_id,
+                    lambda session, engine_id=f"engine-{session_id}": setattr(
+                        session, "engine_agent_session_id", engine_id
+                    ),
+                )
+            )
+        runtime.investigation_ids_by_session = {
+            first_session_id: ["investigation-1"],
+            second_session_id: ["investigation-2"],
+            other_session_id: ["other-investigation"],
+        }
+
+        collections_url = (
+            f"/api/v1/projects/{project['id']}/investigation-collections"
+        )
+        created = client.post(
+            collections_url,
+            json={
+                "title": "Seasonal coastal campaign",
+                "description": "Explicitly curated project investigations.",
+            },
+        )
+        assert created.status_code == 201
+        collection = created.json()
+        assert client.get(collections_url).json() == [collection]
+        member_url = f"{collections_url}/{collection['id']}/members"
+        first_reference = {
+            "investigation_id": "investigation-1",
+            "session_id": first_session_id,
+        }
+        added = client.patch(
+            member_url,
+            json={
+                "expected_revision": collection["revision"],
+                "operation": "add",
+                "investigation": first_reference,
+            },
+        )
+        assert added.status_code == 200
+        collection = added.json()
+        assert collection["investigations"] == [first_reference]
+        assert collection["revision"] == 2
+        assert client.patch(
+            member_url,
+            json={
+                "expected_revision": collection["revision"],
+                "operation": "add",
+                "investigation": first_reference,
+            },
+        ).status_code == 409
+        assert client.patch(
+            member_url,
+            json={
+                "expected_revision": 1,
+                "operation": "remove",
+                "investigation": first_reference,
+            },
+        ).status_code == 409
+
+        invalid_transcript_reference = {
+            **first_reference,
+            "investigation_id": "not-in-transcript",
+        }
+        assert client.patch(
+            member_url,
+            json={
+                "expected_revision": collection["revision"],
+                "operation": "add",
+                "investigation": invalid_transcript_reference,
+            },
+        ).status_code == 404
+        assert client.patch(
+            member_url,
+            json={
+                "expected_revision": collection["revision"],
+                "operation": "add",
+                "investigation": {
+                    "investigation_id": "other-investigation",
+                    "session_id": other_session_id,
+                },
+            },
+        ).status_code == 404
+
+        renamed = client.patch(
+            f"{collections_url}/{collection['id']}",
+            json={
+                "expected_revision": collection["revision"],
+                "title": "2026 coastal campaign",
+                "description": "Updated researcher scope.",
+            },
+        )
+        assert renamed.status_code == 200
+        assert renamed.json()["revision"] == 3
+        assert client.patch(
+            f"{collections_url}/{collection['id']}",
+            json={"expected_revision": collection["revision"], "title": "Stale edit"},
+        ).status_code == 409
+
+        search = client.get(
+            f"/api/v1/projects/{project['id']}/search",
+            params={"query": "2026 coastal"},
+        )
+        assert search.status_code == 200
+        assert search.json()["results"][0]["kind"] == "investigation_collection"
+        assert search.json()["results"][0]["id"] == collection["id"]
+
+        activity_url = f"/api/v1/projects/{project['id']}/activity"
+        filtered_activity = client.get(
+            activity_url,
+            params={
+                "session_id": first_session_id,
+                "investigation_id": "investigation-1",
+            },
+        )
+        assert filtered_activity.status_code == 200
+        assert {
+            item["action"]
+            for item in filtered_activity.json()
+            if item["subject_id"] == collection["id"]
+        } == {
+            "investigation_collection.member_added",
+            "investigation_collection.updated",
+        }
+
+        removed = client.patch(
+            member_url,
+            json={
+                "expected_revision": renamed.json()["revision"],
+                "operation": "remove",
+                "investigation": first_reference,
+            },
+        )
+        assert removed.status_code == 200
+        assert removed.json()["investigations"] == []
+        restored = client.patch(
+            member_url,
+            json={
+                "expected_revision": removed.json()["revision"],
+                "operation": "add",
+                "investigation": first_reference,
+            },
+        )
+        assert restored.status_code == 200
+        assert client.delete(f"{collections_url}/{collection['id']}").status_code == 204
+        deleted_activity = client.get(
+            activity_url,
+            params={
+                "session_id": first_session_id,
+                "investigation_id": "investigation-1",
+            },
+        )
+        assert "investigation_collection.deleted" in {
+            item["action"] for item in deleted_activity.json()
+        }
+        assert client.get(collections_url).json() == []
+
+        archived_project = client.patch(
+            f"/api/v1/projects/{project['id']}",
+            json={"expected_revision": 1, "archived": True},
+        ).json()
+        assert archived_project["archived"] is True
+        archived_collection = client.post(
+            collections_url,
+            json={"title": "Archived group"},
+        )
+        assert archived_collection.status_code == 409
+
+
+def test_project_investigation_templates_create_apply_and_track_progress(tmp_path):
+    settings = Settings(
+        _env_file=None,
+        sessions=SessionSettings(dsn=str(tmp_path / "platform.sqlite3")),
+    )
+    with TestClient(create_app(settings)) as client:
+        project = client.post("/api/v1/projects", json={"title": "Repeatable work"}).json()
+        templates_url = f"/api/v1/projects/{project['id']}/investigation-templates"
+        created = client.post(
+            templates_url,
+            json={
+                "title": "Seasonal shoreline review",
+                "description": "A researcher-authored checklist.",
+                "steps": [
+                    {"title": "Record observation window"},
+                    {"title": "Review existing evidence"},
+                ],
+            },
+        )
+        assert created.status_code == 201
+        template = created.json()
+        assert client.get(templates_url).json() == [template]
+        search = client.get(
+            f"/api/v1/projects/{project['id']}/search",
+            params={"query": "observation window"},
+        )
+        assert search.status_code == 200
+        assert search.json()["results"][0]["kind"] == "investigation_template"
+        assert search.json()["results"][0]["id"] == template["id"]
+        applied = client.post(f"{templates_url}/{template['id']}/apply")
+        assert applied.status_code == 201
+        run = applied.json()
+        assert run["template_id"] == template["id"]
+        assert run["template_revision"] == template["revision"] == 1
+        assert run["template_title"] == template["title"]
+        assert run["session_id"]
+        assert all(not step["completed"] for step in run["steps"])
+        updated_template = client.patch(
+            f"{templates_url}/{template['id']}",
+            json={
+                "expected_revision": template["revision"],
+                "title": "Seasonal shoreline review v2",
+                "description": "Revised researcher checklist.",
+                "steps": [
+                    {"title": "Confirm the study area"},
+                    {"title": "Record the observation window"},
+                ],
+            },
+        )
+        assert updated_template.status_code == 200
+        assert updated_template.json()["revision"] == 2
+        assert updated_template.json()["steps"][0]["id"] != run["steps"][0]["id"]
+        assert run["template_title"] == template["title"]
+        assert run["template_revision"] == 1
+        assert client.patch(
+            f"{templates_url}/{template['id']}",
+            json={
+                "expected_revision": template["revision"],
+                "title": "Stale edit",
+            },
+        ).status_code == 409
+        session_links = client.get(f"/api/v1/projects/{project['id']}/sessions").json()
+        assert [link["session_id"] for link in session_links] == [run["session_id"]]
+
+        runs_url = f"/api/v1/projects/{project['id']}/investigation-template-runs"
+        assert client.get(runs_url).json() == [run]
+        progress_url = f"{runs_url}/{run['id']}"
+        updated = client.patch(
+            progress_url,
+            json={
+                "expected_revision": run["revision"],
+                "completed_step_ids": [run["steps"][0]["id"]],
+            },
+        )
+        assert updated.status_code == 200
+        assert updated.json()["steps"][0]["completed"] is True
+        assert updated.json()["revision"] == run["revision"] + 1
+        assert client.patch(
+            progress_url,
+            json={"expected_revision": run["revision"], "completed_step_ids": []},
+        ).status_code == 409
+        assert client.patch(
+            progress_url,
+            json={
+                "expected_revision": updated.json()["revision"],
+                "completed_step_ids": ["unknown"],
+            },
+        ).status_code == 409
+        second_run = client.post(f"{templates_url}/{template['id']}/apply")
+        assert second_run.status_code == 201
+        assert second_run.json()["template_revision"] == 2
+        assert second_run.json()["template_title"] == updated_template.json()["title"]
+        assert second_run.json()["steps"][0]["title"] == "Confirm the study area"
+        assert len(client.get(runs_url).json()) == 2
+        assert client.delete(f"{templates_url}/{template['id']}").status_code == 204
+        assert client.get(templates_url).json() == []
+        assert len(client.get(runs_url).json()) == 2
+        replacement = client.post(
+            templates_url,
+            json={
+                "title": "Archived check",
+                "steps": [{"title": "Confirm restrictions"}],
+            },
+        )
+        assert replacement.status_code == 201
+        archived = client.patch(
+            f"/api/v1/projects/{project['id']}",
+            json={"expected_revision": 1, "archived": True},
+        )
+        assert archived.status_code == 200
+        assert client.post(f"{templates_url}/{replacement.json()['id']}/apply").status_code == 409
+        assert client.post(
+            templates_url,
+            json={"title": "Not allowed", "steps": [{"title": "Step"}]},
+        ).status_code == 409
+
+
+def test_project_search_finds_saved_work_with_deterministic_ranking_and_paging(tmp_path):
+    settings = Settings(
+        _env_file=None,
+        sessions=SessionSettings(dsn=str(tmp_path / "platform.sqlite3")),
+    )
+    with TestClient(create_app(settings)) as client:
+        project = client.post(
+            "/api/v1/projects",
+            json={"title": "Coastal change"},
+        ).json()
+        other_project = client.post(
+            "/api/v1/projects",
+            json={"title": "Separate research"},
+        ).json()
+        session = client.post(
+            f"/api/v1/projects/{project['id']}/sessions",
+            json={"title": "Delta shoreline review"},
+        ).json()
+        note = client.post(
+            f"/api/v1/projects/{project['id']}/notes",
+            json={
+                "title": "Delta erosion",
+                "body": "Research note on measured shoreline retreat.",
+            },
+        ).json()
+        client.post(
+            f"/api/v1/projects/{other_project['id']}/notes",
+            json={"title": "Delta erosion", "body": "Different Project record."},
+        )
+
+        url = f"/api/v1/projects/{project['id']}/search"
+        first_page = client.get(url, params={"query": "delta erosion", "limit": 1})
+        second_page = client.get(
+            url,
+            params={"query": "delta erosion", "limit": 1, "offset": 1},
+        )
+        blank_query = client.get(url, params={"query": "   "})
+        missing_project = client.get(
+            "/api/v1/projects/missing/search",
+            params={"query": "delta"},
+        )
+
+    assert first_page.status_code == 200
+    result = first_page.json()
+    assert result["total_count"] == 2
+    assert result["results"][0]["kind"] == "note"
+    assert result["results"][0]["id"] == note["id"]
+    assert result["results"][0]["matched_terms"] == ["delta", "erosion"]
+    assert result["results"][0]["matched_fields"] == ["title", "content"]
+    assert result["results"][0]["score"] == 1
+    assert second_page.status_code == 200
+    assert second_page.json()["results"][0]["kind"] == "session"
+    assert second_page.json()["results"][0]["session_id"] == session["session_id"]
+    assert blank_query.status_code == 422
+    assert missing_project.status_code == 404

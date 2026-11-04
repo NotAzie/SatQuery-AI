@@ -1,11 +1,18 @@
+import json
 import sqlite3
 
 import pytest
 
 from earth_platform.projects.models import (
     Project,
+    ProjectInvestigationCollection,
+    ProjectInvestigationCollectionMemberUpdate,
     ProjectInvestigationComparison,
     ProjectInvestigationRef,
+    ProjectInvestigationRelationship,
+    ProjectInvestigationTemplate,
+    ProjectInvestigationTemplateRunUpdate,
+    ProjectInvestigationTemplateStep,
     ProjectNote,
 )
 from earth_platform.projects.sqlite import SQLiteProjectRepository
@@ -60,6 +67,351 @@ async def test_investigation_comparison_is_persisted_and_journaled(tmp_path):
     assert any(item.action == "investigation_comparison.deleted" for item in activity)
     await reopened_projects.aclose()
     await reopened_sessions.aclose()
+
+
+@pytest.mark.asyncio
+async def test_investigation_relationship_persists_and_journals_transactionally(tmp_path):
+    database = str(tmp_path / "platform.sqlite3")
+    sessions = SQLiteSessionStore(database)
+    projects = SQLiteProjectRepository(database)
+    await sessions.open()
+    await projects.open()
+    project = await projects.create(Project(title="Relationship archive"))
+    relationship = ProjectInvestigationRelationship(
+        project_id=project.id,
+        from_investigation=ProjectInvestigationRef(
+            investigation_id="investigation-1",
+            session_id="session-1",
+        ),
+        to_investigation=ProjectInvestigationRef(
+            investigation_id="investigation-2",
+            session_id="session-2",
+        ),
+        relationship_type="follow_up_to",
+        rationale="The second investigation revisits the same location one season later.",
+    )
+
+    saved = await projects.create_investigation_relationship(project.id, relationship)
+    with pytest.raises(ConflictError, match="already exists"):
+        await projects.create_investigation_relationship(project.id, relationship)
+    await projects.aclose()
+    await sessions.aclose()
+    with sqlite3.connect(database) as legacy_db:
+        rows = legacy_db.execute(
+            "SELECT id, data FROM project_activity"
+        ).fetchall()
+        for activity_id, payload in rows:
+            data = json.loads(payload)
+            if data["action"] == "investigation_relationship.created":
+                data.pop("investigations", None)
+                legacy_db.execute(
+                    "UPDATE project_activity SET data = ? WHERE id = ?",
+                    (json.dumps(data), activity_id),
+                )
+        legacy_db.execute("DELETE FROM project_activity_investigations")
+        legacy_db.execute(
+            "DELETE FROM project_migrations WHERE name = ?",
+            ("investigation_activity_provenance_v1",),
+        )
+
+    reopened = SQLiteProjectRepository(database)
+    await reopened.open()
+    assert await reopened.list_investigation_relationships(project.id) == [saved]
+    activity = await reopened.list_activity(project.id)
+    created_activity = [
+        item for item in activity if item.action == "investigation_relationship.created"
+    ]
+    assert len(created_activity) == 1
+    assert created_activity[0].investigations == [
+        relationship.from_investigation,
+        relationship.to_investigation,
+    ]
+    filtered_activity = await reopened.list_activity(
+        project.id,
+        investigation=relationship.to_investigation,
+    )
+    assert [item.action for item in filtered_activity] == [
+        "investigation_relationship.created"
+    ]
+    await reopened.delete_investigation_relationship(project.id, saved.id)
+    assert await reopened.list_investigation_relationships(project.id) == []
+    activity = await reopened.list_activity(project.id)
+    assert any(item.action == "investigation_relationship.deleted" for item in activity)
+    filtered_activity = await reopened.list_activity(
+        project.id,
+        investigation=relationship.to_investigation,
+    )
+    assert {item.action for item in filtered_activity} == {
+        "investigation_relationship.created",
+        "investigation_relationship.deleted",
+    }
+    with pytest.raises(NotFoundError):
+        await reopened.delete_investigation_relationship(project.id, saved.id)
+    await reopened.aclose()
+
+
+@pytest.mark.asyncio
+async def test_investigation_collection_is_revisioned_persisted_and_journaled(tmp_path):
+    database = str(tmp_path / "platform.sqlite3")
+    sessions = SQLiteSessionStore(database)
+    projects = SQLiteProjectRepository(database)
+    await sessions.open()
+    await projects.open()
+    project = await projects.create(Project(title="Campaign archive"))
+    collection = await projects.create_investigation_collection(
+        ProjectInvestigationCollection(
+            project_id=project.id,
+            title="Coastal change campaign",
+            description="Researcher-curated investigations across seasons.",
+        )
+    )
+    first_reference = ProjectInvestigationRef(
+        session_id="session-1",
+        investigation_id="investigation-1",
+    )
+    first_update = ProjectInvestigationCollectionMemberUpdate(
+        expected_revision=collection.revision,
+        operation="add",
+        investigation=first_reference,
+    )
+    collection = await projects.update_investigation_collection_members(
+        project.id, collection.id, first_update
+    )
+    assert collection.revision == 2
+    assert collection.investigations == [first_reference]
+    with pytest.raises(ConflictError, match="already in this collection"):
+        await projects.update_investigation_collection_members(
+            project.id, collection.id, first_update.model_copy(
+                update={"expected_revision": collection.revision}
+            )
+        )
+    with pytest.raises(ConflictError, match="changed by another request"):
+        await projects.update_investigation_collection_members(
+            project.id, collection.id, first_update
+        )
+
+    updated = collection.model_copy(
+        update={"title": "Coastal change campaign 2026", "updated_at": utcnow()}
+    )
+    collection = await projects.update_investigation_collection(
+        updated,
+        expected_revision=collection.revision,
+    )
+    assert collection.title.endswith("2026")
+    assert collection.revision == 3
+    second_reference = ProjectInvestigationRef(
+        session_id="session-2",
+        investigation_id="investigation-2",
+    )
+    collection = await projects.update_investigation_collection_members(
+        project.id,
+        collection.id,
+        ProjectInvestigationCollectionMemberUpdate(
+            expected_revision=collection.revision,
+            operation="add",
+            investigation=second_reference,
+        ),
+    )
+    await projects.aclose()
+    await sessions.aclose()
+
+    reopened = SQLiteProjectRepository(database)
+    await reopened.open()
+    assert await reopened.get_investigation_collection(project.id, collection.id) == collection
+    assert await reopened.list_investigation_collections(project.id) == [collection]
+    filtered_activity = await reopened.list_activity(
+        project.id,
+        investigation=first_reference,
+    )
+    assert {
+        item.action for item in filtered_activity
+    } == {
+        "investigation_collection.member_added",
+        "investigation_collection.updated",
+    }
+
+    removed = await reopened.update_investigation_collection_members(
+        project.id,
+        collection.id,
+        ProjectInvestigationCollectionMemberUpdate(
+            expected_revision=collection.revision,
+            operation="remove",
+            investigation=first_reference,
+        ),
+    )
+    assert removed.investigations == [second_reference]
+    await reopened.delete_investigation_collection(project.id, collection.id)
+    assert await reopened.list_investigation_collections(project.id) == []
+    with pytest.raises(NotFoundError):
+        await reopened.get_investigation_collection(project.id, collection.id)
+    deleted_events = [
+        item
+        for item in await reopened.list_activity(project.id)
+        if item.action == "investigation_collection.deleted"
+    ]
+    assert len(deleted_events) == 1
+    assert deleted_events[0].investigations == [second_reference]
+    await reopened.aclose()
+
+
+@pytest.mark.asyncio
+async def test_investigation_template_reuse_persists_snapshots_and_revision_checks(tmp_path):
+    database = str(tmp_path / "platform.sqlite3")
+    sessions = SQLiteSessionStore(database)
+    projects = SQLiteProjectRepository(database)
+    await sessions.open()
+    await projects.open()
+    project = await projects.create(Project(title="Campaign"))
+    template = ProjectInvestigationTemplate(
+        project_id=project.id,
+        title="Seasonal shoreline review",
+        description="Researcher-authored workflow",
+        steps=[
+            ProjectInvestigationTemplateStep(title="Record observation window"),
+            ProjectInvestigationTemplateStep(title="Review existing evidence"),
+        ],
+    )
+    saved = await projects.create_investigation_template(template)
+    assert await projects.list_investigation_templates(project.id) == [saved]
+    first_run = await projects.apply_investigation_template(project.id, saved.id)
+    second_run = await projects.apply_investigation_template(project.id, saved.id)
+    assert first_run.session_id != second_run.session_id
+    assert first_run.steps == second_run.steps
+    assert first_run.template_revision == saved.revision == 1
+    revised_template = await projects.update_investigation_template(
+        saved.model_copy(
+            update={
+                "title": "Seasonal shoreline review v2",
+                "steps": [
+                    ProjectInvestigationTemplateStep(title="Confirm the study area"),
+                    ProjectInvestigationTemplateStep(title="Record the observation window"),
+                ],
+                "updated_at": utcnow(),
+            }
+        ),
+        expected_revision=saved.revision,
+    )
+    assert revised_template.revision == 2
+    with pytest.raises(ConflictError, match="changed by another request"):
+        await projects.update_investigation_template(
+            saved.model_copy(update={"title": "Stale edit"}),
+            expected_revision=saved.revision,
+        )
+    third_run = await projects.apply_investigation_template(project.id, saved.id)
+    assert third_run.template_revision == revised_template.revision
+    assert third_run.template_title == revised_template.title
+    assert third_run.steps != first_run.steps
+    assert len(await projects.list_sessions(project.id)) == 3
+    await projects.aclose()
+    await sessions.aclose()
+    sessions = SQLiteSessionStore(database)
+    projects = SQLiteProjectRepository(database)
+    await sessions.open()
+    await projects.open()
+    assert await projects.list_investigation_templates(project.id) == [revised_template]
+    assert {run.id for run in await projects.list_investigation_template_runs(project.id)} == {
+        first_run.id,
+        second_run.id,
+        third_run.id,
+    }
+    updated = await projects.update_investigation_template_run(
+        project.id,
+        first_run.id,
+        ProjectInvestigationTemplateRunUpdate(
+            expected_revision=first_run.revision,
+            completed_step_ids=[first_run.steps[0].id],
+        ),
+    )
+    assert updated.revision == first_run.revision + 1
+    assert updated.steps[0].completed is True
+    assert updated.steps[1].completed is False
+    with pytest.raises(ConflictError, match="revision changed"):
+        await projects.update_investigation_template_run(
+            project.id,
+            first_run.id,
+            ProjectInvestigationTemplateRunUpdate(
+                expected_revision=first_run.revision,
+                completed_step_ids=[],
+            ),
+        )
+    await projects.delete_investigation_template(project.id, saved.id)
+    assert await projects.list_investigation_templates(project.id) == []
+    await sessions.sessions.delete(first_run.session_id)
+    retained_runs = await projects.list_investigation_template_runs(project.id)
+    assert {run.id: run for run in retained_runs} == {
+        updated.id: updated,
+        second_run.id: second_run,
+        third_run.id: third_run,
+    }
+    activity = await projects.list_activity(project.id)
+    assert {
+        event.action
+        for event in activity
+        if event.action.startswith("investigation_template")
+    } == {
+        "investigation_template.created",
+        "investigation_template.updated",
+        "investigation_template.applied",
+        "investigation_template_run.updated",
+        "investigation_template.deleted",
+    }
+    await projects.aclose()
+    await sessions.aclose()
+
+
+@pytest.mark.asyncio
+async def test_legacy_template_records_default_to_revision_one(tmp_path):
+    database = str(tmp_path / "platform.sqlite3")
+    sessions = SQLiteSessionStore(database)
+    projects = SQLiteProjectRepository(database)
+    await sessions.open()
+    await projects.open()
+    project = await projects.create(Project(title="Legacy workflows"))
+    template = await projects.create_investigation_template(
+        ProjectInvestigationTemplate(
+            project_id=project.id,
+            title="Existing workflow",
+            steps=[ProjectInvestigationTemplateStep(title="Review the evidence")],
+        )
+    )
+    run = await projects.apply_investigation_template(project.id, template.id)
+    await projects.aclose()
+    await sessions.aclose()
+
+    with sqlite3.connect(database) as legacy_db:
+        template_row = legacy_db.execute(
+            "SELECT data FROM project_investigation_templates WHERE id = ?",
+            (template.id,),
+        ).fetchone()
+        template_data = json.loads(template_row[0])
+        template_data.pop("revision")
+        legacy_db.execute(
+            "UPDATE project_investigation_templates SET data = ? WHERE id = ?",
+            (json.dumps(template_data), template.id),
+        )
+        run_row = legacy_db.execute(
+            "SELECT data FROM project_investigation_template_runs WHERE id = ?",
+            (run.id,),
+        ).fetchone()
+        run_data = json.loads(run_row[0])
+        run_data.pop("template_revision")
+        legacy_db.execute(
+            "UPDATE project_investigation_template_runs SET data = ? WHERE id = ?",
+            (json.dumps(run_data), run.id),
+        )
+
+    reopened = SQLiteProjectRepository(database)
+    await reopened.open()
+    loaded_template = await reopened.get_investigation_template(project.id, template.id)
+    loaded_run = (await reopened.list_investigation_template_runs(project.id))[0]
+    assert loaded_template.revision == 1
+    assert loaded_run.template_revision == 1
+    revised = await reopened.update_investigation_template(
+        loaded_template.model_copy(update={"title": "Revised workflow"}),
+        expected_revision=loaded_template.revision,
+    )
+    assert revised.revision == 2
+    await reopened.aclose()
 
 
 @pytest.mark.asyncio

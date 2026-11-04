@@ -22,17 +22,15 @@ This separation is the project's central rule (see
 
 ## Status
 
-The Phase 2 chat vertical slice is implemented against SatQuery Engine's Agent API. The Platform
-links sessions to Engine Agent sessions, streams and persists Engine events, and restores the
-Engine-owned transcript in the floating chat UI. The Earth Workspace foundation and Platform-owned
-Vision ingestion/preparation are implemented; Engine-authored investigation reports and WGS 84
-Earth Object overlays can be shown for investigations in the active transcript. Image attachments
-can be sent through the typed Engine request contract when the registered Engine adapter supports
-vision. Broader lifecycle geometry, production authentication, and multi-worker run recovery remain
-open boundaries. The Project-based Investigation Workspace organizes sessions, Engine investigations,
-report/source review, saved Earth views and notes, and monitoring references without duplicating
-Engine scientific state. The Platform does not run a model/tool loop or duplicate scientific
-capabilities.
+The Platform delegates scientific reasoning and execution to SatQuery Engine and owns the
+researcher's workspace, persistence, and presentation. It provides Engine-backed chat and
+investigation review alongside a Project-based workspace for sessions, reports, sources, saved Earth
+views, notes, and monitoring references. Phase 8 Platform Intelligence is implemented within the
+current Project boundary: researchers can search Project work, link investigations, review ordered
+activity, reuse revisioned checklists, and curate explicit investigation collections. These
+capabilities organize and reuse work without generating scientific plans or inferring scientific
+relationships. Production authentication, multi-worker recovery, and Engine-provided layer catalogue
+and broader lifecycle geometry contracts remain open integration boundaries.
 
 | Area | State |
 |---|---|
@@ -52,6 +50,8 @@ capabilities.
 | Frontend camera history, bookmarks, selection, drawings, measurements, timeline, split view | implemented as presentation state |
 | Investigation overlays | Engine-exported WGS 84 Earth Objects render for transcript-linked investigations; broader lifecycle geometry needs an Engine contract |
 | Scientific layer catalogue | blocked on an Engine-provided layer catalogue/source contract |
+| Project investigation workspace | Durable Project sessions, investigation review, notes, saved Earth views, comparisons, monitoring references, and reproducibility exports |
+| Phase 8 Platform Intelligence | Project search, validated investigation relationships, workflow timeline, revisioned templates, and explicit investigation collections |
 
 Read [implementation status](docs/implementation-status.md) for phase completion and gaps, and the
 [roadmap](docs/roadmap.md) for the current Platform scope. Phase 2 integration and deployment

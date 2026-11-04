@@ -14,16 +14,30 @@ from earth_platform.projects.models import (
     ProjectCreate,
     ProjectEarthView,
     ProjectEarthViewCreate,
+    ProjectInvestigationCollection,
+    ProjectInvestigationCollectionCreate,
+    ProjectInvestigationCollectionMemberUpdate,
+    ProjectInvestigationCollectionUpdate,
     ProjectInvestigationComparison,
     ProjectInvestigationComparisonCreate,
     ProjectInvestigationRef,
+    ProjectInvestigationRelationship,
+    ProjectInvestigationRelationshipCreate,
+    ProjectInvestigationTemplate,
+    ProjectInvestigationTemplateCreate,
+    ProjectInvestigationTemplateRun,
+    ProjectInvestigationTemplateRunUpdate,
+    ProjectInvestigationTemplateStep,
+    ProjectInvestigationTemplateUpdate,
     ProjectMonitoringLink,
     ProjectNote,
     ProjectNoteCreate,
     ProjectNoteUpdate,
+    ProjectSearchResponse,
     ProjectSessionLink,
     ProjectUpdate,
 )
+from earth_platform.projects.search import ProjectSearch
 from earth_platform.sessions.models import Session
 from earth_platform.shared.clock import utcnow
 from earth_platform.shared.errors import ConflictError, NotFoundError, ValidationFailedError
@@ -94,6 +108,24 @@ async def get_project(project_id: str, projects: ProjectRepositoryDep) -> Projec
     return await projects.get(project_id)
 
 
+@router.get("/{project_id}/search", response_model=ProjectSearchResponse)
+async def search_project(
+    project_id: str,
+    projects: ProjectRepositoryDep,
+    query: str = Query(min_length=1, max_length=200),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> ProjectSearchResponse:
+    if not query.strip():
+        raise ValidationFailedError("Search query cannot be blank")
+    return await ProjectSearch(projects).search(
+        project_id,
+        query.strip(),
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.patch("/{project_id}", response_model=Project)
 async def update_project(
     project_id: str,
@@ -125,10 +157,29 @@ async def list_project_sessions(
 async def list_project_activity(
     project_id: str,
     projects: ProjectRepositoryDep,
+    investigation_id: str | None = Query(default=None, min_length=1),
+    session_id: str | None = Query(default=None, min_length=1),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[ProjectActivity]:
-    return await projects.list_activity(project_id, limit=limit, offset=offset)
+    if (investigation_id is None) != (session_id is None):
+        raise ValidationFailedError(
+            "investigation_id and session_id must be provided together"
+        )
+    investigation = (
+        ProjectInvestigationRef(
+            investigation_id=investigation_id,
+            session_id=session_id,
+        )
+        if investigation_id is not None and session_id is not None
+        else None
+    )
+    return await projects.list_activity(
+        project_id,
+        investigation=investigation,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get(
@@ -228,6 +279,279 @@ async def get_project_investigation(
         investigation_id=investigation_id,
         session_id=session_id,
     )
+
+
+@router.get(
+    "/{project_id}/investigation-relationships",
+    response_model=list[ProjectInvestigationRelationship],
+)
+async def list_project_investigation_relationships(
+    project_id: str,
+    projects: ProjectRepositoryDep,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[ProjectInvestigationRelationship]:
+    return await projects.list_investigation_relationships(
+        project_id, limit=limit, offset=offset
+    )
+
+
+@router.post(
+    "/{project_id}/investigation-relationships",
+    response_model=ProjectInvestigationRelationship,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_project_investigation_relationship(
+    project_id: str,
+    body: ProjectInvestigationRelationshipCreate,
+    projects: ProjectRepositoryDep,
+    runtime: AgentRuntimeDep,
+) -> ProjectInvestigationRelationship:
+    project = await projects.get(project_id)
+    if project.archived:
+        raise ConflictError("Cannot create an investigation relationship in an archived Project")
+    await _require_project_investigation(
+        project_id,
+        body.from_investigation.session_id,
+        body.from_investigation.investigation_id,
+        projects,
+        runtime,
+    )
+    await _require_project_investigation(
+        project_id,
+        body.to_investigation.session_id,
+        body.to_investigation.investigation_id,
+        projects,
+        runtime,
+    )
+    relationship = ProjectInvestigationRelationship(
+        project_id=project_id,
+        **body.model_dump(),
+    )
+    return await projects.create_investigation_relationship(project_id, relationship)
+
+
+@router.delete(
+    "/{project_id}/investigation-relationships/{relationship_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_project_investigation_relationship(
+    project_id: str,
+    relationship_id: str,
+    projects: ProjectRepositoryDep,
+) -> Response:
+    await projects.delete_investigation_relationship(project_id, relationship_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{project_id}/investigation-collections",
+    response_model=list[ProjectInvestigationCollection],
+)
+async def list_project_investigation_collections(
+    project_id: str,
+    projects: ProjectRepositoryDep,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[ProjectInvestigationCollection]:
+    return await projects.list_investigation_collections(
+        project_id, limit=limit, offset=offset
+    )
+
+
+@router.post(
+    "/{project_id}/investigation-collections",
+    response_model=ProjectInvestigationCollection,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_project_investigation_collection(
+    project_id: str,
+    body: ProjectInvestigationCollectionCreate,
+    projects: ProjectRepositoryDep,
+) -> ProjectInvestigationCollection:
+    collection = ProjectInvestigationCollection(
+        project_id=project_id,
+        title=body.title,
+        description=body.description,
+    )
+    return await projects.create_investigation_collection(collection)
+
+
+@router.patch(
+    "/{project_id}/investigation-collections/{collection_id}",
+    response_model=ProjectInvestigationCollection,
+)
+async def update_project_investigation_collection(
+    project_id: str,
+    collection_id: str,
+    body: ProjectInvestigationCollectionUpdate,
+    projects: ProjectRepositoryDep,
+) -> ProjectInvestigationCollection:
+    changes = body.model_dump(exclude={"expected_revision"}, exclude_unset=True)
+    if not changes or any(value is None for value in changes.values()):
+        raise ValidationFailedError("At least one collection field must be updated")
+    collection = await projects.get_investigation_collection(project_id, collection_id)
+    collection = collection.model_copy(update={**changes, "updated_at": utcnow()})
+    return await projects.update_investigation_collection(
+        collection,
+        expected_revision=body.expected_revision,
+    )
+
+
+@router.patch(
+    "/{project_id}/investigation-collections/{collection_id}/members",
+    response_model=ProjectInvestigationCollection,
+)
+async def update_project_investigation_collection_members(
+    project_id: str,
+    collection_id: str,
+    body: ProjectInvestigationCollectionMemberUpdate,
+    projects: ProjectRepositoryDep,
+    runtime: AgentRuntimeDep,
+) -> ProjectInvestigationCollection:
+    if body.operation == "add":
+        await _require_project_investigation(
+            project_id,
+            body.investigation.session_id,
+            body.investigation.investigation_id,
+            projects,
+            runtime,
+        )
+    return await projects.update_investigation_collection_members(
+        project_id,
+        collection_id,
+        body,
+    )
+
+
+@router.delete(
+    "/{project_id}/investigation-collections/{collection_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_project_investigation_collection(
+    project_id: str,
+    collection_id: str,
+    projects: ProjectRepositoryDep,
+) -> Response:
+    await projects.delete_investigation_collection(project_id, collection_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/{project_id}/investigation-templates",
+    response_model=list[ProjectInvestigationTemplate],
+)
+async def list_project_investigation_templates(
+    project_id: str,
+    projects: ProjectRepositoryDep,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[ProjectInvestigationTemplate]:
+    return await projects.list_investigation_templates(
+        project_id, limit=limit, offset=offset
+    )
+
+
+@router.post(
+    "/{project_id}/investigation-templates",
+    response_model=ProjectInvestigationTemplate,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_project_investigation_template(
+    project_id: str,
+    body: ProjectInvestigationTemplateCreate,
+    projects: ProjectRepositoryDep,
+) -> ProjectInvestigationTemplate:
+    template = ProjectInvestigationTemplate(
+        project_id=project_id,
+        title=body.title,
+        description=body.description,
+        steps=[
+            ProjectInvestigationTemplateStep(title=step.title)
+            for step in body.steps
+        ],
+    )
+    return await projects.create_investigation_template(template)
+
+
+@router.patch(
+    "/{project_id}/investigation-templates/{template_id}",
+    response_model=ProjectInvestigationTemplate,
+)
+async def update_project_investigation_template(
+    project_id: str,
+    template_id: str,
+    body: ProjectInvestigationTemplateUpdate,
+    projects: ProjectRepositoryDep,
+) -> ProjectInvestigationTemplate:
+    changes = body.model_dump(exclude={"expected_revision"}, exclude_unset=True)
+    if not changes or any(value is None for value in changes.values()):
+        raise ValidationFailedError("At least one template field must be updated")
+    if body.steps is not None:
+        changes["steps"] = [
+            ProjectInvestigationTemplateStep(title=step.title)
+            for step in body.steps
+        ]
+    template = await projects.get_investigation_template(project_id, template_id)
+    template = template.model_copy(update={**changes, "updated_at": utcnow()})
+    return await projects.update_investigation_template(
+        template,
+        expected_revision=body.expected_revision,
+    )
+
+
+@router.delete(
+    "/{project_id}/investigation-templates/{template_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_project_investigation_template(
+    project_id: str,
+    template_id: str,
+    projects: ProjectRepositoryDep,
+) -> Response:
+    await projects.delete_investigation_template(project_id, template_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/{project_id}/investigation-templates/{template_id}/apply",
+    response_model=ProjectInvestigationTemplateRun,
+    status_code=status.HTTP_201_CREATED,
+)
+async def apply_project_investigation_template(
+    project_id: str,
+    template_id: str,
+    projects: ProjectRepositoryDep,
+) -> ProjectInvestigationTemplateRun:
+    return await projects.apply_investigation_template(project_id, template_id)
+
+
+@router.get(
+    "/{project_id}/investigation-template-runs",
+    response_model=list[ProjectInvestigationTemplateRun],
+)
+async def list_project_investigation_template_runs(
+    project_id: str,
+    projects: ProjectRepositoryDep,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[ProjectInvestigationTemplateRun]:
+    return await projects.list_investigation_template_runs(
+        project_id, limit=limit, offset=offset
+    )
+
+
+@router.patch(
+    "/{project_id}/investigation-template-runs/{run_id}",
+    response_model=ProjectInvestigationTemplateRun,
+)
+async def update_project_investigation_template_run(
+    project_id: str,
+    run_id: str,
+    body: ProjectInvestigationTemplateRunUpdate,
+    projects: ProjectRepositoryDep,
+) -> ProjectInvestigationTemplateRun:
+    return await projects.update_investigation_template_run(project_id, run_id, body)
 
 
 @router.post(

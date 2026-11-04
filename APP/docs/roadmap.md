@@ -28,11 +28,80 @@ report, evidence, or scientific state.
 | 15 | Engine-authored scientific comparison | Implemented | Turn a saved pair of investigations into a reproducible evidence-alignment result, rather than only a side-by-side display. | Reuses Engine comparison generation and adds digest-addressed retrieval for its persisted result. The Platform validates both session/investigation links, stores only the Engine comparison ID/digest with the Project record, and renders Engine output and limitations. Medium/high. Depends on Slice 13 and the existing Engine comparison algorithm. |
 | 16 | Engine reasoning and reproducibility review | Implemented | Complete the investigation workspace's review path by exposing Engine-authored scientific findings and the actual reproducibility export, rather than leaving existing Engine APIs inaccessible to researchers. | Adds typed session-scoped forwarding for Engine reasoning and reproducibility endpoints. The Platform validates response shapes, investigation identity, and the canonical bundle SHA-256, then presents Engine findings, method-input sufficiency, limitations, bundle digest, missing artifacts, and JSON download. Medium. Reuses existing Engine APIs; no new scientific behavior or Engine contract. Depends on Slice 8 and existing Engine reasoning/export records. |
 
+## Phase 8 — Platform Intelligence
+
+**Objective:** make accumulated Platform workspace records easier to find and reuse without
+reconstructing Engine-owned science or substituting Platform recommendations for Engine reasoning.
+
+| Slice | Capability | Status | Why it matters | Contract, reuse, complexity, dependencies |
+|---|---|---|---|---|
+| 1 | Project research search | Implemented | Researchers can retrieve prior work from one Project instead of separately browsing its notes, saved Earth views, comparisons, sessions, and metadata. | A typed Project search endpoint scans paginated Platform-owned records and returns stable lexical ranking, matched terms/fields, concise excerpts, and offsets. The workspace links results to their existing session, investigation, comparison, or artifact sections. No Engine transcript/report parsing, scientific conclusions, or new persistence/index is introduced. Medium. |
+| 2 | Investigation relationships | Implemented | Researchers can explicitly connect Engine investigations across sessions, preserve why they are related, and revisit those links from the Project workspace. | Project-owned, directional links reference existing Engine-issued investigations, use a small explicit workflow vocabulary, and require researcher rationale. The Platform validates source-session membership and Engine investigation identity, persists and journals changes, and indexes rationale for Project search. Links express researcher organization, not scientific conclusions or inferred Engine reasoning. Medium. |
+| 3 | Investigation timeline | Implemented | Researchers can trace Project workflow history for a particular investigation instead of scanning unrelated Project activity. | Extends the existing transactional activity journal with exact investigation references on scoped notes, saved Earth views, comparisons, and relationships. A Project-scoped, indexed filter returns stable paginated events, and the workspace links each event to its investigation. Existing artifact persistence is reused; no duplicate event store or Engine scientific interpretation is added. Medium. |
+| 4 | Investigation templates | Implemented | Researchers can capture repeatable workflow steps once, start multiple Project sessions from that checklist, and track each run without reconstructing the process. | Project-scoped templates contain only researcher-authored titles, descriptions, and checklist steps. Applying one atomically creates a Project session and an immutable checklist snapshot; revision-checked progress is persisted per run. Templates are searchable and their use is journaled. They do not generate scientific methods, Engine prompts, evidence, or plans. Medium. |
+| 5 | Investigation collections | Implemented | Researchers can curate named campaigns or review groups of investigations without splitting a Project or relying on pairwise links. | Project-owned collections contain bounded, ordered Engine investigation references and researcher-authored metadata. Membership additions validate the linked session and Engine transcript; edits use expected revisions, every change is journaled with exact investigation provenance, and collections participate in deterministic Project search. No membership or scientific relationship is inferred. Medium. |
+| 6 | Template revisioning and run provenance | Implemented | Researchers can improve a reusable checklist as their workflow matures without rewriting the instructions or provenance of past runs. | Template metadata and steps are revision-checked; replacing steps assigns new IDs. Each new run records the template revision and immutable title/step snapshot it used. Existing runs remain unchanged. No Engine plan or scientific method is generated. Low/medium. |
+
+Search is deterministic token overlap over the saved Project record set, not semantic or scientific
+retrieval. Project search intentionally does not search Engine reports, results, or opaque transcripts;
+those remain in Engine-owned investigation review. A persistent full-text/vector index should be
+considered only when a measured workload or product requirement justifies changing the existing
+query-time retrieval model. Investigation relationships are likewise explicit Platform associations:
+the Platform does not infer links from transcript/report content, and rationale is not scientific
+evidence. Search indexes only researcher-authored text and explicit collection member identifiers.
+
+Investigation templates are reusable organizational checklists, not scientific protocols generated
+by the Platform. Each application snapshots the exact step IDs and titles so deleting a template
+cannot silently change an in-progress workflow. Run history retains its session reference if that
+session is later deleted. Template revisions can evolve, but each run records the source revision
+and snapshot; edits never mutate already-applied checklists. Engine planning and scientific methods
+remain Engine-owned.
+
+Timeline references are copied from explicitly associated Project records and are searchable by the
+session-qualified Engine investigation identity. Existing retained records are backfilled once during
+SQLite initialization; historical deletion events whose source records no longer exist cannot be
+retroactively attributed and remain available in the unfiltered Project activity stream.
+
+Collections are explicitly authored subsets inside one Project, not a second Project hierarchy.
+Membership is keyed by the exact `(session_id, investigation_id)` Engine reference, preserves
+researcher insertion order, and is revision-checked. A collection can be renamed, described, or
+deleted without changing any Engine record; activity retains the exact investigations present when
+each membership change or deletion occurred.
+
+### Remaining Phase 8 gaps and boundaries
+
+- Cross-Project or organization-wide collections and shared templates require identity, tenancy, and
+  ownership decisions; the current local Platform has no authenticated user boundary.
+- Scientific planning, workspace scientific memory, and dataset/analysis recommendations remain
+  Engine responsibilities. The Platform must wait for the corresponding published Engine contracts
+  and scientific validation rather than infer plans or suitability from metadata.
+- Semantic/vector workspace retrieval is not justified by the current bounded local workload and
+  requires measured scale, deployment, and identity-isolation decisions. Existing deterministic
+  Project search and Phase 6 workspace memory remain available without duplicating Engine results.
+- A graph visualization is not a data capability gap: explicit directional relationships and
+  collections are navigable now. It should be considered only when researcher workflows demonstrate
+  that a graph view improves navigation beyond the existing Project investigation workspace.
+
+### Phase 8 completion assessment
+
+Phase 8 is complete for the current Project-scoped Platform boundary. Its in-repository
+productivity capabilities—deterministic Project search, explicit cross-investigation relationships,
+provenance-filtered workflow history, reusable and revisioned checklists, and curated investigation
+collections—are implemented with persistence, validation, typed contracts, UI navigation, tests, and
+documentation.
+
+The remaining candidates either duplicate Phase 6 workspace memory/retrieval, would move scientific
+planning or recommendations into the Platform, require Engine contracts or scientific validation,
+or depend on authentication/tenancy/deployment decisions. A standalone graph visualization is not
+justified without evidence that explicit links and collection navigation stop scaling for researchers.
+This phase assessment does not claim that broader Platform production-readiness gaps are resolved.
+
 ## Current phase reassessment (2026-11-04)
 
-These are goal-relative estimates of the Platform roadmap as implemented in
-this repository, not test coverage or production-readiness claims. Each phase
-is weighted equally. The overall Platform estimate is 89%.
+These are goal-relative estimates of the Platform roadmap at V2 Phase 7
+completion, before Phase 8; they are not test coverage or production-readiness
+claims. Each phase was weighted equally. The overall Platform estimate at that
+baseline was 89%.
 
 | Phase | Estimate | Genuinely missing capability | Primary classification |
 |---|---:|---|---|

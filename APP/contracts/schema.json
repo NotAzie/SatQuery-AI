@@ -6683,6 +6683,18 @@
             "earth_view.deleted",
             "investigation_comparison.created",
             "investigation_comparison.deleted",
+            "investigation_relationship.created",
+            "investigation_relationship.deleted",
+            "investigation_template.updated",
+            "investigation_collection.created",
+            "investigation_collection.updated",
+            "investigation_collection.deleted",
+            "investigation_collection.member_added",
+            "investigation_collection.member_removed",
+            "investigation_template.created",
+            "investigation_template.deleted",
+            "investigation_template.applied",
+            "investigation_template_run.updated",
             "monitoring.linked",
             "monitoring.unlinked"
           ],
@@ -6692,6 +6704,13 @@
         "id": {
           "title": "Id",
           "type": "string"
+        },
+        "investigations": {
+          "items": {
+            "$ref": "#/$defs/ProjectInvestigationRef"
+          },
+          "title": "Investigations",
+          "type": "array"
         },
         "label": {
           "anyOf": [
@@ -6743,6 +6762,7 @@
       "required": [
         "action",
         "id",
+        "investigations",
         "label",
         "occurred_at",
         "project_id",
@@ -6888,6 +6908,156 @@
       "title": "ProjectEarthViewCreate",
       "type": "object"
     },
+    "ProjectInvestigationCollection": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "maxLength": 4000,
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "investigations": {
+          "items": {
+            "$ref": "#/$defs/ProjectInvestigationRef"
+          },
+          "maxItems": 500,
+          "title": "Investigations",
+          "type": "array"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "created_at",
+        "description",
+        "id",
+        "investigations",
+        "project_id",
+        "revision",
+        "title",
+        "updated_at"
+      ],
+      "title": "ProjectInvestigationCollection",
+      "type": "object"
+    },
+    "ProjectInvestigationCollectionCreate": {
+      "properties": {
+        "description": {
+          "default": "",
+          "maxLength": 4000,
+          "title": "Description",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "title"
+      ],
+      "title": "ProjectInvestigationCollectionCreate",
+      "type": "object"
+    },
+    "ProjectInvestigationCollectionMemberUpdate": {
+      "properties": {
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "investigation": {
+          "$ref": "#/$defs/ProjectInvestigationRef"
+        },
+        "operation": {
+          "enum": [
+            "add",
+            "remove"
+          ],
+          "title": "Operation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expected_revision",
+        "investigation",
+        "operation"
+      ],
+      "title": "ProjectInvestigationCollectionMemberUpdate",
+      "type": "object"
+    },
+    "ProjectInvestigationCollectionUpdate": {
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        }
+      },
+      "required": [
+        "expected_revision"
+      ],
+      "title": "ProjectInvestigationCollectionUpdate",
+      "type": "object"
+    },
     "ProjectInvestigationComparison": {
       "properties": {
         "created_at": {
@@ -6996,6 +7166,396 @@
         "session_id"
       ],
       "title": "ProjectInvestigationRef",
+      "type": "object"
+    },
+    "ProjectInvestigationRelationship": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "from_investigation": {
+          "$ref": "#/$defs/ProjectInvestigationRef"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "relationship_type": {
+          "enum": [
+            "related_to",
+            "follow_up_to",
+            "baseline_for",
+            "context_for"
+          ],
+          "title": "Relationship Type",
+          "type": "string"
+        },
+        "to_investigation": {
+          "$ref": "#/$defs/ProjectInvestigationRef"
+        }
+      },
+      "required": [
+        "created_at",
+        "from_investigation",
+        "id",
+        "project_id",
+        "rationale",
+        "relationship_type",
+        "to_investigation"
+      ],
+      "title": "ProjectInvestigationRelationship",
+      "type": "object"
+    },
+    "ProjectInvestigationRelationshipCreate": {
+      "properties": {
+        "from_investigation": {
+          "$ref": "#/$defs/ProjectInvestigationRef"
+        },
+        "rationale": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "relationship_type": {
+          "enum": [
+            "related_to",
+            "follow_up_to",
+            "baseline_for",
+            "context_for"
+          ],
+          "title": "Relationship Type",
+          "type": "string"
+        },
+        "to_investigation": {
+          "$ref": "#/$defs/ProjectInvestigationRef"
+        }
+      },
+      "required": [
+        "from_investigation",
+        "rationale",
+        "relationship_type",
+        "to_investigation"
+      ],
+      "title": "ProjectInvestigationRelationshipCreate",
+      "type": "object"
+    },
+    "ProjectInvestigationTemplate": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Description",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/ProjectInvestigationTemplateStep"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "created_at",
+        "description",
+        "id",
+        "project_id",
+        "revision",
+        "steps",
+        "title",
+        "updated_at"
+      ],
+      "title": "ProjectInvestigationTemplate",
+      "type": "object"
+    },
+    "ProjectInvestigationTemplateCreate": {
+      "properties": {
+        "description": {
+          "default": "",
+          "maxLength": 2000,
+          "title": "Description",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/ProjectInvestigationTemplateStepCreate"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "steps",
+        "title"
+      ],
+      "title": "ProjectInvestigationTemplateCreate",
+      "type": "object"
+    },
+    "ProjectInvestigationTemplateRun": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/ProjectInvestigationTemplateRunStep"
+          },
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        },
+        "template_id": {
+          "title": "Template Id",
+          "type": "string"
+        },
+        "template_revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Template Revision",
+          "type": "integer"
+        },
+        "template_title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Template Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "created_at",
+        "id",
+        "project_id",
+        "revision",
+        "session_id",
+        "steps",
+        "template_id",
+        "template_revision",
+        "template_title",
+        "updated_at"
+      ],
+      "title": "ProjectInvestigationTemplateRun",
+      "type": "object"
+    },
+    "ProjectInvestigationTemplateRunStep": {
+      "properties": {
+        "completed": {
+          "default": false,
+          "title": "Completed",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "completed",
+        "id",
+        "title"
+      ],
+      "title": "ProjectInvestigationTemplateRunStep",
+      "type": "object"
+    },
+    "ProjectInvestigationTemplateRunUpdate": {
+      "properties": {
+        "completed_step_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Completed Step Ids",
+          "type": "array"
+        },
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "completed_step_ids",
+        "expected_revision"
+      ],
+      "title": "ProjectInvestigationTemplateRunUpdate",
+      "type": "object"
+    },
+    "ProjectInvestigationTemplateStep": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "title": "ProjectInvestigationTemplateStep",
+      "type": "object"
+    },
+    "ProjectInvestigationTemplateStepCreate": {
+      "properties": {
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "ProjectInvestigationTemplateStepCreate",
+      "type": "object"
+    },
+    "ProjectInvestigationTemplateUpdate": {
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "steps": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ProjectInvestigationTemplateStepCreate"
+              },
+              "maxItems": 30,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Steps"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        }
+      },
+      "required": [
+        "expected_revision"
+      ],
+      "title": "ProjectInvestigationTemplateUpdate",
       "type": "object"
     },
     "ProjectMonitoringLink": {
@@ -7200,6 +7760,148 @@
         "expected_revision"
       ],
       "title": "ProjectNoteUpdate",
+      "type": "object"
+    },
+    "ProjectSearchHit": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "investigation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Investigation Id"
+        },
+        "kind": {
+          "enum": [
+            "project",
+            "session",
+            "note",
+            "earth_view",
+            "comparison",
+            "relationship",
+            "investigation_template",
+            "investigation_collection"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "matched_fields": {
+          "items": {
+            "enum": [
+              "title",
+              "content"
+            ],
+            "type": "string"
+          },
+          "title": "Matched Fields",
+          "type": "array"
+        },
+        "matched_terms": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Matched Terms",
+          "type": "array"
+        },
+        "score": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Score",
+          "type": "number"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "created_at",
+        "id",
+        "investigation_id",
+        "kind",
+        "matched_fields",
+        "matched_terms",
+        "score",
+        "session_id",
+        "summary",
+        "title"
+      ],
+      "title": "ProjectSearchHit",
+      "type": "object"
+    },
+    "ProjectSearchResponse": {
+      "properties": {
+        "limit": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "offset": {
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "query": {
+          "title": "Query",
+          "type": "string"
+        },
+        "results": {
+          "items": {
+            "$ref": "#/$defs/ProjectSearchHit"
+          },
+          "title": "Results",
+          "type": "array"
+        },
+        "total_count": {
+          "minimum": 0,
+          "title": "Total Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "limit",
+        "offset",
+        "project_id",
+        "query",
+        "results",
+        "total_count"
+      ],
+      "title": "ProjectSearchResponse",
       "type": "object"
     },
     "ProjectSessionLink": {
@@ -8845,6 +9547,18 @@
     "project_earth_view_create": {
       "$ref": "#/$defs/ProjectEarthViewCreate"
     },
+    "project_investigation_collection": {
+      "$ref": "#/$defs/ProjectInvestigationCollection"
+    },
+    "project_investigation_collection_create": {
+      "$ref": "#/$defs/ProjectInvestigationCollectionCreate"
+    },
+    "project_investigation_collection_member_update": {
+      "$ref": "#/$defs/ProjectInvestigationCollectionMemberUpdate"
+    },
+    "project_investigation_collection_update": {
+      "$ref": "#/$defs/ProjectInvestigationCollectionUpdate"
+    },
     "project_investigation_comparison": {
       "$ref": "#/$defs/ProjectInvestigationComparison"
     },
@@ -8853,6 +9567,33 @@
     },
     "project_investigation_ref": {
       "$ref": "#/$defs/ProjectInvestigationRef"
+    },
+    "project_investigation_relationship": {
+      "$ref": "#/$defs/ProjectInvestigationRelationship"
+    },
+    "project_investigation_relationship_create": {
+      "$ref": "#/$defs/ProjectInvestigationRelationshipCreate"
+    },
+    "project_investigation_template": {
+      "$ref": "#/$defs/ProjectInvestigationTemplate"
+    },
+    "project_investigation_template_create": {
+      "$ref": "#/$defs/ProjectInvestigationTemplateCreate"
+    },
+    "project_investigation_template_run": {
+      "$ref": "#/$defs/ProjectInvestigationTemplateRun"
+    },
+    "project_investigation_template_run_update": {
+      "$ref": "#/$defs/ProjectInvestigationTemplateRunUpdate"
+    },
+    "project_investigation_template_step": {
+      "$ref": "#/$defs/ProjectInvestigationTemplateStep"
+    },
+    "project_investigation_template_step_create": {
+      "$ref": "#/$defs/ProjectInvestigationTemplateStepCreate"
+    },
+    "project_investigation_template_update": {
+      "$ref": "#/$defs/ProjectInvestigationTemplateUpdate"
     },
     "project_monitoring_link": {
       "$ref": "#/$defs/ProjectMonitoringLink"
@@ -8865,6 +9606,12 @@
     },
     "project_note_update": {
       "$ref": "#/$defs/ProjectNoteUpdate"
+    },
+    "project_search_hit": {
+      "$ref": "#/$defs/ProjectSearchHit"
+    },
+    "project_search_response": {
+      "$ref": "#/$defs/ProjectSearchResponse"
     },
     "project_session_link": {
       "$ref": "#/$defs/ProjectSessionLink"
@@ -8943,11 +9690,26 @@
     "project_activity",
     "project_create",
     "project_investigation_ref",
+    "project_investigation_relationship",
+    "project_investigation_relationship_create",
+    "project_investigation_collection",
+    "project_investigation_collection_create",
+    "project_investigation_collection_member_update",
+    "project_investigation_collection_update",
+    "project_investigation_template",
+    "project_investigation_template_create",
+    "project_investigation_template_run",
+    "project_investigation_template_run_update",
+    "project_investigation_template_step",
+    "project_investigation_template_step_create",
+    "project_investigation_template_update",
     "project_investigation_comparison",
     "project_investigation_comparison_create",
     "project_note",
     "project_note_create",
     "project_note_update",
+    "project_search_hit",
+    "project_search_response",
     "project_monitoring_link",
     "project_earth_view",
     "project_earth_view_create",

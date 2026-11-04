@@ -1026,63 +1026,173 @@ export type Action =
   | "earth_view.deleted"
   | "investigation_comparison.created"
   | "investigation_comparison.deleted"
+  | "investigation_relationship.created"
+  | "investigation_relationship.deleted"
+  | "investigation_template.updated"
+  | "investigation_collection.created"
+  | "investigation_collection.updated"
+  | "investigation_collection.deleted"
+  | "investigation_collection.member_added"
+  | "investigation_collection.member_removed"
+  | "investigation_template.created"
+  | "investigation_template.deleted"
+  | "investigation_template.applied"
+  | "investigation_template_run.updated"
   | "monitoring.linked"
   | "monitoring.unlinked";
 export type Id29 = string;
+export type InvestigationId9 = string;
+export type SessionId20 = string;
+export type Investigations = ProjectInvestigationRef[];
 export type Label3 = string | null;
 export type OccurredAt2 = string;
 export type ProjectId = string;
-export type SessionId20 = string | null;
+export type SessionId21 = string | null;
 export type SubjectId = string | null;
 export type Description6 = string | null;
 export type Title7 = string;
 export type CreatedAt8 = string;
 export type Id30 = string;
-export type InvestigationId9 = string | null;
+export type InvestigationId10 = string | null;
 export type ProjectId1 = string;
 export type SourceBookmarkId = string;
 export type SourceSessionExists = boolean;
 export type SourceSessionId = string;
 export type Title8 = string;
-export type InvestigationId10 = string | null;
+export type InvestigationId11 = string | null;
 export type SourceBookmarkId1 = string;
 export type SourceSessionId1 = string;
 export type Title9 = string;
 export type CreatedAt9 = string;
+export type Description7 = string;
+export type Id31 = string;
+/**
+ * @maxItems 500
+ */
+export type Investigations1 = ProjectInvestigationRef[];
+export type ProjectId2 = string;
+export type Revision5 = number;
+export type Title10 = string;
+export type UpdatedAt3 = string;
+export type Description8 = string;
+export type Title11 = string;
+export type ExpectedRevision1 = number;
+export type Operation = "add" | "remove";
+export type Description9 = string | null;
+export type ExpectedRevision2 = number;
+export type Title12 = string | null;
+export type CreatedAt10 = string;
 export type EngineComparisonId = string | null;
 export type EngineComparisonSha256 = string | null;
-export type Id31 = string;
-export type InvestigationId11 = string;
-export type SessionId21 = string;
-export type ProjectId2 = string;
-export type Title10 = string;
-export type Title11 = string;
+export type Id32 = string;
+export type ProjectId3 = string;
+export type Title13 = string;
+export type Title14 = string;
+export type CreatedAt11 = string;
+export type Id33 = string;
+export type ProjectId4 = string;
+export type Rationale3 = string;
+export type RelationshipType = "related_to" | "follow_up_to" | "baseline_for" | "context_for";
+export type Rationale4 = string;
+export type RelationshipType1 = "related_to" | "follow_up_to" | "baseline_for" | "context_for";
+export type CreatedAt12 = string;
+export type Description10 = string;
+export type Id34 = string;
+export type ProjectId5 = string;
+export type Revision6 = number;
+/**
+ * @minItems 1
+ * @maxItems 30
+ */
+export type Steps = [ProjectInvestigationTemplateStep, ...ProjectInvestigationTemplateStep[]];
+export type Id35 = string;
+export type Title15 = string;
+export type Title16 = string;
+export type UpdatedAt4 = string;
+export type Description11 = string;
+/**
+ * @minItems 1
+ * @maxItems 30
+ */
+export type Steps1 = [ProjectInvestigationTemplateStepCreate, ...ProjectInvestigationTemplateStepCreate[]];
+export type Title17 = string;
+export type Title18 = string;
+export type CreatedAt13 = string;
+export type Id36 = string;
+export type ProjectId6 = string;
+export type Revision7 = number;
+export type SessionId22 = string;
+/**
+ * @minItems 1
+ * @maxItems 30
+ */
+export type Steps2 = [ProjectInvestigationTemplateRunStep, ...ProjectInvestigationTemplateRunStep[]];
+export type Completed = boolean;
+export type Id37 = string;
+export type Title19 = string;
+export type TemplateId = string;
+export type TemplateRevision = number;
+export type TemplateTitle = string;
+export type UpdatedAt5 = string;
+/**
+ * @maxItems 30
+ */
+export type CompletedStepIds = string[];
+export type ExpectedRevision3 = number;
+export type Description12 = string | null;
+export type ExpectedRevision4 = number;
+export type Steps3 = [ProjectInvestigationTemplateStepCreate, ...ProjectInvestigationTemplateStepCreate[]] | null;
+export type Title20 = string | null;
 export type LinkedAt = string;
 export type MissionId4 = string;
-export type ProjectId3 = string;
+export type ProjectId7 = string;
 export type ScheduleId5 = string;
 export type Body = string;
-export type CreatedAt10 = string;
-export type Id32 = string;
+export type CreatedAt14 = string;
+export type Id38 = string;
 export type InvestigationId12 = string | null;
 export type InvestigationSessionId = string | null;
-export type ProjectId4 = string;
-export type Revision5 = number;
-export type Title12 = string;
-export type UpdatedAt3 = string;
+export type ProjectId8 = string;
+export type Revision8 = number;
+export type Title21 = string;
+export type UpdatedAt6 = string;
 export type Body1 = string;
 export type InvestigationId13 = string | null;
 export type InvestigationSessionId1 = string | null;
-export type Title13 = string;
+export type Title22 = string;
 export type Body2 = string | null;
-export type ExpectedRevision1 = number;
-export type Title14 = string | null;
+export type ExpectedRevision5 = number;
+export type Title23 = string | null;
+export type CreatedAt15 = string;
+export type Id39 = string;
+export type InvestigationId14 = string | null;
+export type Kind5 =
+  | "project"
+  | "session"
+  | "note"
+  | "earth_view"
+  | "comparison"
+  | "relationship"
+  | "investigation_template"
+  | "investigation_collection";
+export type MatchedFields = ("title" | "content")[];
+export type MatchedTerms = string[];
+export type Score = number;
+export type SessionId23 = string | null;
+export type Summary = string;
+export type Title24 = string;
+export type Limit = number;
+export type Offset = number;
+export type ProjectId9 = string;
+export type Query = string;
+export type Results = ProjectSearchHit[];
+export type TotalCount = number;
 export type LinkedAt1 = string;
-export type ProjectId5 = string;
+export type ProjectId10 = string;
 export type Archived1 = boolean;
 export type ActiveInvestigationIds = string[];
 export type PinnedEvidenceIds = string[];
-export type CreatedAt11 = string;
+export type CreatedAt16 = string;
 /**
  * @maxItems 20
  */
@@ -1294,21 +1404,21 @@ export type EarthContextSnapshots =
       EarthContext,
       EarthContext
     ];
-export type CreatedAt12 = string;
-export type Id33 = string;
+export type CreatedAt17 = string;
+export type Id40 = string;
 export type Name9 = string;
-export type UpdatedAt4 = string;
+export type UpdatedAt7 = string;
 export type Bookmarks1 = EarthBookmark[];
 export type Captures1 = EarthCaptureMetadata[];
 export type EngineAgentSessionId = string | null;
-export type Id34 = string;
-export type Title15 = string | null;
-export type UpdatedAt5 = string;
-export type SessionId22 = string;
+export type Id41 = string;
+export type Title25 = string | null;
+export type UpdatedAt8 = string;
+export type SessionId24 = string;
 export type Archived2 = boolean | null;
-export type Description7 = string | null;
-export type ExpectedRevision2 = number;
-export type Title16 = string | null;
+export type Description13 = string | null;
+export type ExpectedRevision6 = number;
+export type Title26 = string | null;
 export type Filename1 = string | null;
 
 export interface Contracts {
@@ -1372,13 +1482,28 @@ export interface Contracts {
   project_create: ProjectCreate;
   project_earth_view: ProjectEarthView;
   project_earth_view_create: ProjectEarthViewCreate;
+  project_investigation_collection: ProjectInvestigationCollection;
+  project_investigation_collection_create: ProjectInvestigationCollectionCreate;
+  project_investigation_collection_member_update: ProjectInvestigationCollectionMemberUpdate;
+  project_investigation_collection_update: ProjectInvestigationCollectionUpdate;
   project_investigation_comparison: ProjectInvestigationComparison;
   project_investigation_comparison_create: ProjectInvestigationComparisonCreate;
   project_investigation_ref: ProjectInvestigationRef;
+  project_investigation_relationship: ProjectInvestigationRelationship;
+  project_investigation_relationship_create: ProjectInvestigationRelationshipCreate;
+  project_investigation_template: ProjectInvestigationTemplate;
+  project_investigation_template_create: ProjectInvestigationTemplateCreate;
+  project_investigation_template_run: ProjectInvestigationTemplateRun;
+  project_investigation_template_run_update: ProjectInvestigationTemplateRunUpdate;
+  project_investigation_template_step: ProjectInvestigationTemplateStep;
+  project_investigation_template_step_create: ProjectInvestigationTemplateStepCreate;
+  project_investigation_template_update: ProjectInvestigationTemplateUpdate;
   project_monitoring_link: ProjectMonitoringLink;
   project_note: ProjectNote;
   project_note_create: ProjectNoteCreate;
   project_note_update: ProjectNoteUpdate;
+  project_search_hit: ProjectSearchHit;
+  project_search_response: ProjectSearchResponse;
   project_session_link: ProjectSessionLink;
   project_update: ProjectUpdate;
   session: Session;
@@ -3104,11 +3229,22 @@ export interface Project {
 export interface ProjectActivity {
   action: Action;
   id: Id29;
+  investigations: Investigations;
   label: Label3;
   occurred_at: OccurredAt2;
   project_id: ProjectId;
-  session_id: SessionId20;
+  session_id: SessionId21;
   subject_id: SubjectId;
+}
+/**
+ * A reference to an Engine-owned investigation as observed in a linked session.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationRef".
+ */
+export interface ProjectInvestigationRef {
+  investigation_id: InvestigationId9;
+  session_id: SessionId20;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -3126,7 +3262,7 @@ export interface ProjectEarthView {
   context: EarthContext;
   created_at: CreatedAt8;
   id: Id30;
-  investigation_id: InvestigationId9;
+  investigation_id: InvestigationId10;
   project_id: ProjectId1;
   source_bookmark_id: SourceBookmarkId;
   source_session_exists: SourceSessionExists;
@@ -3138,34 +3274,64 @@ export interface ProjectEarthView {
  * via the `definition` "ProjectEarthViewCreate".
  */
 export interface ProjectEarthViewCreate {
-  investigation_id?: InvestigationId10;
+  investigation_id?: InvestigationId11;
   source_bookmark_id: SourceBookmarkId1;
   source_session_id: SourceSessionId1;
   title: Title9;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationCollection".
+ */
+export interface ProjectInvestigationCollection {
+  created_at: CreatedAt9;
+  description: Description7;
+  id: Id31;
+  investigations: Investigations1;
+  project_id: ProjectId2;
+  revision: Revision5;
+  title: Title10;
+  updated_at: UpdatedAt3;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationCollectionCreate".
+ */
+export interface ProjectInvestigationCollectionCreate {
+  description: Description8;
+  title: Title11;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationCollectionMemberUpdate".
+ */
+export interface ProjectInvestigationCollectionMemberUpdate {
+  expected_revision: ExpectedRevision1;
+  investigation: ProjectInvestigationRef;
+  operation: Operation;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationCollectionUpdate".
+ */
+export interface ProjectInvestigationCollectionUpdate {
+  description?: Description9;
+  expected_revision: ExpectedRevision2;
+  title?: Title12;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "ProjectInvestigationComparison".
  */
 export interface ProjectInvestigationComparison {
-  created_at: CreatedAt9;
+  created_at: CreatedAt10;
   engine_comparison_id: EngineComparisonId;
   engine_comparison_sha256: EngineComparisonSha256;
-  id: Id31;
+  id: Id32;
   left: ProjectInvestigationRef;
-  project_id: ProjectId2;
+  project_id: ProjectId3;
   right: ProjectInvestigationRef;
-  title: Title10;
-}
-/**
- * A reference to an Engine-owned investigation as observed in a linked session.
- *
- * This interface was referenced by `Contracts`'s JSON-Schema
- * via the `definition` "ProjectInvestigationRef".
- */
-export interface ProjectInvestigationRef {
-  investigation_id: InvestigationId11;
-  session_id: SessionId21;
+  title: Title13;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -3174,7 +3340,111 @@ export interface ProjectInvestigationRef {
 export interface ProjectInvestigationComparisonCreate {
   left: ProjectInvestigationRef;
   right: ProjectInvestigationRef;
-  title: Title11;
+  title: Title14;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationRelationship".
+ */
+export interface ProjectInvestigationRelationship {
+  created_at: CreatedAt11;
+  from_investigation: ProjectInvestigationRef;
+  id: Id33;
+  project_id: ProjectId4;
+  rationale: Rationale3;
+  relationship_type: RelationshipType;
+  to_investigation: ProjectInvestigationRef;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationRelationshipCreate".
+ */
+export interface ProjectInvestigationRelationshipCreate {
+  from_investigation: ProjectInvestigationRef;
+  rationale: Rationale4;
+  relationship_type: RelationshipType1;
+  to_investigation: ProjectInvestigationRef;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationTemplate".
+ */
+export interface ProjectInvestigationTemplate {
+  created_at: CreatedAt12;
+  description: Description10;
+  id: Id34;
+  project_id: ProjectId5;
+  revision: Revision6;
+  steps: Steps;
+  title: Title16;
+  updated_at: UpdatedAt4;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationTemplateStep".
+ */
+export interface ProjectInvestigationTemplateStep {
+  id: Id35;
+  title: Title15;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationTemplateCreate".
+ */
+export interface ProjectInvestigationTemplateCreate {
+  description: Description11;
+  steps: Steps1;
+  title: Title18;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationTemplateStepCreate".
+ */
+export interface ProjectInvestigationTemplateStepCreate {
+  title: Title17;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationTemplateRun".
+ */
+export interface ProjectInvestigationTemplateRun {
+  created_at: CreatedAt13;
+  id: Id36;
+  project_id: ProjectId6;
+  revision: Revision7;
+  session_id: SessionId22;
+  steps: Steps2;
+  template_id: TemplateId;
+  template_revision: TemplateRevision;
+  template_title: TemplateTitle;
+  updated_at: UpdatedAt5;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationTemplateRunStep".
+ */
+export interface ProjectInvestigationTemplateRunStep {
+  completed: Completed;
+  id: Id37;
+  title: Title19;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationTemplateRunUpdate".
+ */
+export interface ProjectInvestigationTemplateRunUpdate {
+  completed_step_ids: CompletedStepIds;
+  expected_revision: ExpectedRevision3;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationTemplateUpdate".
+ */
+export interface ProjectInvestigationTemplateUpdate {
+  description?: Description12;
+  expected_revision: ExpectedRevision4;
+  steps?: Steps3;
+  title?: Title20;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -3183,7 +3453,7 @@ export interface ProjectInvestigationComparisonCreate {
 export interface ProjectMonitoringLink {
   linked_at: LinkedAt;
   mission_id: MissionId4;
-  project_id: ProjectId3;
+  project_id: ProjectId7;
   schedule_id: ScheduleId5;
 }
 /**
@@ -3192,14 +3462,14 @@ export interface ProjectMonitoringLink {
  */
 export interface ProjectNote {
   body: Body;
-  created_at: CreatedAt10;
-  id: Id32;
+  created_at: CreatedAt14;
+  id: Id38;
   investigation_id: InvestigationId12;
   investigation_session_id: InvestigationSessionId;
-  project_id: ProjectId4;
-  revision: Revision5;
-  title: Title12;
-  updated_at: UpdatedAt3;
+  project_id: ProjectId8;
+  revision: Revision8;
+  title: Title21;
+  updated_at: UpdatedAt6;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -3209,7 +3479,7 @@ export interface ProjectNoteCreate {
   body: Body1;
   investigation_id?: InvestigationId13;
   investigation_session_id?: InvestigationSessionId1;
-  title: Title13;
+  title: Title22;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -3217,8 +3487,36 @@ export interface ProjectNoteCreate {
  */
 export interface ProjectNoteUpdate {
   body?: Body2;
-  expected_revision: ExpectedRevision1;
-  title?: Title14;
+  expected_revision: ExpectedRevision5;
+  title?: Title23;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectSearchHit".
+ */
+export interface ProjectSearchHit {
+  created_at: CreatedAt15;
+  id: Id39;
+  investigation_id: InvestigationId14;
+  kind: Kind5;
+  matched_fields: MatchedFields;
+  matched_terms: MatchedTerms;
+  score: Score;
+  session_id: SessionId23;
+  summary: Summary;
+  title: Title24;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectSearchResponse".
+ */
+export interface ProjectSearchResponse {
+  limit: Limit;
+  offset: Offset;
+  project_id: ProjectId9;
+  query: Query;
+  results: Results;
+  total_count: TotalCount;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -3226,9 +3524,9 @@ export interface ProjectNoteUpdate {
  */
 export interface ProjectSessionLink {
   linked_at: LinkedAt1;
-  project_id: ProjectId5;
+  project_id: ProjectId10;
   session: Session;
-  session_id: SessionId22;
+  session_id: SessionId24;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -3237,13 +3535,13 @@ export interface ProjectSessionLink {
 export interface Session {
   archived: Archived1;
   context: InvestigationContext;
-  created_at: CreatedAt11;
+  created_at: CreatedAt16;
   earth_context_snapshots: EarthContextSnapshots;
   earth_workspace: EarthWorkspaceState;
   engine_agent_session_id: EngineAgentSessionId;
-  id: Id34;
-  title: Title15;
-  updated_at: UpdatedAt5;
+  id: Id41;
+  title: Title25;
+  updated_at: UpdatedAt8;
 }
 /**
  * The working focus of a session. References only; evidence lives in the Engine.
@@ -3276,10 +3574,10 @@ export interface EarthWorkspaceState {
  */
 export interface EarthBookmark {
   context: EarthContext;
-  created_at: CreatedAt12;
-  id: Id33;
+  created_at: CreatedAt17;
+  id: Id40;
   name: Name9;
-  updated_at: UpdatedAt4;
+  updated_at: UpdatedAt7;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -3287,9 +3585,9 @@ export interface EarthBookmark {
  */
 export interface ProjectUpdate {
   archived?: Archived2;
-  description?: Description7;
-  expected_revision: ExpectedRevision2;
-  title?: Title16;
+  description?: Description13;
+  expected_revision: ExpectedRevision6;
+  title?: Title26;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema

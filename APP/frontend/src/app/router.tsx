@@ -1,9 +1,6 @@
 import { createBrowserRouter } from "react-router-dom";
 
 import { AppShell } from "./layout/AppShell";
-import { InvestigationComparisonRoute } from "./routes/InvestigationComparisonRoute";
-import { InvestigationRoute } from "./routes/InvestigationRoute";
-import { ProjectRoute } from "./routes/ProjectRoute";
 import { WorkspaceRoute } from "./routes/WorkspaceRoute";
 
 export const router = createBrowserRouter([
@@ -12,14 +9,28 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <WorkspaceRoute /> },
       { path: "s/:sessionId", element: <WorkspaceRoute /> },
-      { path: "p/:projectId", element: <ProjectRoute /> },
+      {
+        path: "p/:projectId",
+        lazy: async () => {
+          const { ProjectRoute } = await import("./routes/ProjectRoute");
+          return { Component: ProjectRoute };
+        },
+      },
       {
         path: "p/:projectId/comparisons/:comparisonId",
-        element: <InvestigationComparisonRoute />,
+        lazy: async () => {
+          const { InvestigationComparisonRoute } = await import(
+            "./routes/InvestigationComparisonRoute"
+          );
+          return { Component: InvestigationComparisonRoute };
+        },
       },
       {
         path: "p/:projectId/investigations/:sessionId/:investigationId",
-        element: <InvestigationRoute />,
+        lazy: async () => {
+          const { InvestigationRoute } = await import("./routes/InvestigationRoute");
+          return { Component: InvestigationRoute };
+        },
       },
     ],
   },
