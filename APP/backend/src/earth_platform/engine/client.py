@@ -11,9 +11,17 @@ from earth_platform.engine.models import (
     EngineEarthContext,
     EngineEarthObjectGeoJSON,
     EngineHealth,
+    EngineHypothesisCreateRequest,
+    EngineHypothesisLifecycleResponse,
+    EngineHypothesisMutationResponse,
+    EngineHypothesisTransitionRequest,
     EngineImageCapability,
+    EngineInvestigationComparison,
+    EngineInvestigationComparisonRequest,
     EngineInvestigationEventPage,
+    EngineInvestigationReasoningResponse,
     EngineInvestigationReport,
+    EngineInvestigationReproducibilityBundle,
     EngineMission,
     EngineMissionCreate,
     EngineMonitoringComparison,
@@ -23,6 +31,7 @@ from earth_platform.engine.models import (
     EngineMonitoringScheduleCreate,
     EngineMonitoringScheduleUpdate,
     EngineMonitoringTriggerHistory,
+    EngineObservation,
 )
 
 
@@ -56,6 +65,26 @@ class EngineClient(Protocol):
         self, investigation_id: str
     ) -> EngineInvestigationReport: ...
 
+    async def get_investigation_reasoning(
+        self, investigation_id: str
+    ) -> EngineInvestigationReasoningResponse: ...
+
+    async def get_investigation_reproducibility(
+        self, investigation_id: str
+    ) -> EngineInvestigationReproducibilityBundle: ...
+
+    async def create_investigation_comparison(
+        self, request: EngineInvestigationComparisonRequest
+    ) -> EngineInvestigationComparison: ...
+
+    async def get_investigation_comparison(
+        self, comparison_sha256: str
+    ) -> EngineInvestigationComparison: ...
+
+    async def get_investigation_observations(
+        self, investigation_id: str
+    ) -> list[EngineObservation]: ...
+
     async def get_investigation_earth_objects(
         self, investigation_id: str
     ) -> EngineEarthObjectGeoJSON: ...
@@ -68,6 +97,21 @@ class EngineClient(Protocol):
         after_sequence: int = 0,
         limit: int = 100,
     ) -> EngineInvestigationEventPage: ...
+
+    async def get_investigation_hypotheses(
+        self, investigation_id: str
+    ) -> EngineHypothesisLifecycleResponse: ...
+
+    async def add_investigation_hypothesis(
+        self, investigation_id: str, request: EngineHypothesisCreateRequest
+    ) -> EngineHypothesisMutationResponse: ...
+
+    async def transition_investigation_hypothesis(
+        self,
+        investigation_id: str,
+        hypothesis_id: str,
+        request: EngineHypothesisTransitionRequest,
+    ) -> EngineHypothesisMutationResponse: ...
 
     async def list_missions(self) -> list[EngineMission]: ...
 
@@ -87,9 +131,7 @@ class EngineClient(Protocol):
         self, schedule_id: str, enabled: bool
     ) -> EngineMonitoringSchedule: ...
 
-    async def list_monitoring_runs(
-        self, schedule_id: str
-    ) -> list[EngineMonitoringRun]: ...
+    async def list_monitoring_runs(self, schedule_id: str) -> list[EngineMonitoringRun]: ...
 
     async def compare_monitoring_schedule(
         self, schedule_id: str, *, limit: int = 10

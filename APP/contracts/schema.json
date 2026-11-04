@@ -1709,6 +1709,78 @@
       "title": "EngineAgentToolDescriptor",
       "type": "object"
     },
+    "EngineComparisonMeasurement": {
+      "properties": {
+        "canonical_variable": {
+          "title": "Canonical Variable",
+          "type": "string"
+        },
+        "dataset": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataset"
+        },
+        "investigation_id": {
+          "title": "Investigation Id",
+          "type": "string"
+        },
+        "observation_id": {
+          "title": "Observation Id",
+          "type": "string"
+        },
+        "observed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed At"
+        },
+        "provenance": {
+          "additionalProperties": true,
+          "title": "Provenance",
+          "type": "object"
+        },
+        "uncertainty": {
+          "additionalProperties": true,
+          "title": "Uncertainty",
+          "type": "object"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "canonical_variable",
+        "dataset",
+        "investigation_id",
+        "observation_id",
+        "observed_at",
+        "provenance",
+        "uncertainty",
+        "unit",
+        "value"
+      ],
+      "title": "EngineComparisonMeasurement",
+      "type": "object"
+    },
     "EngineDatasetMetadata": {
       "properties": {
         "capabilities": {
@@ -2638,6 +2710,46 @@
       "title": "EngineEventReceived",
       "type": "object"
     },
+    "EngineEvidenceSufficiencyAssessment": {
+      "additionalProperties": true,
+      "properties": {
+        "applicable_validated_rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Applicable Validated Rule Ids",
+          "type": "array"
+        },
+        "explanation": {
+          "title": "Explanation",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "method_inputs_satisfied",
+            "insufficient",
+            "not_assessable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "unmet_preconditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmet Preconditions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "applicable_validated_rule_ids",
+        "explanation",
+        "status",
+        "unmet_preconditions"
+      ],
+      "title": "EngineEvidenceSufficiencyAssessment",
+      "type": "object"
+    },
     "EngineGeoJSONOmission": {
       "properties": {
         "object_id": {
@@ -2703,6 +2815,385 @@
       "title": "EngineHealth",
       "type": "object"
     },
+    "EngineHypothesisCreateRequest": {
+      "properties": {
+        "actor": {
+          "minLength": 1,
+          "title": "Actor",
+          "type": "string"
+        },
+        "competing_group_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Competing Group Id"
+        },
+        "composition": {
+          "anyOf": [
+            {
+              "enum": [
+                "all",
+                "any"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Composition"
+        },
+        "hypothesis_id": {
+          "minLength": 1,
+          "title": "Hypothesis Id",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "explicit",
+            "question_derived",
+            "composite"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "parent_hypothesis_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Parent Hypothesis Ids",
+          "type": "array"
+        },
+        "proposition": {
+          "minLength": 1,
+          "title": "Proposition",
+          "type": "string"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "source_text": {
+          "minLength": 1,
+          "title": "Source Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "actor",
+        "competing_group_id",
+        "composition",
+        "hypothesis_id",
+        "origin",
+        "parent_hypothesis_ids",
+        "proposition",
+        "rationale",
+        "source_text"
+      ],
+      "title": "EngineHypothesisCreateRequest",
+      "type": "object"
+    },
+    "EngineHypothesisGraph": {
+      "properties": {
+        "hypotheses": {
+          "items": {
+            "$ref": "#/$defs/EngineHypothesisRecord"
+          },
+          "title": "Hypotheses",
+          "type": "array"
+        }
+      },
+      "required": [
+        "hypotheses"
+      ],
+      "title": "EngineHypothesisGraph",
+      "type": "object"
+    },
+    "EngineHypothesisLifecycleEvent": {
+      "properties": {
+        "actor": {
+          "minLength": 1,
+          "title": "Actor",
+          "type": "string"
+        },
+        "event_id": {
+          "minLength": 1,
+          "title": "Event Id",
+          "type": "string"
+        },
+        "from_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From Status"
+        },
+        "hypothesis_id": {
+          "minLength": 1,
+          "title": "Hypothesis Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "prior_version": {
+          "minimum": 0,
+          "title": "Prior Version",
+          "type": "integer"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "to_status": {
+          "minLength": 1,
+          "title": "To Status",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "actor",
+        "event_id",
+        "from_status",
+        "hypothesis_id",
+        "occurred_at",
+        "prior_version",
+        "rationale",
+        "to_status",
+        "version"
+      ],
+      "title": "EngineHypothesisLifecycleEvent",
+      "type": "object"
+    },
+    "EngineHypothesisLifecycleResponse": {
+      "properties": {
+        "events": {
+          "items": {
+            "$ref": "#/$defs/EngineHypothesisLifecycleEvent"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "graph": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngineHypothesisGraph"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "restoration_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Restoration Error"
+        },
+        "status": {
+          "enum": [
+            "available",
+            "not_initialized",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "events",
+        "graph",
+        "restoration_error",
+        "status"
+      ],
+      "title": "EngineHypothesisLifecycleResponse",
+      "type": "object"
+    },
+    "EngineHypothesisMutationResponse": {
+      "properties": {
+        "events": {
+          "items": {
+            "$ref": "#/$defs/EngineHypothesisLifecycleEvent"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "hypothesis": {
+          "$ref": "#/$defs/EngineHypothesisRecord"
+        }
+      },
+      "required": [
+        "events",
+        "hypothesis"
+      ],
+      "title": "EngineHypothesisMutationResponse",
+      "type": "object"
+    },
+    "EngineHypothesisRecord": {
+      "properties": {
+        "competing_group_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Competing Group Id"
+        },
+        "composition": {
+          "anyOf": [
+            {
+              "enum": [
+                "all",
+                "any"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Composition"
+        },
+        "hypothesis_id": {
+          "minLength": 1,
+          "title": "Hypothesis Id",
+          "type": "string"
+        },
+        "lifecycle": {
+          "enum": [
+            "proposed",
+            "active",
+            "under_review",
+            "superseded",
+            "withdrawn",
+            "closed"
+          ],
+          "title": "Lifecycle",
+          "type": "string"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        },
+        "origin": {
+          "enum": [
+            "explicit",
+            "question_derived",
+            "composite"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "parent_hypothesis_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Parent Hypothesis Ids",
+          "type": "array"
+        },
+        "proposition": {
+          "minLength": 1,
+          "title": "Proposition",
+          "type": "string"
+        },
+        "source_text": {
+          "minLength": 1,
+          "title": "Source Text",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "competing_group_id",
+        "composition",
+        "hypothesis_id",
+        "lifecycle",
+        "metadata",
+        "origin",
+        "parent_hypothesis_ids",
+        "proposition",
+        "source_text",
+        "version"
+      ],
+      "title": "EngineHypothesisRecord",
+      "type": "object"
+    },
+    "EngineHypothesisTransitionRequest": {
+      "properties": {
+        "actor": {
+          "minLength": 1,
+          "title": "Actor",
+          "type": "string"
+        },
+        "expected_version": {
+          "minimum": 1,
+          "title": "Expected Version",
+          "type": "integer"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "under_review",
+            "superseded",
+            "withdrawn",
+            "closed"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "actor",
+        "expected_version",
+        "rationale",
+        "status"
+      ],
+      "title": "EngineHypothesisTransitionRequest",
+      "type": "object"
+    },
     "EngineImageCapability": {
       "properties": {
         "available": {
@@ -2758,6 +3249,152 @@
         "unavailable_reason"
       ],
       "title": "EngineImageCapability",
+      "type": "object"
+    },
+    "EngineInvestigationComparison": {
+      "properties": {
+        "alignment_issues": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Alignment Issues",
+          "type": "array"
+        },
+        "comparison_id": {
+          "minLength": 1,
+          "title": "Comparison Id",
+          "type": "string"
+        },
+        "comparison_sha256": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "title": "Comparison Sha256",
+          "type": "string"
+        },
+        "investigation_reports": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Investigation Reports",
+          "type": "array"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "markdown": {
+          "minLength": 1,
+          "title": "Markdown",
+          "type": "string"
+        },
+        "measurement_groups": {
+          "items": {
+            "$ref": "#/$defs/EngineMeasurementComparisonGroup"
+          },
+          "title": "Measurement Groups",
+          "type": "array"
+        },
+        "observation_identity_conflicts": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Observation Identity Conflicts",
+          "type": "array"
+        },
+        "observation_stacks": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Observation Stacks",
+          "type": "array"
+        },
+        "schema_version": {
+          "minLength": 1,
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "stack_builder_version": {
+          "minLength": 1,
+          "title": "Stack Builder Version",
+          "type": "string"
+        },
+        "temporal_diagnostics": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Temporal Diagnostics",
+          "type": "array"
+        },
+        "temporal_issues": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Temporal Issues",
+          "type": "array"
+        },
+        "temporal_method_id": {
+          "minLength": 1,
+          "title": "Temporal Method Id",
+          "type": "string"
+        },
+        "temporal_method_version": {
+          "minLength": 1,
+          "title": "Temporal Method Version",
+          "type": "string"
+        },
+        "unmatched_observation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmatched Observation Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "alignment_issues",
+        "comparison_id",
+        "comparison_sha256",
+        "investigation_reports",
+        "limitations",
+        "markdown",
+        "measurement_groups",
+        "observation_identity_conflicts",
+        "observation_stacks",
+        "schema_version",
+        "stack_builder_version",
+        "temporal_diagnostics",
+        "temporal_issues",
+        "temporal_method_id",
+        "temporal_method_version",
+        "unmatched_observation_ids"
+      ],
+      "title": "EngineInvestigationComparison",
+      "type": "object"
+    },
+    "EngineInvestigationComparisonRequest": {
+      "properties": {
+        "investigation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "minItems": 2,
+          "title": "Investigation Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "investigation_ids"
+      ],
+      "title": "EngineInvestigationComparisonRequest",
       "type": "object"
     },
     "EngineInvestigationEvent": {
@@ -2857,6 +3494,37 @@
       "title": "EngineInvestigationEventPage",
       "type": "object"
     },
+    "EngineInvestigationReasoningResponse": {
+      "properties": {
+        "reasoning": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngineScientificReasoningReport"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "status": {
+          "enum": [
+            "not_evaluated",
+            "evaluated",
+            "insufficient_evidence",
+            "not_evaluable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reasoning",
+        "status"
+      ],
+      "title": "EngineInvestigationReasoningResponse",
+      "type": "object"
+    },
     "EngineInvestigationReport": {
       "description": "Engine-authored report text linked to an Engine-owned investigation.",
       "properties": {
@@ -2888,6 +3556,349 @@
         "report_sha256"
       ],
       "title": "EngineInvestigationReport",
+      "type": "object"
+    },
+    "EngineInvestigationReproducibilityBundle": {
+      "additionalProperties": true,
+      "properties": {
+        "artifact_hashes": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Artifact Hashes",
+          "type": "object"
+        },
+        "audit_events": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Audit Events",
+          "type": "array"
+        },
+        "bundle_id": {
+          "minLength": 1,
+          "title": "Bundle Id",
+          "type": "string"
+        },
+        "bundle_sha256": {
+          "pattern": "^[a-fA-F0-9]{64}$",
+          "title": "Bundle Sha256",
+          "type": "string"
+        },
+        "capability_matrix_revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capability Matrix Revision"
+        },
+        "capability_snapshots": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Capability Snapshots",
+          "type": "array"
+        },
+        "datasets": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Datasets",
+          "type": "array"
+        },
+        "earth_object_extractions": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Earth Object Extractions",
+          "type": "array"
+        },
+        "earth_object_graph": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Earth Object Graph"
+        },
+        "earth_object_transitions": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Earth Object Transitions",
+          "type": "array"
+        },
+        "earth_objects": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Earth Objects",
+          "type": "array"
+        },
+        "evidence_graph": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Graph"
+        },
+        "execution_trace": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Execution Trace",
+          "type": "array"
+        },
+        "exported_at": {
+          "format": "date-time",
+          "title": "Exported At",
+          "type": "string"
+        },
+        "hypotheses": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Hypotheses",
+          "type": "array"
+        },
+        "investigation_comparisons": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Investigation Comparisons",
+          "type": "array"
+        },
+        "investigation_id": {
+          "minLength": 1,
+          "title": "Investigation Id",
+          "type": "string"
+        },
+        "missing_artifacts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Artifacts",
+          "type": "array"
+        },
+        "monitoring_comparisons": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Monitoring Comparisons",
+          "type": "array"
+        },
+        "monitoring_events": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Monitoring Events",
+          "type": "array"
+        },
+        "monitoring_notifications": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Monitoring Notifications",
+          "type": "array"
+        },
+        "monitoring_runs": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Monitoring Runs",
+          "type": "array"
+        },
+        "monitoring_schedules": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Monitoring Schedules"
+        },
+        "observations": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Observations",
+          "type": "array"
+        },
+        "plans": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Plans",
+          "type": "array"
+        },
+        "provenance": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Provenance",
+          "type": "array"
+        },
+        "reasoning_report": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Report"
+        },
+        "schema_version": {
+          "minLength": 1,
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "scientific_methods": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Scientific Methods",
+          "type": "array"
+        },
+        "uncertainty_inventory": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uncertainty Inventory"
+        }
+      },
+      "required": [
+        "artifact_hashes",
+        "audit_events",
+        "bundle_id",
+        "bundle_sha256",
+        "capability_matrix_revision",
+        "capability_snapshots",
+        "datasets",
+        "earth_object_extractions",
+        "earth_object_graph",
+        "earth_object_transitions",
+        "earth_objects",
+        "evidence_graph",
+        "execution_trace",
+        "exported_at",
+        "hypotheses",
+        "investigation_comparisons",
+        "investigation_id",
+        "missing_artifacts",
+        "monitoring_comparisons",
+        "monitoring_events",
+        "monitoring_notifications",
+        "monitoring_runs",
+        "monitoring_schedules",
+        "observations",
+        "plans",
+        "provenance",
+        "reasoning_report",
+        "schema_version",
+        "scientific_methods",
+        "uncertainty_inventory"
+      ],
+      "title": "EngineInvestigationReproducibilityBundle",
+      "type": "object"
+    },
+    "EngineMeasurementComparisonGroup": {
+      "properties": {
+        "canonical_variable": {
+          "title": "Canonical Variable",
+          "type": "string"
+        },
+        "coverage": {
+          "enum": [
+            "present_in_all_selected_investigations",
+            "present_in_subset_of_selected_investigations"
+          ],
+          "title": "Coverage",
+          "type": "string"
+        },
+        "interpretation": {
+          "minLength": 1,
+          "title": "Interpretation",
+          "type": "string"
+        },
+        "investigation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Investigation Ids",
+          "type": "array"
+        },
+        "records": {
+          "items": {
+            "$ref": "#/$defs/EngineComparisonMeasurement"
+          },
+          "title": "Records",
+          "type": "array"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "canonical_variable",
+        "coverage",
+        "interpretation",
+        "investigation_ids",
+        "records",
+        "unit"
+      ],
+      "title": "EngineMeasurementComparisonGroup",
       "type": "object"
     },
     "EngineMission": {
@@ -3737,6 +4748,591 @@
         "unit"
       ],
       "title": "EngineMonitoringTriggerPolicy",
+      "type": "object"
+    },
+    "EngineObservation": {
+      "additionalProperties": true,
+      "description": "Typed source record view; values and provenance remain Engine-owned.",
+      "properties": {
+        "assets": {
+          "additionalProperties": {
+            "$ref": "#/$defs/EngineObservationAsset"
+          },
+          "title": "Assets",
+          "type": "object"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 6,
+              "minItems": 4,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bbox"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "crs": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Crs"
+        },
+        "dataset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngineObservationDataset"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "geometry": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Geometry"
+        },
+        "measured_variables": {
+          "additionalProperties": true,
+          "title": "Measured Variables",
+          "type": "object"
+        },
+        "modalities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Modalities",
+          "type": "array"
+        },
+        "observation_id": {
+          "minLength": 1,
+          "title": "Observation Id",
+          "type": "string"
+        },
+        "observation_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observation Type"
+        },
+        "observed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed At"
+        },
+        "properties": {
+          "additionalProperties": true,
+          "title": "Properties",
+          "type": "object"
+        },
+        "provenance": {
+          "additionalProperties": true,
+          "title": "Provenance",
+          "type": "object"
+        },
+        "provider_metadata": {
+          "additionalProperties": true,
+          "title": "Provider Metadata",
+          "type": "object"
+        },
+        "quality": {
+          "additionalProperties": true,
+          "title": "Quality",
+          "type": "object"
+        },
+        "reproducibility": {
+          "additionalProperties": true,
+          "title": "Reproducibility",
+          "type": "object"
+        },
+        "source_document": {
+          "additionalProperties": true,
+          "title": "Source Document",
+          "type": "object"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Id"
+        },
+        "temporal_extent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngineObservationTemporalExtent"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "uncertainty": {
+          "additionalProperties": true,
+          "title": "Uncertainty",
+          "type": "object"
+        }
+      },
+      "required": [
+        "assets",
+        "bbox",
+        "confidence",
+        "crs",
+        "dataset",
+        "geometry",
+        "measured_variables",
+        "modalities",
+        "observation_id",
+        "observation_type",
+        "observed_at",
+        "properties",
+        "provenance",
+        "provider_metadata",
+        "quality",
+        "reproducibility",
+        "source_document",
+        "source_id",
+        "temporal_extent",
+        "uncertainty"
+      ],
+      "title": "EngineObservation",
+      "type": "object"
+    },
+    "EngineObservationAsset": {
+      "properties": {
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "checksum": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checksum"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "media_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Media Type"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "array"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "uri": {
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "capabilities",
+        "checksum",
+        "description",
+        "media_type",
+        "metadata",
+        "roles",
+        "title",
+        "uri"
+      ],
+      "title": "EngineObservationAsset",
+      "type": "object"
+    },
+    "EngineObservationDataset": {
+      "properties": {
+        "connector_id": {
+          "minLength": 1,
+          "title": "Connector Id",
+          "type": "string"
+        },
+        "dataset_id": {
+          "minLength": 1,
+          "title": "Dataset Id",
+          "type": "string"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "connector_id",
+        "dataset_id",
+        "metadata",
+        "uri",
+        "version"
+      ],
+      "title": "EngineObservationDataset",
+      "type": "object"
+    },
+    "EngineObservationTemporalExtent": {
+      "properties": {
+        "end": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start"
+        }
+      },
+      "required": [
+        "end",
+        "start"
+      ],
+      "title": "EngineObservationTemporalExtent",
+      "type": "object"
+    },
+    "EngineScientificConclusion": {
+      "additionalProperties": true,
+      "properties": {
+        "additional_observation_targets": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Additional Observation Targets",
+          "type": "array"
+        },
+        "explanation": {
+          "title": "Explanation",
+          "type": "string"
+        },
+        "missing_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Evidence",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "unresolved",
+            "findings_available"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "additional_observation_targets",
+        "explanation",
+        "missing_evidence",
+        "status"
+      ],
+      "title": "EngineScientificConclusion",
+      "type": "object"
+    },
+    "EngineScientificFinding": {
+      "additionalProperties": true,
+      "properties": {
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "contradicting_observation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Contradicting Observation Ids",
+          "type": "array"
+        },
+        "evidential_relation": {
+          "enum": [
+            "supports",
+            "contradicts",
+            "contextual",
+            "inconclusive"
+          ],
+          "title": "Evidential Relation",
+          "type": "string"
+        },
+        "finding_id": {
+          "minLength": 1,
+          "title": "Finding Id",
+          "type": "string"
+        },
+        "hypothesis_statement": {
+          "minLength": 1,
+          "title": "Hypothesis Statement",
+          "type": "string"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "observation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Observation Ids",
+          "type": "array"
+        },
+        "rule_id": {
+          "minLength": 1,
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "rule_version": {
+          "minLength": 1,
+          "title": "Rule Version",
+          "type": "string"
+        },
+        "statement": {
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        },
+        "supporting_observation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Supporting Observation Ids",
+          "type": "array"
+        },
+        "unresolved_observation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unresolved Observation Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "assumptions",
+        "contradicting_observation_ids",
+        "evidential_relation",
+        "finding_id",
+        "hypothesis_statement",
+        "limitations",
+        "observation_ids",
+        "rule_id",
+        "rule_version",
+        "statement",
+        "supporting_observation_ids",
+        "unresolved_observation_ids"
+      ],
+      "title": "EngineScientificFinding",
+      "type": "object"
+    },
+    "EngineScientificReasoningReport": {
+      "additionalProperties": true,
+      "properties": {
+        "conclusion": {
+          "$ref": "#/$defs/EngineScientificConclusion"
+        },
+        "engine_id": {
+          "minLength": 1,
+          "title": "Engine Id",
+          "type": "string"
+        },
+        "engine_version": {
+          "minLength": 1,
+          "title": "Engine Version",
+          "type": "string"
+        },
+        "findings": {
+          "items": {
+            "$ref": "#/$defs/EngineScientificFinding"
+          },
+          "title": "Findings",
+          "type": "array"
+        },
+        "investigation_id": {
+          "minLength": 1,
+          "title": "Investigation Id",
+          "type": "string"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Limitations",
+          "type": "array"
+        },
+        "reasoning_id": {
+          "minLength": 1,
+          "title": "Reasoning Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "evaluated",
+            "insufficient_evidence",
+            "not_evaluable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "sufficiency": {
+          "$ref": "#/$defs/EngineEvidenceSufficiencyAssessment"
+        }
+      },
+      "required": [
+        "conclusion",
+        "engine_id",
+        "engine_version",
+        "findings",
+        "investigation_id",
+        "limitations",
+        "reasoning_id",
+        "status",
+        "sufficiency"
+      ],
+      "title": "EngineScientificReasoningReport",
       "type": "object"
     },
     "EvidenceRef": {
@@ -5010,6 +6606,681 @@
         "version"
       ],
       "title": "PreparedVisionPayload",
+      "type": "object"
+    },
+    "Project": {
+      "properties": {
+        "archived": {
+          "default": false,
+          "title": "Archived",
+          "type": "boolean"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "archived",
+        "created_at",
+        "description",
+        "id",
+        "revision",
+        "title",
+        "updated_at"
+      ],
+      "title": "Project",
+      "type": "object"
+    },
+    "ProjectActivity": {
+      "properties": {
+        "action": {
+          "enum": [
+            "project.created",
+            "project.updated",
+            "project.archived",
+            "project.unarchived",
+            "session.linked",
+            "note.created",
+            "note.updated",
+            "note.deleted",
+            "earth_view.saved",
+            "earth_view.deleted",
+            "investigation_comparison.created",
+            "investigation_comparison.deleted",
+            "monitoring.linked",
+            "monitoring.unlinked"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Id"
+        },
+        "subject_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subject Id"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "label",
+        "occurred_at",
+        "project_id",
+        "session_id",
+        "subject_id"
+      ],
+      "title": "ProjectActivity",
+      "type": "object"
+    },
+    "ProjectCreate": {
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "description",
+        "title"
+      ],
+      "title": "ProjectCreate",
+      "type": "object"
+    },
+    "ProjectEarthView": {
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/EarthContext"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "investigation_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Investigation Id"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "source_bookmark_id": {
+          "title": "Source Bookmark Id",
+          "type": "string"
+        },
+        "source_session_exists": {
+          "default": true,
+          "title": "Source Session Exists",
+          "type": "boolean"
+        },
+        "source_session_id": {
+          "title": "Source Session Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "context",
+        "created_at",
+        "id",
+        "investigation_id",
+        "project_id",
+        "source_bookmark_id",
+        "source_session_exists",
+        "source_session_id",
+        "title"
+      ],
+      "title": "ProjectEarthView",
+      "type": "object"
+    },
+    "ProjectEarthViewCreate": {
+      "properties": {
+        "investigation_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Investigation Id"
+        },
+        "source_bookmark_id": {
+          "minLength": 1,
+          "title": "Source Bookmark Id",
+          "type": "string"
+        },
+        "source_session_id": {
+          "minLength": 1,
+          "title": "Source Session Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_bookmark_id",
+        "source_session_id",
+        "title"
+      ],
+      "title": "ProjectEarthViewCreate",
+      "type": "object"
+    },
+    "ProjectInvestigationComparison": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "engine_comparison_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine Comparison Id"
+        },
+        "engine_comparison_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-fA-F0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine Comparison Sha256"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "left": {
+          "$ref": "#/$defs/ProjectInvestigationRef"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "right": {
+          "$ref": "#/$defs/ProjectInvestigationRef"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "created_at",
+        "engine_comparison_id",
+        "engine_comparison_sha256",
+        "id",
+        "left",
+        "project_id",
+        "right",
+        "title"
+      ],
+      "title": "ProjectInvestigationComparison",
+      "type": "object"
+    },
+    "ProjectInvestigationComparisonCreate": {
+      "properties": {
+        "left": {
+          "$ref": "#/$defs/ProjectInvestigationRef"
+        },
+        "right": {
+          "$ref": "#/$defs/ProjectInvestigationRef"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "left",
+        "right",
+        "title"
+      ],
+      "title": "ProjectInvestigationComparisonCreate",
+      "type": "object"
+    },
+    "ProjectInvestigationRef": {
+      "description": "A reference to an Engine-owned investigation as observed in a linked session.",
+      "properties": {
+        "investigation_id": {
+          "title": "Investigation Id",
+          "type": "string"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "investigation_id",
+        "session_id"
+      ],
+      "title": "ProjectInvestigationRef",
+      "type": "object"
+    },
+    "ProjectMonitoringLink": {
+      "properties": {
+        "linked_at": {
+          "format": "date-time",
+          "title": "Linked At",
+          "type": "string"
+        },
+        "mission_id": {
+          "minLength": 1,
+          "title": "Mission Id",
+          "type": "string"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "schedule_id": {
+          "minLength": 1,
+          "title": "Schedule Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "linked_at",
+        "mission_id",
+        "project_id",
+        "schedule_id"
+      ],
+      "title": "ProjectMonitoringLink",
+      "type": "object"
+    },
+    "ProjectNote": {
+      "properties": {
+        "body": {
+          "maxLength": 20000,
+          "minLength": 1,
+          "title": "Body",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "investigation_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Investigation Id"
+        },
+        "investigation_session_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Investigation Session Id"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "body",
+        "created_at",
+        "id",
+        "investigation_id",
+        "investigation_session_id",
+        "project_id",
+        "revision",
+        "title",
+        "updated_at"
+      ],
+      "title": "ProjectNote",
+      "type": "object"
+    },
+    "ProjectNoteCreate": {
+      "properties": {
+        "body": {
+          "maxLength": 20000,
+          "minLength": 1,
+          "title": "Body",
+          "type": "string"
+        },
+        "investigation_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Investigation Id"
+        },
+        "investigation_session_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Investigation Session Id"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "body",
+        "title"
+      ],
+      "title": "ProjectNoteCreate",
+      "type": "object"
+    },
+    "ProjectNoteUpdate": {
+      "properties": {
+        "body": {
+          "anyOf": [
+            {
+              "maxLength": 20000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Body"
+        },
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        }
+      },
+      "required": [
+        "expected_revision"
+      ],
+      "title": "ProjectNoteUpdate",
+      "type": "object"
+    },
+    "ProjectSessionLink": {
+      "properties": {
+        "linked_at": {
+          "format": "date-time",
+          "title": "Linked At",
+          "type": "string"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "session": {
+          "$ref": "#/$defs/Session"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "linked_at",
+        "project_id",
+        "session",
+        "session_id"
+      ],
+      "title": "ProjectSessionLink",
+      "type": "object"
+    },
+    "ProjectUpdate": {
+      "properties": {
+        "archived": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Archived"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        }
+      },
+      "required": [
+        "expected_revision"
+      ],
+      "title": "ProjectUpdate",
       "type": "object"
     },
     "ReasoningDeltaEvent": {
@@ -6424,6 +8695,9 @@
     "engine_agent_tool_descriptor": {
       "$ref": "#/$defs/EngineAgentToolDescriptor"
     },
+    "engine_comparison_measurement": {
+      "$ref": "#/$defs/EngineComparisonMeasurement"
+    },
     "engine_dataset_metadata": {
       "$ref": "#/$defs/EngineDatasetMetadata"
     },
@@ -6439,17 +8713,56 @@
     "engine_earth_query": {
       "$ref": "#/$defs/EngineEarthQuery"
     },
+    "engine_evidence_sufficiency_assessment": {
+      "$ref": "#/$defs/EngineEvidenceSufficiencyAssessment"
+    },
     "engine_health": {
       "$ref": "#/$defs/EngineHealth"
+    },
+    "engine_hypothesis_create_request": {
+      "$ref": "#/$defs/EngineHypothesisCreateRequest"
+    },
+    "engine_hypothesis_graph": {
+      "$ref": "#/$defs/EngineHypothesisGraph"
+    },
+    "engine_hypothesis_lifecycle_event": {
+      "$ref": "#/$defs/EngineHypothesisLifecycleEvent"
+    },
+    "engine_hypothesis_lifecycle_response": {
+      "$ref": "#/$defs/EngineHypothesisLifecycleResponse"
+    },
+    "engine_hypothesis_mutation_response": {
+      "$ref": "#/$defs/EngineHypothesisMutationResponse"
+    },
+    "engine_hypothesis_record": {
+      "$ref": "#/$defs/EngineHypothesisRecord"
+    },
+    "engine_hypothesis_transition_request": {
+      "$ref": "#/$defs/EngineHypothesisTransitionRequest"
     },
     "engine_image_capability": {
       "$ref": "#/$defs/EngineImageCapability"
     },
+    "engine_investigation_comparison": {
+      "$ref": "#/$defs/EngineInvestigationComparison"
+    },
+    "engine_investigation_comparison_request": {
+      "$ref": "#/$defs/EngineInvestigationComparisonRequest"
+    },
     "engine_investigation_event_page": {
       "$ref": "#/$defs/EngineInvestigationEventPage"
     },
+    "engine_investigation_reasoning_response": {
+      "$ref": "#/$defs/EngineInvestigationReasoningResponse"
+    },
     "engine_investigation_report": {
       "$ref": "#/$defs/EngineInvestigationReport"
+    },
+    "engine_investigation_reproducibility_bundle": {
+      "$ref": "#/$defs/EngineInvestigationReproducibilityBundle"
+    },
+    "engine_measurement_comparison_group": {
+      "$ref": "#/$defs/EngineMeasurementComparisonGroup"
     },
     "engine_mission": {
       "$ref": "#/$defs/EngineMission"
@@ -6478,6 +8791,18 @@
     "engine_monitoring_trigger_history": {
       "$ref": "#/$defs/EngineMonitoringTriggerHistory"
     },
+    "engine_observation": {
+      "$ref": "#/$defs/EngineObservation"
+    },
+    "engine_scientific_conclusion": {
+      "$ref": "#/$defs/EngineScientificConclusion"
+    },
+    "engine_scientific_finding": {
+      "$ref": "#/$defs/EngineScientificFinding"
+    },
+    "engine_scientific_reasoning_report": {
+      "$ref": "#/$defs/EngineScientificReasoningReport"
+    },
     "evidence": {
       "$ref": "#/$defs/EvidenceRef"
     },
@@ -6505,6 +8830,48 @@
     "prepared_vision_payload": {
       "$ref": "#/$defs/PreparedVisionPayload"
     },
+    "project": {
+      "$ref": "#/$defs/Project"
+    },
+    "project_activity": {
+      "$ref": "#/$defs/ProjectActivity"
+    },
+    "project_create": {
+      "$ref": "#/$defs/ProjectCreate"
+    },
+    "project_earth_view": {
+      "$ref": "#/$defs/ProjectEarthView"
+    },
+    "project_earth_view_create": {
+      "$ref": "#/$defs/ProjectEarthViewCreate"
+    },
+    "project_investigation_comparison": {
+      "$ref": "#/$defs/ProjectInvestigationComparison"
+    },
+    "project_investigation_comparison_create": {
+      "$ref": "#/$defs/ProjectInvestigationComparisonCreate"
+    },
+    "project_investigation_ref": {
+      "$ref": "#/$defs/ProjectInvestigationRef"
+    },
+    "project_monitoring_link": {
+      "$ref": "#/$defs/ProjectMonitoringLink"
+    },
+    "project_note": {
+      "$ref": "#/$defs/ProjectNote"
+    },
+    "project_note_create": {
+      "$ref": "#/$defs/ProjectNoteCreate"
+    },
+    "project_note_update": {
+      "$ref": "#/$defs/ProjectNoteUpdate"
+    },
+    "project_session_link": {
+      "$ref": "#/$defs/ProjectSessionLink"
+    },
+    "project_update": {
+      "$ref": "#/$defs/ProjectUpdate"
+    },
     "session": {
       "$ref": "#/$defs/Session"
     },
@@ -6525,6 +8892,13 @@
     "layer_spec",
     "evidence",
     "engine_health",
+    "engine_hypothesis_record",
+    "engine_hypothesis_graph",
+    "engine_hypothesis_lifecycle_event",
+    "engine_hypothesis_lifecycle_response",
+    "engine_hypothesis_create_request",
+    "engine_hypothesis_transition_request",
+    "engine_hypothesis_mutation_response",
     "engine_agent_tool_descriptor",
     "engine_image_capability",
     "engine_dataset_metadata",
@@ -6542,8 +8916,19 @@
     "engine_monitoring_schedule_create",
     "engine_monitoring_schedule_update",
     "engine_earth_object_geojson",
+    "engine_investigation_comparison",
+    "engine_investigation_comparison_request",
+    "engine_comparison_measurement",
+    "engine_measurement_comparison_group",
     "engine_investigation_event_page",
     "engine_investigation_report",
+    "engine_investigation_reasoning_response",
+    "engine_investigation_reproducibility_bundle",
+    "engine_scientific_finding",
+    "engine_scientific_conclusion",
+    "engine_evidence_sufficiency_assessment",
+    "engine_scientific_reasoning_report",
+    "engine_observation",
     "message",
     "model_info",
     "image_asset",
@@ -6554,6 +8939,20 @@
     "session",
     "conversation",
     "active_task",
+    "project",
+    "project_activity",
+    "project_create",
+    "project_investigation_ref",
+    "project_investigation_comparison",
+    "project_investigation_comparison_create",
+    "project_note",
+    "project_note_create",
+    "project_note_update",
+    "project_monitoring_link",
+    "project_earth_view",
+    "project_earth_view_create",
+    "project_update",
+    "project_session_link",
     "plugin_manifest",
     "panel"
   ],

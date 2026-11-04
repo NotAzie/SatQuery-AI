@@ -1,9 +1,17 @@
-import { useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useParams } from "react-router-dom";
 
+import { restoreEarthContext } from "@/earth/restore";
+import type { EarthBookmark } from "@/earth/workspace/types";
+import { useEarthRegistry } from "@/hooks/useEarth";
 import { getSession, updateSessionEarthWorkspace } from "@/services/api/sessions";
 import { useEarthStore } from "@/state/earthStore";
 import { useSessionStore } from "@/state/sessionStore";
+
+interface PendingRestore {
+  sessionId: string;
+  bookmark: EarthBookmark;
+}
 
 /**
  * `/` starts a fresh workspace, `/s/:sessionId` resumes one. The route renders nothing itself:
@@ -11,9 +19,13 @@ import { useSessionStore } from "@/state/sessionStore";
  */
 export function WorkspaceRoute() {
   const { sessionId } = useParams();
+  const location = useLocation();
+  const registry = useEarthRegistry();
   const setActiveSession = useSessionStore((s) => s.setActiveSession);
+  const [pendingRestore, setPendingRestore] = useState<PendingRestore | null>(null);
 
   useEffect(() => {
+    const restoreBookmarkId = new URLSearchParams(location.search).get("restoreBookmark");
     setActiveSession(sessionId ?? null);
     if (!sessionId) return () => setActiveSession(null);
 
@@ -63,6 +75,18 @@ export function WorkspaceRoute() {
         const initial = serverHasState ? serverWorkspace : current;
         useSessionStore.getState().hydrateWorkspace(initial);
         useEarthStore.getState().setCaptures(initial.captures);
+        if (restoreBookmarkId) {
+          const bookmark = initial.bookmarks.find(({ id }) => id === restoreBookmarkId);
+          if (!bookmark) {
+            useSessionStore
+              .getState()
+              .setPersistenceError("The requested saved Earth view is not in this session.");
+          } else {
+            setPendingRestore({ sessionId, bookmark });
+          }
+        } else {
+          setPendingRestore(null);
+        }
         unsubscribe = useSessionStore.subscribe((state, previous) => {
           if (
             state.bookmarks === previous.bookmarks &&
@@ -91,7 +115,49 @@ export function WorkspaceRoute() {
       if (saveTimer) clearTimeout(saveTimer);
       setActiveSession(null);
     };
-  }, [sessionId, setActiveSession]);
+  }, [location.search, sessionId, setActiveSession]);
+
+  useEffect(() => {
+    const controller = registry.controller;
+    const restoreBookmarkId = new URLSearchParams(location.search).get("restoreBookmark");
+    if (
+      !pendingRestore ||
+      !controller ||
+      pendingRestore.sessionId !== sessionId ||
+      pendingRestore.bookmark.id !== restoreBookmarkId
+    ) {
+      return;
+    }
+    let active = true;
+    void restoreEarthContext(
+      pendingRestore.bookmark.context,
+      controller,
+      registry.secondaryController,
+      registry.events,
+    )
+      .then(() => {
+        if (active) useSessionStore.getState().setPersistenceError(null);
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          useSessionStore
+            .getState()
+            .setPersistenceError(
+              reason instanceof Error ? reason.message : "Could not restore the saved Earth view.",
+            );
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    location.search,
+    pendingRestore,
+    registry.controller,
+    registry.events,
+    registry.secondaryController,
+    sessionId,
+  ]);
 
   return null;
 }

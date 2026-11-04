@@ -11,10 +11,17 @@ from contextlib import asynccontextmanager, suppress
 from typing import List, Literal, Optional
 
 from connectors.noaa_coops import NoaaCoopsConnector
-from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Path, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, StrictBool, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    StrictBool,
+    TypeAdapter,
+    model_validator,
+)
+from pydantic import ValidationError as PydanticValidationError
 
 from .agent import (
     AgentEarthContext,
@@ -26,7 +33,10 @@ from .config import Settings, get_settings
 from .connector_bootstrap import load_configured_connectors
 from .errors import ExtensionError, QueryError, SatQueryError, ValidationError
 from .orchestrator import SatQueryEngine
-from .platform.comparisons import InvestigationComparisonRequest
+from .platform.comparisons import (
+    InvestigationComparison,
+    InvestigationComparisonRequest,
+)
 from .platform.contracts import (
     EarthCapabilitySnapshot,
     EarthObjectRelationship,
@@ -1552,6 +1562,33 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         return JSONResponse(jsonable_encoder(comparison))
 
     @app.get(
+        "/api/v1/platform/investigation-comparisons/{comparison_sha256}",
+        summary="Retrieve a persisted Engine investigation comparison by digest",
+    )
+    async def get_investigation_comparison(
+        comparison_sha256: str = Path(pattern=r"^[a-fA-F0-9]{64}$"),
+    ) -> JSONResponse:
+        runtime = get_engine().platform_runtime
+        artifact = runtime.earth_memory.get(
+            f"investigation-comparison:{comparison_sha256}"
+        )
+        if artifact is None or artifact.artifact_type != "investigation_comparison":
+            raise HTTPException(status_code=404, detail="Investigation comparison not found")
+        try:
+            comparison = InvestigationComparison.model_validate(artifact.payload)
+        except PydanticValidationError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail="Persisted investigation comparison failed contract validation",
+            ) from exc
+        if comparison.comparison_sha256 != comparison_sha256:
+            raise HTTPException(
+                status_code=409,
+                detail="Persisted investigation comparison digest does not match the request",
+            )
+        return JSONResponse(jsonable_encoder(comparison))
+
+    @app.get(
         "/api/v1/platform/investigations/{investigation_id}/intelligence",
         summary="Inspect the investigation design and evidence coverage audit",
     )
@@ -2194,7 +2231,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         force_tool: Optional[str] = Form(
             None, description="Pin a capability and bypass routing."
         ),
-        include_trace: bool = Form(True),
+        include_trace: str | None = Form(
+            default=None,
+            description="Include execution trace; defaults to true when omitted.",
+        ),
     ) -> QueryResponse:
         engine = get_engine()
 
@@ -2212,13 +2252,25 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             if piece.strip()
         ]
 
+        try:
+            trace_enabled = (
+                TypeAdapter(bool).validate_python(include_trace)
+                if include_trace is not None
+                else True
+            )
+        except PydanticValidationError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="include_trace must be a boolean",
+            ) from exc
+
         return await engine.answer_on_platform(
             query,
             uploads=uploads,
             image_paths=paths,
             modality_hint=_parse_modality(modality_hint),
             force_tool=_parse_tool(force_tool),
-            include_trace=include_trace,
+            include_trace=trace_enabled,
         )
 
     @app.post(

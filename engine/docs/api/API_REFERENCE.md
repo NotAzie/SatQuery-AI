@@ -96,7 +96,7 @@ routes are called.
 | `GET` | `/api/v1/platform/investigations/{investigation_id}` | Inspect task, evidence, result, and lifecycle references. |
 | `POST` | `/api/v1/platform/monitoring/schedules` | Create a recurring EarthQuery schedule linked to an active mission. Optional `rolling_window_seconds` resolves a lookback window ending at each persisted run's start; it cannot be combined with fixed EarthQuery temporal bounds. |
 | `GET` | `/api/v1/platform/monitoring/schedules` | List schedules, optionally filtered by `mission_id`. |
-| `PATCH` | `/api/v1/platform/monitoring/schedules/{schedule_id}` | Revise query/cadence/policy, including optional `rolling_window_seconds` (set to `null` to disable), with an `expected_revision`; stale edits return 409. |
+| `PATCH` | `/api/v1/platform/monitoring/schedules/{schedule_id}` | Revise query/cadence/policy, including optional `rolling_window_seconds` (set to `null` to disable), with an `expected_revision`; stale edits return 409. Changing the interval resets the next due time to the revision time plus the new interval. |
 | `POST` | `/api/v1/platform/monitoring/schedules/{schedule_id}/enable` | Enable a schedule without discarding run history. |
 | `POST` | `/api/v1/platform/monitoring/schedules/{schedule_id}/disable` | Disable a schedule without deleting it. |
 | `GET` | `/api/v1/platform/monitoring/schedules/{schedule_id}/runs` | Inspect persisted run, resolved temporal-window bounds, investigation, and execution links. |
@@ -161,12 +161,15 @@ query parameter to continue with older records.
 | `GET` | `/api/v1/platform/investigations/{investigation_id}/report` | Build deterministic Markdown and structured output from recorded plans, observations, Earth Objects, coverage, reasoning, provenance, linked monitoring history, comparison artifact references, and limitations. Monitoring and cross-investigation comparisons remain context and do not add scientific findings. |
 | `GET` | `/api/v1/platform/monitoring/schedules/{schedule_id}/comparison` | Align explicit canonical measurements from recent completed or partial runs of one schedule; requires at least two linked investigations and persists the content-hashed comparison in Earth Memory. Exact declared spatial support can additionally enable versioned descriptive consecutive differences. |
 | `POST` | `/api/v1/platform/investigation-comparisons` | Align exact resolved canonical variable and unit labels across 2–20 investigations; persists an auditable Earth Memory artifact. It can emit descriptive consecutive differences only for exact shared point/pixel support and compatible dataset/source-variable identities. It does not convert units, resample, test trends/significance, propagate uncertainty, or produce scientific conclusions. |
+| `GET` | `/api/v1/platform/investigation-comparisons/{comparison_sha256}` | Retrieve the persisted Engine comparison by its full content digest, validating the stored payload and digest before returning it. |
 
 Comparison schema `1.2` records evidence-only investigation report snapshots,
 the exact-support stack builder version, and
 consecutive-difference method/version with each content digest. Temporal outputs
 remain descriptive arithmetic, retain their exact source members, and mark
 uncertainty as not propagated.
+The digest-addressed `GET` route returns the exact persisted comparison payload;
+it does not rebuild the comparison from current investigation state.
 
 ## Investigation records, evidence, and execution
 
@@ -474,7 +477,9 @@ or trend inference is performed.
 ## Existing image capability
 
 The image endpoints remain supported and execute through the platform task
-runtime. Successful `QueryResponse` values include `platform_mission_id`,
+runtime. The multipart `/api/v1/query` endpoint includes the execution trace by
+default; set `include_trace=false` to omit it. Invalid boolean values return
+HTTP 422. Successful `QueryResponse` values include `platform_mission_id`,
 `platform_investigation_id`, and `platform_execution_id` for inspection.
 
 | Method | Path | Purpose |

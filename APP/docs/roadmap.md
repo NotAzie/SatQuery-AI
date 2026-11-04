@@ -3,6 +3,113 @@
 The roadmap covers the Platform only. SatQuery Engine remains the sole execution system for
 reasoning, tool calling, investigations, evidence, and scientific results.
 
+## V2 Phase 7 — Investigation Workspace
+
+**Objective:** make an Engine investigation the primary scientific artifact, organized inside a
+durable Platform Project. Projects group work but never replace or duplicate Engine investigation,
+report, evidence, or scientific state.
+
+| Slice | Capability | Status | Why it comes next | Contract, reuse, complexity, dependencies |
+|---|---|---|---|---|
+| 1 | Project foundation and Project-owned sessions | Implemented | Establish durable organization and navigation first. | Platform `Project` and `ProjectSessionLink` HTTP models; SQLite Project tables and REST routes. Reuses session persistence, FastAPI container, React session navigation, and generated contracts. Medium. No Engine dependency. |
+| 2 | Project investigation catalog | Implemented | Make Engine investigations—not chat sessions—the navigable scientific artifacts. | Platform returns Engine-issued IDs and their linked-session references only; reuses linked-session listing, Engine transcript, and existing session-scoped report/history APIs. Medium. Depends on Slice 1 and existing Engine records; no new scientific state. |
+| 3 | Evidence, report, and source review | Implemented | Give users a complete review path from a catalog item to its Engine-authored conclusions and provenance. | Reuses typed Engine reports, source observations, Engine Object evidence/source IDs, and session-ownership checks. The Platform adapts the Engine's existing observations endpoint; no scientific inference or new Engine behavior. Medium/high. Depends on Slice 2 and existing Engine records. |
+| 4 | Saved Earth views, notes, image links, and measurements | Implemented | Preserve useful presentation context without presenting local annotations as scientific evidence. | Platform-owned Project views and notes, with optional investigation-scoped associations; links to existing session image IDs; reuse persisted Earth workspace and image APIs. Medium/high. Depends on Slice 1 and explicit labeling of presentation-only data. |
+| 5 | Project timeline and reproducibility review | Implemented | Make prior work understandable and replayable after the catalog and review surfaces exist. | Reuse Engine-paged investigation journal, Platform event/session timestamps, and saved Earth views; never infer scientific sequence from chat prose. High. Depends on Slices 2–4 and journal completeness. |
+| 6 | Project-linked monitoring | Implemented | Bring ongoing Engine work into the same durable organization after investigation review is established. | Platform association to existing Engine schedule/mission IDs; reuse monitoring UI and Engine schedule/run APIs. Medium. Depends on Slice 1 and Engine IDs being sufficient to associate without transferring schedule ownership. |
+| 7 | Historical reopen and integrity behavior | Implemented | Close the phase with reliable long-term navigation, links, and restoration across restarts and record lifecycle changes. | Reuses transactional Project/session storage, saved Earth snapshots, and existing session-scoped ownership; reopening persists a bookmark in the original session before restoring it. Medium/high. Depends on all preceding slices. |
+| 8 | Durable investigation workspace | Implemented | Replace separate inline Review and History actions with one reloadable destination centered on an Engine investigation. | Reuses the existing report, observations, Earth Object, and cursor-paged journal contracts. A Platform endpoint verifies Project/session membership and the Engine transcript before returning the existing typed reference. Medium. Depends on Slices 2, 3, and 5; no new Engine contract or scientific state. |
+| 9 | Investigation-scoped notes | Implemented | Attach a researcher's question or interpretation to the investigation it concerns, rather than leaving every note as an undifferentiated Project annotation. | Extends the Platform Project note contract with the existing Engine investigation ID and source-session ID. The Platform validates both against the linked Project session and Engine transcript, then persists and paginates notes by that pair. Medium. Depends on Slices 4 and 8; no Engine-owned notes or scientific claims. |
+| 10 | Investigation-linked Earth views | Implemented | Reopen a map context from inside the investigation it documents instead of searching a Project-wide list. | Extends saved-view records with an optional Engine investigation ID bound to their existing source session. The Platform validates the association against the Engine transcript and filters views by that pair. Reuses EarthContext bookmarks and restoration. Medium. Depends on Slices 4 and 8; no new Engine contract. |
+| 11 | Investigation Earth-context review | Implemented | Make imagery and measurements visible in the investigation that uses a saved map context, without requiring a detour to the Project catalog. | Presents the existing saved EarthContext camera, measurement, and image references in the investigation route. Image thumbnails use the existing source-session asset endpoint only while that session exists. Low. Depends on Slice 10; no new contract or persistence. |
+| 12 | Investigation note editing and deletion | Implemented | Let researchers correct or remove their Platform annotations without leaving the investigation workspace. | Reuses the existing revision-checked Project note update and delete endpoints. The investigation/source-session association remains unchanged; no Engine contract is required. Low. Depends on Slice 9. |
+| 13 | Durable investigation comparisons | Implemented | Review two related investigations together while preserving each Engine record as the scientific authority. | Adds a Platform comparison record containing only a title and two validated Engine investigation/session references. A side-by-side route presents existing reports, sources, evidence references, and the first bounded journal page. Medium. Depends on Slices 2, 3, 5, and 8; no new Engine contract. |
+| 14 | Engine-owned hypothesis lifecycle review | Implemented | Give researchers an explicit, durable place to record and manage hypotheses associated with the scientific investigation, without asking the Platform to judge them. | Reuses the Engine's typed, versioned hypothesis graph and lifecycle APIs. The Platform validates session ownership, displays Engine records/events, and submits only explicit researcher declarations and version-checked transitions. Medium. Depends on Slices 2 and 8 and the existing Engine hypothesis contract. |
+| 15 | Engine-authored scientific comparison | Implemented | Turn a saved pair of investigations into a reproducible evidence-alignment result, rather than only a side-by-side display. | Reuses Engine comparison generation and adds digest-addressed retrieval for its persisted result. The Platform validates both session/investigation links, stores only the Engine comparison ID/digest with the Project record, and renders Engine output and limitations. Medium/high. Depends on Slice 13 and the existing Engine comparison algorithm. |
+| 16 | Engine reasoning and reproducibility review | Implemented | Complete the investigation workspace's review path by exposing Engine-authored scientific findings and the actual reproducibility export, rather than leaving existing Engine APIs inaccessible to researchers. | Adds typed session-scoped forwarding for Engine reasoning and reproducibility endpoints. The Platform validates response shapes, investigation identity, and the canonical bundle SHA-256, then presents Engine findings, method-input sufficiency, limitations, bundle digest, missing artifacts, and JSON download. Medium. Reuses existing Engine APIs; no new scientific behavior or Engine contract. Depends on Slice 8 and existing Engine reasoning/export records. |
+
+## Current phase reassessment (2026-11-04)
+
+These are goal-relative estimates of the Platform roadmap as implemented in
+this repository, not test coverage or production-readiness claims. Each phase
+is weighted equally. The overall Platform estimate is 89%.
+
+| Phase | Estimate | Genuinely missing capability | Primary classification |
+|---|---:|---|---|
+| 1 — Platform foundation | 90% | Multi-worker durability and production operations | Deployment or external infrastructure |
+| 2 — Agent Runtime integration | 80% | Authentication/authorization and interrupted-turn recovery | Product decision |
+| 2 — Agent Runtime integration | 80% | Live validation against a deployed Engine and vision-capable adapter | Deployment or external infrastructure |
+| 3 — Earth Workspace foundation | 90% | Additional live Earth command kinds beyond the initial supported commands | New Engine contract |
+| 4 — Earth Workspace | 90% | Layer catalogue, source access, and renderable layer semantics | Product decision |
+| 5 — Vision | 90% | Provider-backed image interpretation | Deployment or external infrastructure |
+| 6 — Earth Intelligence | 85% | Per-user memory isolation and identity ownership | Product decision |
+| 6 — Earth Intelligence | 85% | Persistent full-text/vector indexing at demonstrated workload scale | Product decision |
+| V1 Phase 7 — Recurring monitoring | 85% | External alert delivery | Product decision |
+| V2 Phase 7 — Investigation Workspace | 100% | No remaining gap in the currently defined Phase 7 slices | — |
+
+No additional Platform-only implementation slice is justified by these
+remaining gaps. Resume them when their listed product decisions, Engine
+contracts, scientific validation, or deployment dependencies are supplied.
+
+Slice 1 defines the Platform Project as the organizing container and an Engine investigation as the
+scientific artifact. A Platform session remains the interaction/Earth-workspace context and can be
+linked to at most one Project. Projects and their session links are Platform-owned and persisted
+transactionally; session deletion cascades to its link. Project revisions protect concurrent edits.
+No new Engine contract is required for this slice.
+
+Slice 8 makes each catalog entry a durable investigation route. Its Platform reference endpoint
+checks that the source session belongs to the Project and that the Engine transcript contains the
+requested investigation before the UI loads the existing Engine report, observations, Earth Object
+references, and execution journal. It replaces separate inline Review and History actions without
+adding Engine behavior.
+
+Slice 9 adds explicit investigation association to Platform notes. Both identifiers are required
+together and validated against the linked session's Engine transcript. Unscoped notes remain
+Project-level; scoped notes appear in the investigation workspace.
+
+Slice 10 applies the same explicit association to saved Earth views, using the existing source
+session ID plus the Engine investigation ID. The view remains a Platform snapshot of EarthContext;
+it can be restored in the original session, but it does not become Engine evidence or a scientific
+result. Existing unscoped Project views remain supported.
+
+Slice 11 brings the saved EarthContext's camera location, presentation measurement, and image
+references into the investigation route itself. Image previews continue to use the original
+session-scoped asset endpoint and are omitted when that source session no longer exists. No image
+bytes or scientific meaning are copied into the investigation record.
+
+Slice 12 completes the investigation note lifecycle by exposing revision-checked edits and deletion
+beside each scoped annotation. The existing Project API remains authoritative for note persistence
+and concurrency; the investigation route only updates its local presentation after a successful
+response.
+
+Slice 13 adds durable Project comparisons of two distinct Engine investigation references. The
+Platform validates both references against the Project's linked sessions and Engine transcripts,
+persists the selected pair and user-provided title transactionally, and records creation/removal in
+Project activity. The comparison view presents Engine-authored records side by side and does not
+calculate scientific differences or conclusions.
+
+Slice 14 exposes the Engine's existing hypothesis graph and lifecycle through session-scoped
+Platform routes after validating that the investigation belongs to the Engine transcript linked
+to that Platform session. The investigation workspace presents Engine-authored propositions,
+versions, lifecycle states, and events. Researchers may register explicit propositions and request
+version-checked transitions with an actor and rationale; the Engine remains authoritative for
+validity and scientific meaning. The Platform does not generate hypotheses, assess truth, or infer
+transitions. Unavailable lifecycle history and rejected mutations are shown as errors rather than
+replaced with local state.
+
+Slice 15 wires the existing Engine investigation-comparison operation into saved Project
+comparisons. Creation validates both Project/session/Engine transcript references before asking the
+Engine to align its explicit canonical measurements and eligible exact-support temporal diagnostics.
+The Project stores only the Engine comparison ID and full content digest with the two source
+references; Engine Memory retains the scientific payload. A digest-addressed Engine endpoint
+restores that exact payload, and the Platform displays its output and limitations without
+recalculation or scientific interpretation.
+
+For later slices, Platform contracts must carry Engine-issued investigation, report, evidence, and
+source identifiers without fabricating or reinterpreting their content. If an Engine-owned listing
+or provenance contract proves insufficient, record the exact missing contract and defer that
+sub-capability rather than synthesizing scientific state in the Platform.
+
 ## Phase 1 — Platform foundation
 
 **Status: implemented foundation.** Modular backend/frontend shells, contracts, DI, configuration,
@@ -214,10 +321,10 @@ deployment-dependent.**
   typed investigation progress events, and saved evidence references are indexed; opaque tool results
   and assistant prose are not parsed as scientific records.
 
-- The current backend and frontend validation baseline passes; details and the one upstream test
-  dependency warning are recorded in the [implementation status](implementation-status.md).
+- Current Platform validation and remaining Engine/deployment boundaries are recorded in the
+  [implementation status](implementation-status.md).
 
-## Phase 7 — Recurring monitoring workflows
+## V1 Phase 7 — Recurring monitoring workflows
 
 **Status: Engine-backed management and review workflow implemented.** The workspace can create and
 select Engine-owned missions, create recurring schedules from a user-declared WGS 84 bounding box

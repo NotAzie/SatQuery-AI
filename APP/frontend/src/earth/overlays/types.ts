@@ -8,6 +8,7 @@ export interface OverlayController {
   getState(): EarthOverlay[];
   onChange(listener: (overlays: EarthOverlay[]) => void): Unsubscribe;
   onHighlightChange(listener: (evidenceIds: string[]) => void): Unsubscribe;
+  restore(overlays: readonly EarthOverlay[]): Promise<void>;
   add(command: AddOverlayCommand): Promise<void>;
   showInvestigation(
     investigationId: string,

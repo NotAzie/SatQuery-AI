@@ -65,6 +65,7 @@ layers = [
   "earth_platform.main",
   "earth_platform.lifecycle | earth_platform.api",
   "earth_platform.container",
+  "earth_platform.projects",
   "earth_platform.plugins | earth_platform.streaming",
   "earth_platform.intelligence",
   "earth_platform.agent",

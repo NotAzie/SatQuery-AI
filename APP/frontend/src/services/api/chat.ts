@@ -3,8 +3,15 @@ import type {
   AgentTurnRequest,
   EngineEarthObjectGeoJSON,
   EngineAgentSession,
+  EngineHypothesisCreateRequest,
+  EngineHypothesisLifecycleResponse,
+  EngineHypothesisMutationResponse,
+  EngineHypothesisTransitionRequest,
   EngineInvestigationEventPage,
+  EngineObservation,
   EngineInvestigationReport,
+  EngineInvestigationReasoningResponse,
+  EngineInvestigationReproducibilityBundle,
 } from "@/shared/types";
 
 import { apiFetch, apiFetchVoid, apiUrl, ApiError } from "./client";
@@ -26,6 +33,39 @@ export async function getInvestigationReport(
 ) {
   return apiFetch<EngineInvestigationReport>(
     `/chat/sessions/${encodeURIComponent(sessionId)}/investigations/${encodeURIComponent(investigationId)}/report`,
+    { signal },
+  );
+}
+
+export async function getInvestigationReasoning(
+  sessionId: string,
+  investigationId: string,
+  signal?: AbortSignal,
+) {
+  return apiFetch<EngineInvestigationReasoningResponse>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}/investigations/${encodeURIComponent(investigationId)}/reasoning`,
+    { signal },
+  );
+}
+
+export async function getInvestigationReproducibility(
+  sessionId: string,
+  investigationId: string,
+  signal?: AbortSignal,
+) {
+  return apiFetch<EngineInvestigationReproducibilityBundle>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}/investigations/${encodeURIComponent(investigationId)}/reproducibility`,
+    { signal },
+  );
+}
+
+export async function getInvestigationObservations(
+  sessionId: string,
+  investigationId: string,
+  signal?: AbortSignal,
+) {
+  return apiFetch<EngineObservation[]>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}/investigations/${encodeURIComponent(investigationId)}/observations`,
     { signal },
   );
 }
@@ -55,6 +95,48 @@ export async function getInvestigationEvents(
   return apiFetch<EngineInvestigationEventPage>(
     `/chat/sessions/${encodeURIComponent(sessionId)}/investigations/${encodeURIComponent(investigationId)}/events?${query}`,
     { signal },
+  );
+}
+
+export async function getInvestigationHypotheses(
+  sessionId: string,
+  investigationId: string,
+  signal?: AbortSignal,
+) {
+  return apiFetch<EngineHypothesisLifecycleResponse>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}/investigations/${encodeURIComponent(investigationId)}/hypotheses`,
+    { signal },
+  );
+}
+
+export async function addInvestigationHypothesis(
+  sessionId: string,
+  investigationId: string,
+  body: EngineHypothesisCreateRequest,
+) {
+  return apiFetch<EngineHypothesisMutationResponse>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}/investigations/${encodeURIComponent(investigationId)}/hypotheses`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export async function transitionInvestigationHypothesis(
+  sessionId: string,
+  investigationId: string,
+  hypothesisId: string,
+  body: EngineHypothesisTransitionRequest,
+) {
+  return apiFetch<EngineHypothesisMutationResponse>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}/investigations/${encodeURIComponent(investigationId)}/hypotheses/${encodeURIComponent(hypothesisId)}/transitions`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
   );
 }
 

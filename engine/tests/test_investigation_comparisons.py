@@ -315,6 +315,16 @@ def test_comparison_api_rejects_duplicate_ids_and_renders_markdown():
         assert body["comparison_sha256"]
         assert "surface_water_level" in body["markdown"]
         assert "No trends, statistical tests, or scientific conclusions were generated." in body["markdown"]
+        restored = client.get(
+            "/api/v1/platform/investigation-comparisons/"
+            f"{body['comparison_sha256']}"
+        )
+        assert restored.status_code == 200
+        assert restored.json() == body
+        missing = client.get(
+            "/api/v1/platform/investigation-comparisons/" + "f" * 64
+        )
+        assert missing.status_code == 404
         memory = client.post(
             "/api/v1/platform/earth-memory/search",
             json={

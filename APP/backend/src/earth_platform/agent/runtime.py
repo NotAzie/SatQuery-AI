@@ -19,8 +19,15 @@ from earth_platform.engine.models import (
     EngineAgentSession,
     EngineEarthContext,
     EngineEarthObjectGeoJSON,
+    EngineHypothesisCreateRequest,
+    EngineHypothesisLifecycleResponse,
+    EngineHypothesisMutationResponse,
+    EngineHypothesisTransitionRequest,
     EngineInvestigationEventPage,
+    EngineInvestigationReasoningResponse,
     EngineInvestigationReport,
+    EngineInvestigationReproducibilityBundle,
+    EngineObservation,
 )
 from earth_platform.sessions.models import Session
 from earth_platform.sessions.repository import SessionStore
@@ -119,6 +126,24 @@ class AgentRuntime:
         await self._require_session_investigation(session_id, investigation_id)
         return await self._engine.get_investigation_report(investigation_id)
 
+    async def get_investigation_reasoning(
+        self, session_id: str, investigation_id: str
+    ) -> EngineInvestigationReasoningResponse:
+        await self._require_session_investigation(session_id, investigation_id)
+        return await self._engine.get_investigation_reasoning(investigation_id)
+
+    async def get_investigation_reproducibility(
+        self, session_id: str, investigation_id: str
+    ) -> EngineInvestigationReproducibilityBundle:
+        await self._require_session_investigation(session_id, investigation_id)
+        return await self._engine.get_investigation_reproducibility(investigation_id)
+
+    async def get_investigation_observations(
+        self, session_id: str, investigation_id: str
+    ) -> list[EngineObservation]:
+        await self._require_session_investigation(session_id, investigation_id)
+        return await self._engine.get_investigation_observations(investigation_id)
+
     async def get_investigation_earth_objects(
         self, session_id: str, investigation_id: str
     ) -> EngineEarthObjectGeoJSON:
@@ -133,9 +158,7 @@ class AgentRuntime:
         after_sequence: int = 0,
         limit: int = 100,
     ) -> EngineInvestigationEventPage:
-        transcript = await self._require_session_investigation(
-            session_id, investigation_id
-        )
+        transcript = await self._require_session_investigation(session_id, investigation_id)
         return await self._engine.get_investigation_events(
             transcript.session_id,
             investigation_id,
@@ -143,14 +166,39 @@ class AgentRuntime:
             limit=limit,
         )
 
+    async def get_investigation_hypotheses(
+        self, session_id: str, investigation_id: str
+    ) -> EngineHypothesisLifecycleResponse:
+        await self._require_session_investigation(session_id, investigation_id)
+        return await self._engine.get_investigation_hypotheses(investigation_id)
+
+    async def add_investigation_hypothesis(
+        self,
+        session_id: str,
+        investigation_id: str,
+        request: EngineHypothesisCreateRequest,
+    ) -> EngineHypothesisMutationResponse:
+        await self._require_session_investigation(session_id, investigation_id)
+        return await self._engine.add_investigation_hypothesis(investigation_id, request)
+
+    async def transition_investigation_hypothesis(
+        self,
+        session_id: str,
+        investigation_id: str,
+        hypothesis_id: str,
+        request: EngineHypothesisTransitionRequest,
+    ) -> EngineHypothesisMutationResponse:
+        await self._require_session_investigation(session_id, investigation_id)
+        return await self._engine.transition_investigation_hypothesis(
+            investigation_id, hypothesis_id, request
+        )
+
     async def _require_session_investigation(
         self, session_id: str, investigation_id: str
     ) -> EngineAgentSession:
         transcript = await self.get_engine_session(session_id)
         if investigation_id not in transcript.investigation_ids:
-            raise NotFoundError(
-                f"Investigation '{investigation_id}' is not linked to this session"
-            )
+            raise NotFoundError(f"Investigation '{investigation_id}' is not linked to this session")
         return transcript
 
     async def cancel_turn(self, session_id: str) -> None:

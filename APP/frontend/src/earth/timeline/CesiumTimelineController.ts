@@ -50,6 +50,52 @@ export function createTimelineController(clock: TimelineClock): TimelineControll
   return {
     getState: state,
 
+    restore(nextState) {
+      if (!Number.isFinite(nextState.speed) || nextState.speed <= 0) {
+        throw new RangeError("Timeline playback speed must be a positive finite number");
+      }
+      const nextRange = nextState.range
+        ? toRange(toDate(nextState.range.start), toDate(nextState.range.end))
+        : null;
+      if (nextState.playing && !nextRange) {
+        throw new Error("Set a timeline range before playback");
+      }
+      if (nextState.instant && !Number.isFinite(nextState.instant.getTime())) {
+        throw new RangeError("Timeline instant must be a valid date");
+      }
+      if (nextState.instant && nextRange) {
+        if (
+          nextState.instant.getTime() < toDate(nextRange.start).getTime() ||
+          nextState.instant.getTime() > toDate(nextRange.end).getTime()
+        ) {
+          throw new RangeError("Timeline instant must be within the selected range");
+        }
+      }
+
+      range = nextRange;
+      if (nextRange) {
+        const start = toDate(nextRange.start);
+        const stop = toDate(nextRange.end);
+        clock.startTime = JulianDate.fromDate(start);
+        clock.stopTime = JulianDate.fromDate(stop);
+        clock.clockRange = nextState.playing ? ClockRange.LOOP_STOP : ClockRange.CLAMPED;
+        clock.currentTime = JulianDate.fromDate(nextState.instant ?? start);
+      } else {
+        clock.clockRange = ClockRange.UNBOUNDED;
+        if (!nextState.playing) clock.shouldAnimate = false;
+        clock.currentTime = nextState.instant
+          ? JulianDate.fromDate(nextState.instant)
+          : JulianDate.now();
+      }
+      clock.clockStep = ClockStep.SYSTEM_CLOCK_MULTIPLIER;
+      if (nextState.instant) {
+        clock.currentTime = JulianDate.fromDate(nextState.instant);
+      }
+      clock.multiplier = nextState.speed;
+      clock.shouldAnimate = nextState.playing;
+      publish();
+    },
+
     setInstant(instant) {
       if (!Number.isFinite(instant.getTime())) {
         throw new RangeError("Timeline instant must be a valid date");

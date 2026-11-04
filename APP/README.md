@@ -29,7 +29,10 @@ Vision ingestion/preparation are implemented; Engine-authored investigation repo
 Earth Object overlays can be shown for investigations in the active transcript. Image attachments
 can be sent through the typed Engine request contract when the registered Engine adapter supports
 vision. Broader lifecycle geometry, production authentication, and multi-worker run recovery remain
-open boundaries. The Platform does not run a model/tool loop or duplicate scientific capabilities.
+open boundaries. The Project-based Investigation Workspace organizes sessions, Engine investigations,
+report/source review, saved Earth views and notes, and monitoring references without duplicating
+Engine scientific state. The Platform does not run a model/tool loop or duplicate scientific
+capabilities.
 
 | Area | State |
 |---|---|
@@ -51,9 +54,9 @@ open boundaries. The Platform does not run a model/tool loop or duplicate scient
 | Scientific layer catalogue | blocked on an Engine-provided layer catalogue/source contract |
 
 Read [implementation status](docs/implementation-status.md) for phase completion and gaps, and the
-[roadmap](docs/roadmap.md) for Phase 3 scope. Phase 2 integration and deployment requirements are
-tracked in [Phase 2 Agent Runtime](docs/phase-2-agent-runtime.md). The Engine must be reachable and
-have a compatible reasoning model registered before live chat can run.
+[roadmap](docs/roadmap.md) for the current Platform scope. Phase 2 integration and deployment
+requirements are tracked in [Phase 2 Agent Runtime](docs/phase-2-agent-runtime.md). The Engine must
+be reachable and have a compatible reasoning model registered before live chat can run.
 
 ## Repository layout
 

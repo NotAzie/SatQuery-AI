@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from earth_platform.shared.earth import EarthContext as WorkspaceEarthContext
 from earth_platform.shared.geo import BoundingBox, GeoJSONGeometry, LngLat, TimeRange
@@ -153,6 +153,300 @@ class EngineInvestigationReport(BaseModel):
     markdown: str = Field(min_length=1)
 
 
+class EngineInvestigationComparisonRequest(BaseModel):
+    investigation_ids: list[str] = Field(min_length=2, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_distinct_investigations(self) -> EngineInvestigationComparisonRequest:
+        if len(self.investigation_ids) != len(set(self.investigation_ids)):
+            raise ValueError("investigation_ids must be unique")
+        return self
+
+
+class EngineComparisonMeasurement(BaseModel):
+    investigation_id: str
+    observation_id: str
+    canonical_variable: str
+    value: Any = None
+    unit: str
+    observed_at: str | None = None
+    dataset: dict[str, Any] | None = None
+    uncertainty: dict[str, Any] = Field(default_factory=dict)
+    provenance: dict[str, Any] = Field(default_factory=dict)
+
+
+class EngineMeasurementComparisonGroup(BaseModel):
+    canonical_variable: str
+    unit: str
+    records: list[EngineComparisonMeasurement] = Field(default_factory=list)
+    investigation_ids: list[str] = Field(default_factory=list)
+    coverage: Literal[
+        "present_in_all_selected_investigations",
+        "present_in_subset_of_selected_investigations",
+    ]
+    interpretation: str = Field(min_length=1)
+
+
+class EngineInvestigationComparison(BaseModel):
+    comparison_id: str = Field(min_length=1)
+    comparison_sha256: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
+    schema_version: str = Field(min_length=1)
+    stack_builder_version: str = Field(min_length=1)
+    temporal_method_id: str = Field(min_length=1)
+    temporal_method_version: str = Field(min_length=1)
+    investigation_reports: list[dict[str, Any]]
+    measurement_groups: list[EngineMeasurementComparisonGroup] = Field(default_factory=list)
+    observation_stacks: list[dict[str, Any]] = Field(default_factory=list)
+    temporal_diagnostics: list[dict[str, Any]] = Field(default_factory=list)
+    alignment_issues: list[dict[str, Any]] = Field(default_factory=list)
+    temporal_issues: list[dict[str, Any]] = Field(default_factory=list)
+    observation_identity_conflicts: list[dict[str, Any]] = Field(default_factory=list)
+    unmatched_observation_ids: list[str] = Field(default_factory=list)
+    limitations: list[str]
+    markdown: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_id_matches_digest(self) -> EngineInvestigationComparison:
+        expected_id = f"investigation-comparison:{self.comparison_sha256[:20]}"
+        if self.comparison_id != expected_id:
+            raise ValueError("comparison_id does not match the comparison digest")
+        return self
+
+
+class EngineScientificFinding(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    finding_id: str = Field(min_length=1)
+    rule_id: str = Field(min_length=1)
+    rule_version: str = Field(min_length=1)
+    statement: str = Field(min_length=1)
+    hypothesis_statement: str = Field(min_length=1)
+    evidential_relation: Literal["supports", "contradicts", "contextual", "inconclusive"]
+    observation_ids: list[str] = Field(min_length=1)
+    supporting_observation_ids: list[str] = Field(default_factory=list)
+    contradicting_observation_ids: list[str] = Field(default_factory=list)
+    unresolved_observation_ids: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class EngineScientificConclusion(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    status: Literal["unresolved", "findings_available"]
+    explanation: str
+    missing_evidence: list[str] = Field(default_factory=list)
+    additional_observation_targets: list[str] = Field(default_factory=list)
+
+
+class EngineEvidenceSufficiencyAssessment(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    status: Literal["method_inputs_satisfied", "insufficient", "not_assessable"]
+    explanation: str
+    applicable_validated_rule_ids: list[str] = Field(default_factory=list)
+    unmet_preconditions: list[str] = Field(default_factory=list)
+
+
+class EngineScientificReasoningReport(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    reasoning_id: str = Field(min_length=1)
+    investigation_id: str = Field(min_length=1)
+    engine_id: str = Field(min_length=1)
+    engine_version: str = Field(min_length=1)
+    status: Literal["evaluated", "insufficient_evidence", "not_evaluable"]
+    findings: list[EngineScientificFinding] = Field(default_factory=list)
+    sufficiency: EngineEvidenceSufficiencyAssessment
+    conclusion: EngineScientificConclusion
+    limitations: list[str] = Field(default_factory=list)
+
+
+class EngineInvestigationReasoningResponse(BaseModel):
+    status: Literal["not_evaluated", "evaluated", "insufficient_evidence", "not_evaluable"]
+    reasoning: EngineScientificReasoningReport | None = None
+
+    @model_validator(mode="after")
+    def validate_reasoning_status(self) -> EngineInvestigationReasoningResponse:
+        if self.status == "not_evaluated":
+            if self.reasoning is not None:
+                raise ValueError("not_evaluated reasoning response cannot include a report")
+        elif self.reasoning is None or self.reasoning.status != self.status:
+            raise ValueError("reasoning status must match the Engine report")
+        return self
+
+
+class EngineInvestigationReproducibilityBundle(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    schema_version: str = Field(min_length=1)
+    bundle_id: str = Field(min_length=1)
+    investigation_id: str = Field(min_length=1)
+    capability_matrix_revision: str | None = None
+    capability_snapshots: list[dict[str, Any]] = Field(default_factory=list)
+    hypotheses: list[dict[str, Any]] = Field(default_factory=list)
+    plans: list[dict[str, Any]] = Field(default_factory=list)
+    datasets: list[dict[str, Any]] = Field(default_factory=list)
+    observations: list[dict[str, Any]] = Field(default_factory=list)
+    earth_objects: list[dict[str, Any]] = Field(default_factory=list)
+    earth_object_graph: dict[str, Any] | None = None
+    earth_object_extractions: list[dict[str, Any]] = Field(default_factory=list)
+    earth_object_transitions: list[dict[str, Any]] = Field(default_factory=list)
+    provenance: list[dict[str, Any]] = Field(default_factory=list)
+    scientific_methods: list[dict[str, Any]] = Field(default_factory=list)
+    evidence_graph: dict[str, Any] | None = None
+    reasoning_report: dict[str, Any] | None = None
+    uncertainty_inventory: dict[str, Any] | None = None
+    execution_trace: list[dict[str, Any]] = Field(default_factory=list)
+    audit_events: list[dict[str, Any]] = Field(default_factory=list)
+    monitoring_schedules: list[dict[str, Any]] | None = None
+    monitoring_runs: list[dict[str, Any]] = Field(default_factory=list)
+    monitoring_events: list[dict[str, Any]] = Field(default_factory=list)
+    monitoring_notifications: list[dict[str, Any]] = Field(default_factory=list)
+    monitoring_comparisons: list[dict[str, Any]] = Field(default_factory=list)
+    investigation_comparisons: list[dict[str, Any]] = Field(default_factory=list)
+    missing_artifacts: list[str] = Field(default_factory=list)
+    artifact_hashes: dict[str, str] = Field(default_factory=dict)
+    bundle_sha256: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
+    exported_at: datetime
+
+    @field_validator("artifact_hashes")
+    @classmethod
+    def validate_artifact_hashes(cls, value: dict[str, str]) -> dict[str, str]:
+        if any(
+            len(digest) != 64
+            or any(character not in "0123456789abcdefABCDEF" for character in digest)
+            for digest in value.values()
+        ):
+            raise ValueError("artifact hashes must be SHA-256 digests")
+        return value
+
+    @field_validator("exported_at")
+    @classmethod
+    def validate_exported_at_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("reproducibility export time must be timezone-aware")
+        return value
+
+
+class EngineHypothesisRecord(BaseModel):
+    hypothesis_id: str = Field(min_length=1)
+    version: int = Field(ge=1)
+    proposition: str = Field(min_length=1)
+    source_text: str = Field(min_length=1)
+    origin: Literal["explicit", "question_derived", "composite"]
+    lifecycle: Literal["proposed", "active", "under_review", "superseded", "withdrawn", "closed"]
+    competing_group_id: str | None = None
+    parent_hypothesis_ids: list[str] = Field(default_factory=list)
+    composition: Literal["all", "any"] | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EngineHypothesisGraph(BaseModel):
+    hypotheses: list[EngineHypothesisRecord] = Field(default_factory=list)
+
+
+class EngineHypothesisLifecycleEvent(BaseModel):
+    event_id: str = Field(min_length=1)
+    hypothesis_id: str = Field(min_length=1)
+    prior_version: int = Field(ge=0)
+    version: int = Field(ge=1)
+    from_status: str | None = None
+    to_status: str = Field(min_length=1)
+    actor: str = Field(min_length=1)
+    rationale: str = Field(min_length=1)
+    occurred_at: datetime
+
+
+class EngineHypothesisLifecycleResponse(BaseModel):
+    status: Literal["available", "not_initialized", "unavailable"]
+    graph: EngineHypothesisGraph | None = None
+    events: list[EngineHypothesisLifecycleEvent] = Field(default_factory=list)
+    restoration_error: str | None = None
+
+
+class EngineHypothesisCreateRequest(BaseModel):
+    hypothesis_id: str = Field(min_length=1)
+    proposition: str = Field(min_length=1)
+    source_text: str = Field(min_length=1)
+    origin: Literal["explicit", "question_derived", "composite"]
+    competing_group_id: str | None = None
+    parent_hypothesis_ids: list[str] = Field(default_factory=list)
+    composition: Literal["all", "any"] | None = None
+    actor: str = Field(min_length=1)
+    rationale: str = Field(min_length=1)
+
+
+class EngineHypothesisTransitionRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+    status: Literal["active", "under_review", "superseded", "withdrawn", "closed"]
+    actor: str = Field(min_length=1)
+    rationale: str = Field(min_length=1)
+
+
+class EngineHypothesisMutationResponse(BaseModel):
+    hypothesis: EngineHypothesisRecord
+    events: list[EngineHypothesisLifecycleEvent] = Field(default_factory=list)
+
+
+class EngineObservationDataset(BaseModel):
+    connector_id: str = Field(min_length=1)
+    dataset_id: str = Field(min_length=1)
+    version: str | None = None
+    uri: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EngineObservationTemporalExtent(BaseModel):
+    start: datetime | None = None
+    end: datetime | None = None
+
+
+class EngineObservationAsset(BaseModel):
+    uri: str = Field(min_length=1)
+    media_type: str | None = None
+    roles: list[str] = Field(default_factory=list)
+    title: str | None = None
+    description: str | None = None
+    checksum: str | None = None
+    capabilities: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EngineObservation(BaseModel):
+    """Typed source record view; values and provenance remain Engine-owned."""
+
+    model_config = ConfigDict(extra="allow")
+
+    observation_id: str = Field(min_length=1)
+    source_id: str | None = None
+    dataset: EngineObservationDataset | None = None
+    observed_at: datetime | None = None
+    geometry: dict[str, Any] | None = None
+    bbox: tuple[float, ...] | None = Field(default=None, min_length=4, max_length=6)
+    crs: str | None = None
+    temporal_extent: EngineObservationTemporalExtent | None = None
+    observation_type: str | None = None
+    measured_variables: dict[str, Any] = Field(default_factory=dict)
+    modalities: list[str] = Field(default_factory=list)
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    uncertainty: dict[str, Any] = Field(default_factory=dict)
+    provider_metadata: dict[str, Any] = Field(default_factory=dict)
+    quality: dict[str, Any] = Field(default_factory=dict)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    reproducibility: dict[str, Any] = Field(default_factory=dict)
+    properties: dict[str, Any] = Field(default_factory=dict)
+    assets: dict[str, EngineObservationAsset] = Field(default_factory=dict)
+    source_document: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("bbox")
+    @classmethod
+    def validate_bbox_dimensions(cls, value: tuple[float, ...] | None) -> tuple[float, ...] | None:
+        if value is not None and len(value) not in {4, 6}:
+            raise ValueError("observation bbox must contain four or six coordinates")
+        return value
+
+
 class EngineEarthQuery(BaseModel):
     bbox: tuple[float, ...] | None = Field(default=None, min_length=4, max_length=6)
     point: tuple[float, float] | None = None
@@ -173,9 +467,7 @@ class EngineEarthQuery(BaseModel):
     raster_analysis: Literal["zonal_descriptive"] | None = None
     raster_pixel_selection: Literal["pixel_center", "all_touched"] | None = None
     raster_weighting: Literal["equal_cell", "geodesic_cell_area"] | None = None
-    raster_semantics: dict[str, Literal["numeric", "categorical"]] = Field(
-        default_factory=dict
-    )
+    raster_semantics: dict[str, Literal["numeric", "categorical"]] = Field(default_factory=dict)
     raster_component_extraction: tuple[dict[str, Any], ...] = ()
 
 
@@ -220,8 +512,7 @@ class EngineMonitoringScheduleCreate(BaseModel):
     @model_validator(mode="after")
     def validate_rolling_window(self) -> EngineMonitoringScheduleCreate:
         if self.rolling_window_seconds is not None and (
-            self.earth_query.temporal_start is not None
-            or self.earth_query.temporal_end is not None
+            self.earth_query.temporal_start is not None or self.earth_query.temporal_end is not None
         ):
             raise ValueError(
                 "rolling temporal windows cannot be combined with fixed EarthQuery times"
@@ -245,9 +536,7 @@ class EngineMonitoringScheduleUpdate(BaseModel):
         if not changed:
             raise ValueError("at least one schedule field must be updated")
         if any(
-            getattr(self, field) is None
-            for field in changed
-            if field != "rolling_window_seconds"
+            getattr(self, field) is None for field in changed if field != "rolling_window_seconds"
         ):
             raise ValueError("updated schedule fields cannot be null")
         return self
@@ -288,8 +577,12 @@ class EngineMonitoringRun(BaseModel):
     lease_expires_at: datetime | None = None
 
     @field_validator(
-        "scheduled_at", "started_at", "effective_temporal_start",
-        "effective_temporal_end", "finished_at", "lease_expires_at",
+        "scheduled_at",
+        "started_at",
+        "effective_temporal_start",
+        "effective_temporal_end",
+        "finished_at",
+        "lease_expires_at",
     )
     @classmethod
     def require_timezone(cls, value: datetime | None) -> datetime | None:
@@ -299,9 +592,7 @@ class EngineMonitoringRun(BaseModel):
 
     @model_validator(mode="after")
     def validate_effective_window(self) -> EngineMonitoringRun:
-        if (self.effective_temporal_start is None) != (
-            self.effective_temporal_end is None
-        ):
+        if (self.effective_temporal_start is None) != (self.effective_temporal_end is None):
             raise ValueError("effective temporal window bounds must be provided together")
         if (
             self.effective_temporal_start is not None
@@ -416,9 +707,7 @@ class EngineEarthObjectGeoJSON(BaseModel):
 
     type: Literal["FeatureCollection"]
     features: list[EngineEarthObjectFeature] = Field(default_factory=list)
-    omitted_objects: list[EngineGeoJSONOmission] = Field(
-        alias="satquery:omitted_objects"
-    )
+    omitted_objects: list[EngineGeoJSONOmission] = Field(alias="satquery:omitted_objects")
     geometry_policy: str = Field(alias="satquery:geometry_policy", min_length=1)
 
 
@@ -514,9 +803,7 @@ class EngineEarthOverlay(BaseModel):
     label: str | None = Field(default=None, max_length=256)
     investigation_id: str | None = Field(default=None, min_length=1, max_length=128)
     features: list[EngineEarthOverlayFeature] = Field(default_factory=list, max_length=4096)
-    omitted_objects: list[EngineEarthOverlayOmission] = Field(
-        default_factory=list, max_length=4096
-    )
+    omitted_objects: list[EngineEarthOverlayOmission] = Field(default_factory=list, max_length=4096)
     geometry_policy: str | None = Field(default=None, max_length=512)
 
 
@@ -580,9 +867,7 @@ class EngineEarthContext(BaseModel):
     )
     selected_evidence_ids: list[str] = Field(default_factory=list, max_length=64)
     bookmarks: list[EngineEarthBookmarkRef] = Field(default_factory=list, max_length=32)
-    camera_history: EngineEarthCameraHistory = Field(
-        default_factory=EngineEarthCameraHistory
-    )
+    camera_history: EngineEarthCameraHistory = Field(default_factory=EngineEarthCameraHistory)
     split_view: EngineEarthSplitView = Field(default_factory=EngineEarthSplitView)
     measurement: EngineEarthMeasurement | None = None
 
@@ -634,10 +919,7 @@ class EngineEarthContext(BaseModel):
                 if context.viewport
                 else None
             ),
-            layers=[
-                EngineEarthLayer.model_validate(item.model_dump())
-                for item in context.layers
-            ],
+            layers=[EngineEarthLayer.model_validate(item.model_dump()) for item in context.layers],
             time_range=context.time,
             instant=context.instant,
             timeline_playback=EngineEarthTimelinePlayback.model_validate(
@@ -653,13 +935,11 @@ class EngineEarthContext(BaseModel):
                 else None
             ),
             drawings=[
-                EngineEarthDrawing.model_validate(item.model_dump())
-                for item in context.drawings
+                EngineEarthDrawing.model_validate(item.model_dump()) for item in context.drawings
             ],
             imagery=list(imagery_by_asset.values()),
             overlays=[
-                EngineEarthOverlay.model_validate(item.model_dump())
-                for item in context.overlays
+                EngineEarthOverlay.model_validate(item.model_dump()) for item in context.overlays
             ],
             secondary_view=(
                 EngineEarthSecondaryView(
@@ -681,9 +961,7 @@ class EngineEarthContext(BaseModel):
                         EngineEarthOverlay.model_validate(item.model_dump())
                         for item in context.secondary_view.overlays
                     ],
-                    selected_evidence_ids=(
-                        context.secondary_view.selected_evidence_ids
-                    ),
+                    selected_evidence_ids=(context.secondary_view.selected_evidence_ids),
                 )
                 if context.secondary_view
                 else None
@@ -702,9 +980,7 @@ class EngineEarthContext(BaseModel):
                     for item in context.camera_history.past
                 ],
                 present=(
-                    EngineEarthCamera.model_validate(
-                        context.camera_history.present.model_dump()
-                    )
+                    EngineEarthCamera.model_validate(context.camera_history.present.model_dump())
                     if context.camera_history.present
                     else None
                 ),

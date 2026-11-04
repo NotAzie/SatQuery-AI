@@ -12,9 +12,17 @@ from earth_platform.engine.models import (
     EngineEarthContext,
     EngineEarthObjectGeoJSON,
     EngineHealth,
+    EngineHypothesisCreateRequest,
+    EngineHypothesisLifecycleResponse,
+    EngineHypothesisMutationResponse,
+    EngineHypothesisTransitionRequest,
     EngineImageCapability,
+    EngineInvestigationComparison,
+    EngineInvestigationComparisonRequest,
     EngineInvestigationEventPage,
+    EngineInvestigationReasoningResponse,
     EngineInvestigationReport,
+    EngineInvestigationReproducibilityBundle,
     EngineMission,
     EngineMissionCreate,
     EngineMonitoringComparison,
@@ -24,6 +32,7 @@ from earth_platform.engine.models import (
     EngineMonitoringScheduleCreate,
     EngineMonitoringScheduleUpdate,
     EngineMonitoringTriggerHistory,
+    EngineObservation,
 )
 
 _MESSAGE = "SatQuery Engine is not configured; set engine.kind and its connection settings"
@@ -65,9 +74,32 @@ class UnavailableEngineClient:
     async def get_agent_session(self, session_id: str) -> EngineAgentSession:
         self._fail()
 
-    async def get_investigation_report(
+    async def get_investigation_report(self, investigation_id: str) -> EngineInvestigationReport:
+        self._fail()
+
+    async def get_investigation_reasoning(
         self, investigation_id: str
-    ) -> EngineInvestigationReport:
+    ) -> EngineInvestigationReasoningResponse:
+        self._fail()
+
+    async def get_investigation_reproducibility(
+        self, investigation_id: str
+    ) -> EngineInvestigationReproducibilityBundle:
+        self._fail()
+
+    async def create_investigation_comparison(
+        self, request: EngineInvestigationComparisonRequest
+    ) -> EngineInvestigationComparison:
+        self._fail()
+
+    async def get_investigation_comparison(
+        self, comparison_sha256: str
+    ) -> EngineInvestigationComparison:
+        self._fail()
+
+    async def get_investigation_observations(
+        self, investigation_id: str
+    ) -> list[EngineObservation]:
         self._fail()
 
     async def get_investigation_earth_objects(
@@ -83,6 +115,24 @@ class UnavailableEngineClient:
         after_sequence: int = 0,
         limit: int = 100,
     ) -> EngineInvestigationEventPage:
+        self._fail()
+
+    async def get_investigation_hypotheses(
+        self, investigation_id: str
+    ) -> EngineHypothesisLifecycleResponse:
+        self._fail()
+
+    async def add_investigation_hypothesis(
+        self, investigation_id: str, request: EngineHypothesisCreateRequest
+    ) -> EngineHypothesisMutationResponse:
+        self._fail()
+
+    async def transition_investigation_hypothesis(
+        self,
+        investigation_id: str,
+        hypothesis_id: str,
+        request: EngineHypothesisTransitionRequest,
+    ) -> EngineHypothesisMutationResponse:
         self._fail()
 
     async def list_missions(self) -> list[EngineMission]:
@@ -109,9 +159,7 @@ class UnavailableEngineClient:
     ) -> EngineMonitoringSchedule:
         self._fail()
 
-    async def list_monitoring_runs(
-        self, schedule_id: str
-    ) -> list[EngineMonitoringRun]:
+    async def list_monitoring_runs(self, schedule_id: str) -> list[EngineMonitoringRun]:
         self._fail()
 
     async def compare_monitoring_schedule(

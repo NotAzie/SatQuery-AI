@@ -432,6 +432,14 @@ export type ModelVisibleWithExecutionConsent = boolean;
 export type ModelVisibleWithoutConsent = boolean;
 export type RequiresExecutionAuthorization = boolean;
 export type ToolId1 = string;
+export type CanonicalVariable = string;
+export type Dataset = {
+  [k: string]: unknown;
+} | null;
+export type InvestigationId3 = string;
+export type ObservationId = string;
+export type ObservedAt = string | null;
+export type Unit1 = string;
 export type Capabilities = string[];
 export type Citation = string | null;
 export type ConnectorId = string;
@@ -514,52 +522,363 @@ export type ResolutionUnit1 = string | null;
 export type SpatialResolution1 = number | null;
 export type TemporalEnd = string | null;
 export type TemporalStart = string | null;
+export type ApplicableValidatedRuleIds = string[];
+export type Explanation = string;
+export type Status3 = "method_inputs_satisfied" | "insufficient" | "not_assessable";
+export type UnmetPreconditions = string[];
 export type Detail = string | null;
-export type Status3 = "ok" | "degraded" | "unavailable" | "unconfigured";
+export type Status4 = "ok" | "degraded" | "unavailable" | "unconfigured";
 export type Version1 = string | null;
+export type Actor = string;
+export type CompetingGroupId = string | null;
+export type Composition = ("all" | "any") | null;
+export type HypothesisId = string;
+export type Origin1 = "explicit" | "question_derived" | "composite";
+export type ParentHypothesisIds = string[];
+export type Proposition = string;
+export type Rationale = string;
+export type SourceText = string;
+export type CompetingGroupId1 = string | null;
+export type Composition1 = ("all" | "any") | null;
+export type HypothesisId1 = string;
+export type Lifecycle1 = "proposed" | "active" | "under_review" | "superseded" | "withdrawn" | "closed";
+export type Origin2 = "explicit" | "question_derived" | "composite";
+export type ParentHypothesisIds1 = string[];
+export type Proposition1 = string;
+export type SourceText1 = string;
+export type Version2 = number;
+export type Hypotheses = EngineHypothesisRecord[];
+export type Actor1 = string;
+export type EventId = string;
+export type FromStatus = string | null;
+export type HypothesisId2 = string;
+export type OccurredAt = string;
+export type PriorVersion = number;
+export type Rationale1 = string;
+export type ToStatus = string;
+export type Version3 = number;
+export type Events = EngineHypothesisLifecycleEvent[];
+export type RestorationError = string | null;
+export type Status5 = "available" | "not_initialized" | "unavailable";
+export type Events1 = EngineHypothesisLifecycleEvent[];
+export type Actor2 = string;
+export type ExpectedVersion = number;
+export type Rationale2 = string;
+export type Status6 = "active" | "under_review" | "superseded" | "withdrawn" | "closed";
+export type AlignmentIssues = {
+  [k: string]: unknown;
+}[];
+export type ComparisonId = string;
+export type ComparisonSha256 = string;
+export type InvestigationReports = {
+  [k: string]: unknown;
+}[];
+export type Limitations = string[];
+export type Markdown = string;
+export type CanonicalVariable1 = string;
+export type Coverage = "present_in_all_selected_investigations" | "present_in_subset_of_selected_investigations";
+export type Interpretation = string;
+export type InvestigationIds2 = string[];
+export type Records = EngineComparisonMeasurement[];
+export type Unit2 = string;
+export type MeasurementGroups = EngineMeasurementComparisonGroup[];
+export type ObservationIdentityConflicts = {
+  [k: string]: unknown;
+}[];
+export type ObservationStacks = {
+  [k: string]: unknown;
+}[];
+export type SchemaVersion15 = string;
+export type StackBuilderVersion = string;
+export type TemporalDiagnostics = {
+  [k: string]: unknown;
+}[];
+export type TemporalIssues = {
+  [k: string]: unknown;
+}[];
+export type TemporalMethodId = string;
+export type TemporalMethodVersion = string;
+export type UnmatchedObservationIds = string[];
+/**
+ * @minItems 2
+ * @maxItems 20
+ */
+export type InvestigationIds3 =
+  | [string, string]
+  | [string, string, string]
+  | [string, string, string, string]
+  | [string, string, string, string, string]
+  | [string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string, string, string, string, string]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ];
 export type EventSha256 = string;
 export type EventType = string;
 export type PlanId = string;
 export type PreviousEventSha256 = string;
 export type Sequence = number;
 export type Timestamp = string;
-export type Events = EngineInvestigationEvent[];
+export type Events2 = EngineInvestigationEvent[];
 export type HasMore = boolean;
-export type InvestigationId3 = string;
+export type InvestigationId4 = string;
 export type NextSequence = number;
 export type PlanId1 = string | null;
-export type InvestigationId4 = string;
-export type Markdown = string;
+export type AdditionalObservationTargets = string[];
+export type Explanation1 = string;
+export type MissingEvidence = string[];
+export type Status7 = "unresolved" | "findings_available";
+export type EngineId = string;
+export type EngineVersion = string;
+export type Assumptions = string[];
+export type ContradictingObservationIds = string[];
+export type EvidentialRelation = "supports" | "contradicts" | "contextual" | "inconclusive";
+export type FindingId = string;
+export type HypothesisStatement = string;
+export type Limitations1 = string[];
+/**
+ * @minItems 1
+ */
+export type ObservationIds = [string, ...string[]];
+export type RuleId = string;
+export type RuleVersion = string;
+export type Statement = string;
+export type SupportingObservationIds = string[];
+export type UnresolvedObservationIds = string[];
+export type Findings = EngineScientificFinding[];
+export type InvestigationId5 = string;
+export type Limitations2 = string[];
+export type ReasoningId = string;
+export type Status8 = "evaluated" | "insufficient_evidence" | "not_evaluable";
+export type Status9 = "not_evaluated" | "evaluated" | "insufficient_evidence" | "not_evaluable";
+export type InvestigationId6 = string;
+export type Markdown1 = string;
 export type ReportId = string;
 export type ReportSha256 = string;
+export type AuditEvents = {
+  [k: string]: unknown;
+}[];
+export type BundleId = string;
+export type BundleSha256 = string;
+export type CapabilityMatrixRevision = string | null;
+export type CapabilitySnapshots = {
+  [k: string]: unknown;
+}[];
+export type Datasets1 = {
+  [k: string]: unknown;
+}[];
+export type EarthObjectExtractions = {
+  [k: string]: unknown;
+}[];
+export type EarthObjectGraph = {
+  [k: string]: unknown;
+} | null;
+export type EarthObjectTransitions = {
+  [k: string]: unknown;
+}[];
+export type EarthObjects = {
+  [k: string]: unknown;
+}[];
+export type EvidenceGraph = {
+  [k: string]: unknown;
+} | null;
+export type ExecutionTrace = {
+  [k: string]: unknown;
+}[];
+export type ExportedAt = string;
+export type Hypotheses1 = {
+  [k: string]: unknown;
+}[];
+export type InvestigationComparisons = {
+  [k: string]: unknown;
+}[];
+export type InvestigationId7 = string;
+export type MissingArtifacts = string[];
+export type MonitoringComparisons = {
+  [k: string]: unknown;
+}[];
+export type MonitoringEvents = {
+  [k: string]: unknown;
+}[];
+export type MonitoringNotifications = {
+  [k: string]: unknown;
+}[];
+export type MonitoringRuns = {
+  [k: string]: unknown;
+}[];
+export type MonitoringSchedules =
+  | {
+      [k: string]: unknown;
+    }[]
+  | null;
+export type Observations = {
+  [k: string]: unknown;
+}[];
+export type Plans = {
+  [k: string]: unknown;
+}[];
+export type Provenance1 = {
+  [k: string]: unknown;
+}[];
+export type ReasoningReport = {
+  [k: string]: unknown;
+} | null;
+export type SchemaVersion16 = string;
+export type ScientificMethods = {
+  [k: string]: unknown;
+}[];
+export type UncertaintyInventory = {
+  [k: string]: unknown;
+} | null;
 export type CreatedAt4 = string;
 export type FinishedAt1 = string | null;
 export type MissionId = string;
 export type Name2 = string;
 export type Objective = string;
-export type Status4 = "active" | "completed" | "cancelled";
+export type Status10 = "active" | "completed" | "cancelled";
 export type Name3 = string;
 export type Objective1 = string;
-export type ComparisonId = string;
-export type ComparisonSha256 = string;
-export type Limitations = string[];
-export type Markdown1 = string;
+export type ComparisonId1 = string;
+export type ComparisonSha2561 = string;
+export type Limitations3 = string[];
+export type Markdown2 = string;
 export type AcknowledgedAt = string | null;
 export type CreatedAt5 = string;
 export type Detail1 = string;
-export type EventId = string;
+export type EventId1 = string;
 export type NotificationId = string;
 export type RunId16 = string;
 export type ScheduleId = string;
 export type Severity = "warning" | "error";
-export type Status5 = "unread" | "acknowledged";
+export type Status11 = "unread" | "acknowledged";
 export type Title2 = string;
 export type EffectiveTemporalEnd = string | null;
 export type EffectiveTemporalStart = string | null;
 export type ExecutionId = string | null;
 export type FailureType = string | null;
 export type FinishedAt2 = string | null;
-export type InvestigationId5 = string | null;
+export type InvestigationId8 = string | null;
 export type LeaseExpiresAt = string | null;
 export type MissedIntervals = number;
 export type MissionId1 = string;
@@ -568,7 +887,7 @@ export type ScheduleId1 = string;
 export type ScheduleRevision = number;
 export type ScheduledAt = string;
 export type StartedAt1 = string;
-export type Status6 = "running" | "completed" | "partial" | "failed" | "skipped";
+export type Status12 = "running" | "completed" | "partial" | "failed" | "skipped";
 export type WorkerId = string | null;
 export type CreatedAt6 = string;
 export type Enabled1 = boolean;
@@ -581,7 +900,7 @@ export type Priority = number;
 export type Revision3 = number;
 export type RollingWindowSeconds = number | null;
 export type ScheduleId2 = string;
-export type CanonicalVariable = string;
+export type CanonicalVariable2 = string;
 export type CooldownSeconds = number;
 export type MaxAttempts = number;
 export type Name5 = string;
@@ -589,7 +908,7 @@ export type Operator = "gt" | "gte" | "lt" | "lte" | "abs_gt" | "abs_gte";
 export type PolicyId = string;
 export type RetrySafe = boolean;
 export type Threshold = number;
-export type Unit1 = string;
+export type Unit3 = string;
 export type TriggerPolicies = EngineMonitoringTriggerPolicy[];
 export type UpdatedAt1 = string;
 export type IntervalSeconds1 = number;
@@ -606,7 +925,7 @@ export type OverlapPolicy2 = ("skip_while_running" | "allow") | null;
 export type Priority2 = number | null;
 export type RollingWindowSeconds2 = number | null;
 export type TriggerPolicies2 = EngineMonitoringTriggerPolicy[] | null;
-export type EventId1 = string;
+export type EventId2 = string;
 export type EventType1 =
   | "trigger_evaluated"
   | "trigger_matched"
@@ -614,21 +933,49 @@ export type EventType1 =
   | "trigger_investigation_created"
   | "trigger_investigation_completed"
   | "trigger_investigation_failed";
-export type OccurredAt = string;
+export type OccurredAt1 = string;
 export type RunId18 = string | null;
 export type ScheduleId3 = string;
-export type Events1 = EngineMonitoringTriggerEvent[];
+export type Events3 = EngineMonitoringTriggerEvent[];
 export type HasMore1 = boolean;
 export type NextCursor = string | null;
 export type Policies = EngineMonitoringTriggerPolicy[];
 export type ScheduleId4 = string;
 export type ScheduleRevision1 = number;
+export type Capabilities1 = string[];
+export type Checksum = string | null;
+export type Description3 = string | null;
+export type MediaType = string | null;
+export type Roles = string[];
+export type Title3 = string | null;
+export type Uri1 = string;
+export type Bbox1 =
+  | [number, number, number, number]
+  | [number, number, number, number, number]
+  | [number, number, number, number, number, number]
+  | null;
+export type Confidence = number | null;
+export type Crs3 = string | null;
+export type ConnectorId1 = string;
+export type DatasetId1 = string;
+export type Uri2 = string | null;
+export type Version4 = string | null;
+export type Geometry6 = {
+  [k: string]: unknown;
+} | null;
+export type Modalities2 = string[];
+export type ObservationId1 = string;
+export type ObservationType = string | null;
+export type ObservedAt1 = string | null;
+export type SourceId = string | null;
+export type End2 = string | null;
+export type Start2 = string | null;
 export type Attribution = string | null;
 export type DefaultVisible = boolean;
 export type Id25 = string;
 export type Kind4 = string;
 export type TimeDynamic = boolean;
-export type Title3 = string;
+export type Title4 = string;
 export type ZOrder = number;
 export type MaxContextTokens = number | null;
 export type MaxOutputTokens = number | null;
@@ -644,25 +991,98 @@ export type Icon = string | null;
 export type Id26 = string;
 export type Order = number;
 export type Slot = "left" | "right" | "bottom" | "overlay" | "settings";
-export type Title4 = string;
+export type Title5 = string;
 export type ApiVersion = number;
-export type Description3 = string | null;
+export type Description4 = string | null;
 export type FrontendEntry = string | null;
 export type Id27 = string;
 export type Name8 = string;
 export type Provides = ("llm_provider" | "tool_source" | "ui_panel" | "earth_layer")[];
-export type Version2 = string;
+export type Version5 = string;
 /**
  * @minItems 1
  */
 export type AssetIds1 = [string, ...string[]];
 export type DataBase64 = string;
-export type Assets1 = PreparedVisionAsset[];
-export type Version3 = number;
+export type Assets2 = PreparedVisionAsset[];
+export type Version6 = number;
 export type Archived = boolean;
+export type CreatedAt7 = string;
+export type Description5 = string | null;
+export type Id28 = string;
+export type Revision4 = number;
+export type Title6 = string;
+export type UpdatedAt2 = string;
+export type Action =
+  | "project.created"
+  | "project.updated"
+  | "project.archived"
+  | "project.unarchived"
+  | "session.linked"
+  | "note.created"
+  | "note.updated"
+  | "note.deleted"
+  | "earth_view.saved"
+  | "earth_view.deleted"
+  | "investigation_comparison.created"
+  | "investigation_comparison.deleted"
+  | "monitoring.linked"
+  | "monitoring.unlinked";
+export type Id29 = string;
+export type Label3 = string | null;
+export type OccurredAt2 = string;
+export type ProjectId = string;
+export type SessionId20 = string | null;
+export type SubjectId = string | null;
+export type Description6 = string | null;
+export type Title7 = string;
+export type CreatedAt8 = string;
+export type Id30 = string;
+export type InvestigationId9 = string | null;
+export type ProjectId1 = string;
+export type SourceBookmarkId = string;
+export type SourceSessionExists = boolean;
+export type SourceSessionId = string;
+export type Title8 = string;
+export type InvestigationId10 = string | null;
+export type SourceBookmarkId1 = string;
+export type SourceSessionId1 = string;
+export type Title9 = string;
+export type CreatedAt9 = string;
+export type EngineComparisonId = string | null;
+export type EngineComparisonSha256 = string | null;
+export type Id31 = string;
+export type InvestigationId11 = string;
+export type SessionId21 = string;
+export type ProjectId2 = string;
+export type Title10 = string;
+export type Title11 = string;
+export type LinkedAt = string;
+export type MissionId4 = string;
+export type ProjectId3 = string;
+export type ScheduleId5 = string;
+export type Body = string;
+export type CreatedAt10 = string;
+export type Id32 = string;
+export type InvestigationId12 = string | null;
+export type InvestigationSessionId = string | null;
+export type ProjectId4 = string;
+export type Revision5 = number;
+export type Title12 = string;
+export type UpdatedAt3 = string;
+export type Body1 = string;
+export type InvestigationId13 = string | null;
+export type InvestigationSessionId1 = string | null;
+export type Title13 = string;
+export type Body2 = string | null;
+export type ExpectedRevision1 = number;
+export type Title14 = string | null;
+export type LinkedAt1 = string;
+export type ProjectId5 = string;
+export type Archived1 = boolean;
 export type ActiveInvestigationIds = string[];
 export type PinnedEvidenceIds = string[];
-export type CreatedAt7 = string;
+export type CreatedAt11 = string;
 /**
  * @maxItems 20
  */
@@ -874,16 +1294,21 @@ export type EarthContextSnapshots =
       EarthContext,
       EarthContext
     ];
-export type CreatedAt8 = string;
-export type Id28 = string;
+export type CreatedAt12 = string;
+export type Id33 = string;
 export type Name9 = string;
-export type UpdatedAt2 = string;
+export type UpdatedAt4 = string;
 export type Bookmarks1 = EarthBookmark[];
 export type Captures1 = EarthCaptureMetadata[];
 export type EngineAgentSessionId = string | null;
-export type Id29 = string;
-export type Title5 = string | null;
-export type UpdatedAt3 = string;
+export type Id34 = string;
+export type Title15 = string | null;
+export type UpdatedAt5 = string;
+export type SessionId22 = string;
+export type Archived2 = boolean | null;
+export type Description7 = string | null;
+export type ExpectedRevision2 = number;
+export type Title16 = string | null;
 export type Filename1 = string | null;
 
 export interface Contracts {
@@ -897,15 +1322,29 @@ export interface Contracts {
   earth_context: EarthContext;
   engine_agent_session: EngineAgentSession;
   engine_agent_tool_descriptor: EngineAgentToolDescriptor;
+  engine_comparison_measurement: EngineComparisonMeasurement;
   engine_dataset_metadata: EngineDatasetMetadata;
   engine_discovery_response: EngineDiscoveryResponse;
   engine_earth_capability_snapshot: EngineEarthCapabilitySnapshot;
   engine_earth_object_geojson: EngineEarthObjectGeoJSON;
   engine_earth_query: EngineEarthQuery;
+  engine_evidence_sufficiency_assessment: EngineEvidenceSufficiencyAssessment;
   engine_health: EngineHealth;
+  engine_hypothesis_create_request: EngineHypothesisCreateRequest;
+  engine_hypothesis_graph: EngineHypothesisGraph;
+  engine_hypothesis_lifecycle_event: EngineHypothesisLifecycleEvent;
+  engine_hypothesis_lifecycle_response: EngineHypothesisLifecycleResponse;
+  engine_hypothesis_mutation_response: EngineHypothesisMutationResponse;
+  engine_hypothesis_record: EngineHypothesisRecord;
+  engine_hypothesis_transition_request: EngineHypothesisTransitionRequest;
   engine_image_capability: EngineImageCapability;
+  engine_investigation_comparison: EngineInvestigationComparison;
+  engine_investigation_comparison_request: EngineInvestigationComparisonRequest;
   engine_investigation_event_page: EngineInvestigationEventPage;
+  engine_investigation_reasoning_response: EngineInvestigationReasoningResponse;
   engine_investigation_report: EngineInvestigationReport;
+  engine_investigation_reproducibility_bundle: EngineInvestigationReproducibilityBundle;
+  engine_measurement_comparison_group: EngineMeasurementComparisonGroup;
   engine_mission: EngineMission;
   engine_mission_create: EngineMissionCreate;
   engine_monitoring_comparison: EngineMonitoringComparison;
@@ -915,6 +1354,10 @@ export interface Contracts {
   engine_monitoring_schedule_create: EngineMonitoringScheduleCreate;
   engine_monitoring_schedule_update: EngineMonitoringScheduleUpdate;
   engine_monitoring_trigger_history: EngineMonitoringTriggerHistory;
+  engine_observation: EngineObservation;
+  engine_scientific_conclusion: EngineScientificConclusion;
+  engine_scientific_finding: EngineScientificFinding;
+  engine_scientific_reasoning_report: EngineScientificReasoningReport;
   evidence: EvidenceRef;
   image_asset: ImageAsset;
   layer_spec: LayerSpec;
@@ -924,6 +1367,20 @@ export interface Contracts {
   plugin_manifest: PluginManifest;
   prepare_vision_request: PrepareVisionRequest;
   prepared_vision_payload: PreparedVisionPayload;
+  project: Project;
+  project_activity: ProjectActivity;
+  project_create: ProjectCreate;
+  project_earth_view: ProjectEarthView;
+  project_earth_view_create: ProjectEarthViewCreate;
+  project_investigation_comparison: ProjectInvestigationComparison;
+  project_investigation_comparison_create: ProjectInvestigationComparisonCreate;
+  project_investigation_ref: ProjectInvestigationRef;
+  project_monitoring_link: ProjectMonitoringLink;
+  project_note: ProjectNote;
+  project_note_create: ProjectNoteCreate;
+  project_note_update: ProjectNoteUpdate;
+  project_session_link: ProjectSessionLink;
+  project_update: ProjectUpdate;
   session: Session;
   update_image_asset_request: UpdateImageAssetRequest;
   vision_context: VisionContext;
@@ -1806,6 +2263,30 @@ export interface InputSchema {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineComparisonMeasurement".
+ */
+export interface EngineComparisonMeasurement {
+  canonical_variable: CanonicalVariable;
+  dataset: Dataset;
+  investigation_id: InvestigationId3;
+  observation_id: ObservationId;
+  observed_at: ObservedAt;
+  provenance: Provenance;
+  uncertainty: Uncertainty;
+  unit: Unit1;
+  value: Value1;
+}
+export interface Provenance {
+  [k: string]: unknown;
+}
+export interface Uncertainty {
+  [k: string]: unknown;
+}
+export interface Value1 {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "EngineDatasetMetadata".
  */
 export interface EngineDatasetMetadata {
@@ -1969,21 +2450,157 @@ export interface RasterSemantics {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineEvidenceSufficiencyAssessment".
+ */
+export interface EngineEvidenceSufficiencyAssessment {
+  applicable_validated_rule_ids: ApplicableValidatedRuleIds;
+  explanation: Explanation;
+  status: Status3;
+  unmet_preconditions: UnmetPreconditions;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "EngineHealth".
  */
 export interface EngineHealth {
   detail: Detail;
-  status: Status3;
+  status: Status4;
   version: Version1;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineHypothesisCreateRequest".
+ */
+export interface EngineHypothesisCreateRequest {
+  actor: Actor;
+  competing_group_id: CompetingGroupId;
+  composition: Composition;
+  hypothesis_id: HypothesisId;
+  origin: Origin1;
+  parent_hypothesis_ids: ParentHypothesisIds;
+  proposition: Proposition;
+  rationale: Rationale;
+  source_text: SourceText;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineHypothesisGraph".
+ */
+export interface EngineHypothesisGraph {
+  hypotheses: Hypotheses;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineHypothesisRecord".
+ */
+export interface EngineHypothesisRecord {
+  competing_group_id: CompetingGroupId1;
+  composition: Composition1;
+  hypothesis_id: HypothesisId1;
+  lifecycle: Lifecycle1;
+  metadata: Metadata2;
+  origin: Origin2;
+  parent_hypothesis_ids: ParentHypothesisIds1;
+  proposition: Proposition1;
+  source_text: SourceText1;
+  version: Version2;
+}
+export interface Metadata2 {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineHypothesisLifecycleEvent".
+ */
+export interface EngineHypothesisLifecycleEvent {
+  actor: Actor1;
+  event_id: EventId;
+  from_status: FromStatus;
+  hypothesis_id: HypothesisId2;
+  occurred_at: OccurredAt;
+  prior_version: PriorVersion;
+  rationale: Rationale1;
+  to_status: ToStatus;
+  version: Version3;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineHypothesisLifecycleResponse".
+ */
+export interface EngineHypothesisLifecycleResponse {
+  events: Events;
+  graph: EngineHypothesisGraph | null;
+  restoration_error: RestorationError;
+  status: Status5;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineHypothesisMutationResponse".
+ */
+export interface EngineHypothesisMutationResponse {
+  events: Events1;
+  hypothesis: EngineHypothesisRecord;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineHypothesisTransitionRequest".
+ */
+export interface EngineHypothesisTransitionRequest {
+  actor: Actor2;
+  expected_version: ExpectedVersion;
+  rationale: Rationale2;
+  status: Status6;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineInvestigationComparison".
+ */
+export interface EngineInvestigationComparison {
+  alignment_issues: AlignmentIssues;
+  comparison_id: ComparisonId;
+  comparison_sha256: ComparisonSha256;
+  investigation_reports: InvestigationReports;
+  limitations: Limitations;
+  markdown: Markdown;
+  measurement_groups: MeasurementGroups;
+  observation_identity_conflicts: ObservationIdentityConflicts;
+  observation_stacks: ObservationStacks;
+  schema_version: SchemaVersion15;
+  stack_builder_version: StackBuilderVersion;
+  temporal_diagnostics: TemporalDiagnostics;
+  temporal_issues: TemporalIssues;
+  temporal_method_id: TemporalMethodId;
+  temporal_method_version: TemporalMethodVersion;
+  unmatched_observation_ids: UnmatchedObservationIds;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineMeasurementComparisonGroup".
+ */
+export interface EngineMeasurementComparisonGroup {
+  canonical_variable: CanonicalVariable1;
+  coverage: Coverage;
+  interpretation: Interpretation;
+  investigation_ids: InvestigationIds2;
+  records: Records;
+  unit: Unit2;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineInvestigationComparisonRequest".
+ */
+export interface EngineInvestigationComparisonRequest {
+  investigation_ids: InvestigationIds3;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "EngineInvestigationEventPage".
  */
 export interface EngineInvestigationEventPage {
-  events: Events;
+  events: Events2;
   has_more: HasMore;
-  investigation_id: InvestigationId3;
+  investigation_id: InvestigationId4;
   next_sequence: NextSequence;
   plan_id: PlanId1;
 }
@@ -2004,16 +2621,110 @@ export interface Payload1 {
   [k: string]: unknown;
 }
 /**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineInvestigationReasoningResponse".
+ */
+export interface EngineInvestigationReasoningResponse {
+  reasoning: EngineScientificReasoningReport | null;
+  status: Status9;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineScientificReasoningReport".
+ */
+export interface EngineScientificReasoningReport {
+  conclusion: EngineScientificConclusion;
+  engine_id: EngineId;
+  engine_version: EngineVersion;
+  findings: Findings;
+  investigation_id: InvestigationId5;
+  limitations: Limitations2;
+  reasoning_id: ReasoningId;
+  status: Status8;
+  sufficiency: EngineEvidenceSufficiencyAssessment;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineScientificConclusion".
+ */
+export interface EngineScientificConclusion {
+  additional_observation_targets: AdditionalObservationTargets;
+  explanation: Explanation1;
+  missing_evidence: MissingEvidence;
+  status: Status7;
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineScientificFinding".
+ */
+export interface EngineScientificFinding {
+  assumptions: Assumptions;
+  contradicting_observation_ids: ContradictingObservationIds;
+  evidential_relation: EvidentialRelation;
+  finding_id: FindingId;
+  hypothesis_statement: HypothesisStatement;
+  limitations: Limitations1;
+  observation_ids: ObservationIds;
+  rule_id: RuleId;
+  rule_version: RuleVersion;
+  statement: Statement;
+  supporting_observation_ids: SupportingObservationIds;
+  unresolved_observation_ids: UnresolvedObservationIds;
+  [k: string]: unknown;
+}
+/**
  * Engine-authored report text linked to an Engine-owned investigation.
  *
  * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "EngineInvestigationReport".
  */
 export interface EngineInvestigationReport {
-  investigation_id: InvestigationId4;
-  markdown: Markdown;
+  investigation_id: InvestigationId6;
+  markdown: Markdown1;
   report_id: ReportId;
   report_sha256: ReportSha256;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineInvestigationReproducibilityBundle".
+ */
+export interface EngineInvestigationReproducibilityBundle {
+  artifact_hashes: ArtifactHashes;
+  audit_events: AuditEvents;
+  bundle_id: BundleId;
+  bundle_sha256: BundleSha256;
+  capability_matrix_revision: CapabilityMatrixRevision;
+  capability_snapshots: CapabilitySnapshots;
+  datasets: Datasets1;
+  earth_object_extractions: EarthObjectExtractions;
+  earth_object_graph: EarthObjectGraph;
+  earth_object_transitions: EarthObjectTransitions;
+  earth_objects: EarthObjects;
+  evidence_graph: EvidenceGraph;
+  execution_trace: ExecutionTrace;
+  exported_at: ExportedAt;
+  hypotheses: Hypotheses1;
+  investigation_comparisons: InvestigationComparisons;
+  investigation_id: InvestigationId7;
+  missing_artifacts: MissingArtifacts;
+  monitoring_comparisons: MonitoringComparisons;
+  monitoring_events: MonitoringEvents;
+  monitoring_notifications: MonitoringNotifications;
+  monitoring_runs: MonitoringRuns;
+  monitoring_schedules: MonitoringSchedules;
+  observations: Observations;
+  plans: Plans;
+  provenance: Provenance1;
+  reasoning_report: ReasoningReport;
+  schema_version: SchemaVersion16;
+  scientific_methods: ScientificMethods;
+  uncertainty_inventory: UncertaintyInventory;
+  [k: string]: unknown;
+}
+export interface ArtifactHashes {
+  [k: string]: string;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -2022,13 +2733,13 @@ export interface EngineInvestigationReport {
 export interface EngineMission {
   created_at: CreatedAt4;
   finished_at: FinishedAt1;
-  metadata: Metadata2;
+  metadata: Metadata3;
   mission_id: MissionId;
   name: Name2;
   objective: Objective;
-  status: Status4;
+  status: Status10;
 }
-export interface Metadata2 {
+export interface Metadata3 {
   [k: string]: unknown;
 }
 /**
@@ -2044,10 +2755,10 @@ export interface EngineMissionCreate {
  * via the `definition` "EngineMonitoringComparison".
  */
 export interface EngineMonitoringComparison {
-  comparison_id: ComparisonId;
-  comparison_sha256: ComparisonSha256;
-  limitations: Limitations;
-  markdown: Markdown1;
+  comparison_id: ComparisonId1;
+  comparison_sha256: ComparisonSha2561;
+  limitations: Limitations3;
+  markdown: Markdown2;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -2057,12 +2768,12 @@ export interface EngineMonitoringNotification {
   acknowledged_at: AcknowledgedAt;
   created_at: CreatedAt5;
   detail: Detail1;
-  event_id: EventId;
+  event_id: EventId1;
   notification_id: NotificationId;
   run_id: RunId16;
   schedule_id: ScheduleId;
   severity: Severity;
-  status: Status5;
+  status: Status11;
   title: Title2;
 }
 /**
@@ -2075,7 +2786,7 @@ export interface EngineMonitoringRun {
   execution_id: ExecutionId;
   failure_type: FailureType;
   finished_at: FinishedAt2;
-  investigation_id: InvestigationId5;
+  investigation_id: InvestigationId8;
   lease_expires_at: LeaseExpiresAt;
   missed_intervals: MissedIntervals;
   mission_id: MissionId1;
@@ -2084,7 +2795,7 @@ export interface EngineMonitoringRun {
   schedule_revision: ScheduleRevision;
   scheduled_at: ScheduledAt;
   started_at: StartedAt1;
-  status: Status6;
+  status: Status12;
   worker_id: WorkerId;
 }
 /**
@@ -2112,7 +2823,7 @@ export interface EngineMonitoringSchedule {
  * via the `definition` "EngineMonitoringTriggerPolicy".
  */
 export interface EngineMonitoringTriggerPolicy {
-  canonical_variable: CanonicalVariable;
+  canonical_variable: CanonicalVariable2;
   cooldown_seconds: CooldownSeconds;
   follow_up_query: EngineEarthQuery;
   max_attempts: MaxAttempts;
@@ -2121,7 +2832,7 @@ export interface EngineMonitoringTriggerPolicy {
   policy_id: PolicyId;
   retry_safe: RetrySafe;
   threshold: Threshold;
-  unit: Unit1;
+  unit: Unit3;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -2156,7 +2867,7 @@ export interface EngineMonitoringScheduleUpdate {
  * via the `definition` "EngineMonitoringTriggerHistory".
  */
 export interface EngineMonitoringTriggerHistory {
-  events: Events1;
+  events: Events3;
   has_more: HasMore1;
   next_cursor: NextCursor;
   policies: Policies;
@@ -2168,14 +2879,109 @@ export interface EngineMonitoringTriggerHistory {
  * via the `definition` "EngineMonitoringTriggerEvent".
  */
 export interface EngineMonitoringTriggerEvent {
-  event_id: EventId1;
+  event_id: EventId2;
   event_type: EventType1;
-  occurred_at: OccurredAt;
+  occurred_at: OccurredAt1;
   payload: Payload2;
   run_id: RunId18;
   schedule_id: ScheduleId3;
 }
 export interface Payload2 {
+  [k: string]: unknown;
+}
+/**
+ * Typed source record view; values and provenance remain Engine-owned.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineObservation".
+ */
+export interface EngineObservation {
+  assets: Assets1;
+  bbox: Bbox1;
+  confidence: Confidence;
+  crs: Crs3;
+  dataset: EngineObservationDataset | null;
+  geometry: Geometry6;
+  measured_variables: MeasuredVariables;
+  modalities: Modalities2;
+  observation_id: ObservationId1;
+  observation_type: ObservationType;
+  observed_at: ObservedAt1;
+  properties: Properties2;
+  provenance: Provenance2;
+  provider_metadata: ProviderMetadata;
+  quality: Quality;
+  reproducibility: Reproducibility;
+  source_document: SourceDocument;
+  source_id: SourceId;
+  temporal_extent: EngineObservationTemporalExtent | null;
+  uncertainty: Uncertainty1;
+  [k: string]: unknown;
+}
+export interface Assets1 {
+  [k: string]: EngineObservationAsset;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineObservationAsset".
+ */
+export interface EngineObservationAsset {
+  capabilities: Capabilities1;
+  checksum: Checksum;
+  description: Description3;
+  media_type: MediaType;
+  metadata: Metadata4;
+  roles: Roles;
+  title: Title3;
+  uri: Uri1;
+}
+export interface Metadata4 {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineObservationDataset".
+ */
+export interface EngineObservationDataset {
+  connector_id: ConnectorId1;
+  dataset_id: DatasetId1;
+  metadata: Metadata5;
+  uri: Uri2;
+  version: Version4;
+}
+export interface Metadata5 {
+  [k: string]: unknown;
+}
+export interface MeasuredVariables {
+  [k: string]: unknown;
+}
+export interface Properties2 {
+  [k: string]: unknown;
+}
+export interface Provenance2 {
+  [k: string]: unknown;
+}
+export interface ProviderMetadata {
+  [k: string]: unknown;
+}
+export interface Quality {
+  [k: string]: unknown;
+}
+export interface Reproducibility {
+  [k: string]: unknown;
+}
+export interface SourceDocument {
+  [k: string]: unknown;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "EngineObservationTemporalExtent".
+ */
+export interface EngineObservationTemporalExtent {
+  end: End2;
+  start: Start2;
+}
+export interface Uncertainty1 {
   [k: string]: unknown;
 }
 /**
@@ -2191,7 +2997,7 @@ export interface LayerSpec {
   source: Source2;
   style: Style1;
   time_dynamic: TimeDynamic;
-  title: Title3;
+  title: Title4;
   z_order: ZOrder;
 }
 export interface Source2 {
@@ -2236,7 +3042,7 @@ export interface PanelContribution {
   id: Id26;
   order: Order;
   slot: Slot;
-  title: Title4;
+  title: Title5;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -2244,12 +3050,12 @@ export interface PanelContribution {
  */
 export interface PluginManifest {
   api_version: ApiVersion;
-  description: Description3;
+  description: Description4;
   frontend_entry: FrontendEntry;
   id: Id27;
   name: Name8;
   provides: Provides;
-  version: Version2;
+  version: Version5;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -2266,9 +3072,9 @@ export interface PrepareVisionRequest {
  * via the `definition` "PreparedVisionPayload".
  */
 export interface PreparedVisionPayload {
-  assets: Assets1;
+  assets: Assets2;
   context: VisionContext;
-  version: Version3;
+  version: Version6;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
@@ -2280,18 +3086,164 @@ export interface PreparedVisionAsset {
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "Project".
+ */
+export interface Project {
+  archived: Archived;
+  created_at: CreatedAt7;
+  description: Description5;
+  id: Id28;
+  revision: Revision4;
+  title: Title6;
+  updated_at: UpdatedAt2;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectActivity".
+ */
+export interface ProjectActivity {
+  action: Action;
+  id: Id29;
+  label: Label3;
+  occurred_at: OccurredAt2;
+  project_id: ProjectId;
+  session_id: SessionId20;
+  subject_id: SubjectId;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectCreate".
+ */
+export interface ProjectCreate {
+  description: Description6;
+  title: Title7;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectEarthView".
+ */
+export interface ProjectEarthView {
+  context: EarthContext;
+  created_at: CreatedAt8;
+  id: Id30;
+  investigation_id: InvestigationId9;
+  project_id: ProjectId1;
+  source_bookmark_id: SourceBookmarkId;
+  source_session_exists: SourceSessionExists;
+  source_session_id: SourceSessionId;
+  title: Title8;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectEarthViewCreate".
+ */
+export interface ProjectEarthViewCreate {
+  investigation_id?: InvestigationId10;
+  source_bookmark_id: SourceBookmarkId1;
+  source_session_id: SourceSessionId1;
+  title: Title9;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationComparison".
+ */
+export interface ProjectInvestigationComparison {
+  created_at: CreatedAt9;
+  engine_comparison_id: EngineComparisonId;
+  engine_comparison_sha256: EngineComparisonSha256;
+  id: Id31;
+  left: ProjectInvestigationRef;
+  project_id: ProjectId2;
+  right: ProjectInvestigationRef;
+  title: Title10;
+}
+/**
+ * A reference to an Engine-owned investigation as observed in a linked session.
+ *
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationRef".
+ */
+export interface ProjectInvestigationRef {
+  investigation_id: InvestigationId11;
+  session_id: SessionId21;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectInvestigationComparisonCreate".
+ */
+export interface ProjectInvestigationComparisonCreate {
+  left: ProjectInvestigationRef;
+  right: ProjectInvestigationRef;
+  title: Title11;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectMonitoringLink".
+ */
+export interface ProjectMonitoringLink {
+  linked_at: LinkedAt;
+  mission_id: MissionId4;
+  project_id: ProjectId3;
+  schedule_id: ScheduleId5;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectNote".
+ */
+export interface ProjectNote {
+  body: Body;
+  created_at: CreatedAt10;
+  id: Id32;
+  investigation_id: InvestigationId12;
+  investigation_session_id: InvestigationSessionId;
+  project_id: ProjectId4;
+  revision: Revision5;
+  title: Title12;
+  updated_at: UpdatedAt3;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectNoteCreate".
+ */
+export interface ProjectNoteCreate {
+  body: Body1;
+  investigation_id?: InvestigationId13;
+  investigation_session_id?: InvestigationSessionId1;
+  title: Title13;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectNoteUpdate".
+ */
+export interface ProjectNoteUpdate {
+  body?: Body2;
+  expected_revision: ExpectedRevision1;
+  title?: Title14;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectSessionLink".
+ */
+export interface ProjectSessionLink {
+  linked_at: LinkedAt1;
+  project_id: ProjectId5;
+  session: Session;
+  session_id: SessionId22;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
  * via the `definition` "Session".
  */
 export interface Session {
-  archived: Archived;
+  archived: Archived1;
   context: InvestigationContext;
-  created_at: CreatedAt7;
+  created_at: CreatedAt11;
   earth_context_snapshots: EarthContextSnapshots;
   earth_workspace: EarthWorkspaceState;
   engine_agent_session_id: EngineAgentSessionId;
-  id: Id29;
-  title: Title5;
-  updated_at: UpdatedAt3;
+  id: Id34;
+  title: Title15;
+  updated_at: UpdatedAt5;
 }
 /**
  * The working focus of a session. References only; evidence lives in the Engine.
@@ -2324,10 +3276,20 @@ export interface EarthWorkspaceState {
  */
 export interface EarthBookmark {
   context: EarthContext;
-  created_at: CreatedAt8;
-  id: Id28;
+  created_at: CreatedAt12;
+  id: Id33;
   name: Name9;
-  updated_at: UpdatedAt2;
+  updated_at: UpdatedAt4;
+}
+/**
+ * This interface was referenced by `Contracts`'s JSON-Schema
+ * via the `definition` "ProjectUpdate".
+ */
+export interface ProjectUpdate {
+  archived?: Archived2;
+  description?: Description7;
+  expected_revision: ExpectedRevision2;
+  title?: Title16;
 }
 /**
  * This interface was referenced by `Contracts`'s JSON-Schema

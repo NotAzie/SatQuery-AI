@@ -89,4 +89,48 @@ describe("CesiumTimelineController", () => {
     controller.play(1);
     expect(clock.clockRange).toBe(ClockRange.LOOP_STOP);
   });
+
+  it("restores and clears a saved timeline state", () => {
+    const clock = new Clock();
+    const controller = createTimelineController(clock);
+    const instant = new Date("2024-01-02T12:00:00Z");
+
+    controller.restore({
+      instant,
+      range: {
+        start: "2024-01-01T00:00:00Z",
+        end: "2024-01-03T00:00:00Z",
+      },
+      playing: true,
+      speed: 8,
+    });
+    expect(controller.getState()).toMatchObject({
+      instant,
+      playing: true,
+      speed: 8,
+      range: { start: "2024-01-01T00:00:00.000Z", end: "2024-01-03T00:00:00.000Z" },
+    });
+    const beforeInvalidRestore = controller.getState();
+    expect(() =>
+      controller.restore({
+        instant: new Date("2024-01-04T00:00:00Z"),
+        range: {
+          start: "2024-01-01T00:00:00Z",
+          end: "2024-01-03T00:00:00Z",
+        },
+        playing: false,
+        speed: 1,
+      }),
+    ).toThrow("within the selected range");
+    expect(controller.getState()).toEqual(beforeInvalidRestore);
+
+    controller.restore({ instant, range: null, playing: false, speed: 1 });
+    expect(controller.getState()).toMatchObject({
+      instant,
+      range: null,
+      playing: false,
+      speed: 1,
+    });
+    expect(clock.clockRange).toBe(ClockRange.UNBOUNDED);
+  });
 });

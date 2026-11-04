@@ -451,6 +451,11 @@ class InMemoryMonitoringRepository:
             revised = MonitoringSchedule.model_validate({
                 **current.model_dump(),
                 **changes,
+                "next_run_at": (
+                    now + timedelta(seconds=changes["interval_seconds"])
+                    if "interval_seconds" in changes
+                    else current.next_run_at
+                ),
                 "updated_at": now,
                 "revision": current.revision + 1,
             })
@@ -868,7 +873,14 @@ class SQLiteMonitoringRepository(InMemoryMonitoringRepository):
                 )
             changes = update.model_dump(exclude={"expected_revision"}, exclude_unset=True)
             revised = current.model_copy(update={
-                **changes, "updated_at": now, "revision": current.revision + 1,
+                **changes,
+                "next_run_at": (
+                    now + timedelta(seconds=changes["interval_seconds"])
+                    if "interval_seconds" in changes
+                    else current.next_run_at
+                ),
+                "updated_at": now,
+                "revision": current.revision + 1,
             })
             connection.execute(
                 "UPDATE satquery_monitoring_schedules SET next_run_at=?, enabled=?, revision=?, payload=? WHERE schedule_id=?",

@@ -36,7 +36,7 @@ interface EarthStoreState {
   syncCameras: boolean;
   setCamera: (camera: CameraState) => void;
   setSecondaryCamera: (camera: CameraState | null) => void;
-  setViewport: (viewport: EarthViewport) => void;
+  setViewport: (viewport: EarthViewport | null) => void;
   setSecondaryViewport: (viewport: EarthViewport | null) => void;
   setLayers: (layers: LayerState[]) => void;
   setTimeline: (timeline: TimelineState) => void;

@@ -19,6 +19,7 @@ from earth_platform.intelligence.memory import WorkspaceMemory
 from earth_platform.intelligence.planner import PromptAssembler, RequestPlanner
 from earth_platform.intelligence.recommendations import RecommendationEngine
 from earth_platform.llm.provider import ProviderFactory
+from earth_platform.projects import ProjectRepository, SQLiteProjectRepository
 from earth_platform.sessions import SessionStore, SQLiteSessionStore
 from earth_platform.settings import Settings
 from earth_platform.shared.registry import Registry
@@ -37,6 +38,7 @@ class Container:
     settings: Settings
     engine: EngineClient
     sessions: SessionStore
+    projects: ProjectRepository
     event_bus: EventBus
     agent_runtime: AgentRuntime
     provider_factories: Registry[ProviderFactory]
@@ -52,9 +54,11 @@ class Container:
 
     async def start(self) -> None:
         self._stack.push_async_callback(self.sessions.aclose)
+        self._stack.push_async_callback(self.projects.aclose)
         self._stack.push_async_callback(self.event_bus.aclose)
         self._stack.push_async_callback(self.engine.aclose)
         await self.sessions.open()
+        await self.projects.open()
         try:
             await self.engine.connect()
         except EngineUnavailableError as exc:
@@ -68,6 +72,7 @@ class Container:
 
 def build_container(settings: Settings) -> Container:
     sessions = SQLiteSessionStore(settings.sessions.dsn)
+    projects = SQLiteProjectRepository(settings.sessions.dsn)
     engine = build_engine_client(settings.engine)
     event_bus = InMemoryEventBus(
         sessions.events,
@@ -93,6 +98,7 @@ def build_container(settings: Settings) -> Container:
         settings=settings,
         engine=engine,
         sessions=sessions,
+        projects=projects,
         event_bus=event_bus,
         agent_runtime=AgentRuntime(engine, sessions, event_bus, settings.agent.model_id),
         provider_factories=provider_factories,

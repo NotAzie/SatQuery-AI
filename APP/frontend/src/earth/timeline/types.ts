@@ -12,6 +12,7 @@ export interface TimelineState {
 export interface TimelineController {
   setInstant(instant: Date): void;
   setRange(range: TimeRange): void;
+  restore(state: TimelineState): void;
   play(speed: number): void;
   pause(): void;
   getState(): TimelineState;

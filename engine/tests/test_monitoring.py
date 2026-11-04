@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import tempfile
-from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from satquery.platform.config import PlatformConfig
@@ -382,13 +382,17 @@ def test_schedule_edits_are_optimistic_versioned_and_runs_keep_their_revision():
             revised = repository.revise(schedule.schedule_id, update, now)
             assert revised.revision == 2
             assert revised.name == "Revised definition"
+            assert revised.next_run_at == now + timedelta(seconds=90)
             try:
                 repository.revise(schedule.schedule_id, update, now)
             except MonitoringRevisionConflict:
                 pass
             else:
                 raise AssertionError("stale schedule edits must fail with a revision conflict")
-            run = repository.claim_due(schedule.schedule_id, now)
+            assert repository.claim_due(schedule.schedule_id, now) is None
+            run = repository.claim_due(
+                schedule.schedule_id, now + timedelta(seconds=90)
+            )
             assert run is not None
             assert run.schedule_revision == 2
     finally:

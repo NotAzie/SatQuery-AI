@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from conftest import make_sar_scene, make_scene, to_png_bytes
 from PIL import Image
-
 from satquery.config import Settings
 from satquery.errors import ImageError, ImageNotFoundError
 from satquery.imaging import (
@@ -27,9 +27,6 @@ from satquery.imaging import (
     to_gray,
 )
 from satquery.schemas import Modality
-
-from conftest import make_sar_scene, make_scene, to_png_bytes
-
 
 # ---------------------------------------------------------------------------
 # Loading
@@ -56,7 +53,7 @@ def test_grayscale_input_becomes_three_channel(settings):
 
 def test_sixteen_bit_input_is_percentile_stretched(settings):
     raw = np.linspace(0, 40000, 128 * 128).reshape(128, 128).astype(np.uint16)
-    image = Image.fromarray(raw, mode="I;16")
+    image = Image.frombytes("I;16", (128, 128), raw.tobytes())
     loaded = load_image_from_bytes(to_png_bytes(image), "dn.png", settings)
 
     assert loaded.array.dtype == np.uint8

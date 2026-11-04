@@ -7,6 +7,8 @@ sides cannot drift. Add a model here when it crosses the HTTP/stream boundary.
 import json
 from pathlib import Path
 
+from pydantic import BaseModel
+
 from earth_platform.agent.events import AgentEvent
 from earth_platform.agent.runtime import AgentTurnRequest
 from earth_platform.earth.commands import EarthCommand
@@ -15,14 +17,28 @@ from earth_platform.earth.state import EarthContext
 from earth_platform.engine.models import (
     EngineAgentSession,
     EngineAgentToolDescriptor,
+    EngineComparisonMeasurement,
     EngineDatasetMetadata,
     EngineEarthCapabilitySnapshot,
     EngineEarthObjectGeoJSON,
     EngineEarthQuery,
+    EngineEvidenceSufficiencyAssessment,
     EngineHealth,
+    EngineHypothesisCreateRequest,
+    EngineHypothesisGraph,
+    EngineHypothesisLifecycleEvent,
+    EngineHypothesisLifecycleResponse,
+    EngineHypothesisMutationResponse,
+    EngineHypothesisRecord,
+    EngineHypothesisTransitionRequest,
     EngineImageCapability,
+    EngineInvestigationComparison,
+    EngineInvestigationComparisonRequest,
     EngineInvestigationEventPage,
+    EngineInvestigationReasoningResponse,
     EngineInvestigationReport,
+    EngineInvestigationReproducibilityBundle,
+    EngineMeasurementComparisonGroup,
     EngineMission,
     EngineMissionCreate,
     EngineMonitoringComparison,
@@ -32,11 +48,31 @@ from earth_platform.engine.models import (
     EngineMonitoringScheduleCreate,
     EngineMonitoringScheduleUpdate,
     EngineMonitoringTriggerHistory,
+    EngineObservation,
+    EngineScientificConclusion,
+    EngineScientificFinding,
+    EngineScientificReasoningReport,
     EvidenceRef,
 )
 from earth_platform.intelligence.models import EngineDiscoveryResponse
 from earth_platform.llm.types import ModelInfo
 from earth_platform.plugins.api import PanelContribution, PluginManifest
+from earth_platform.projects.models import (
+    Project,
+    ProjectActivity,
+    ProjectCreate,
+    ProjectEarthView,
+    ProjectEarthViewCreate,
+    ProjectInvestigationComparison,
+    ProjectInvestigationComparisonCreate,
+    ProjectInvestigationRef,
+    ProjectMonitoringLink,
+    ProjectNote,
+    ProjectNoteCreate,
+    ProjectNoteUpdate,
+    ProjectSessionLink,
+    ProjectUpdate,
+)
 from earth_platform.sessions.models import ActiveTask, Conversation, Session
 from earth_platform.shared.messages import Message
 from earth_platform.streaming.messages import ClientMessage, ControlMessage
@@ -47,7 +83,6 @@ from earth_platform.vision.types import (
     UpdateImageAssetRequest,
     VisionContext,
 )
-from pydantic import BaseModel
 
 
 class Contracts(BaseModel):
@@ -60,6 +95,13 @@ class Contracts(BaseModel):
     layer_spec: LayerSpec
     evidence: EvidenceRef
     engine_health: EngineHealth
+    engine_hypothesis_record: EngineHypothesisRecord
+    engine_hypothesis_graph: EngineHypothesisGraph
+    engine_hypothesis_lifecycle_event: EngineHypothesisLifecycleEvent
+    engine_hypothesis_lifecycle_response: EngineHypothesisLifecycleResponse
+    engine_hypothesis_create_request: EngineHypothesisCreateRequest
+    engine_hypothesis_transition_request: EngineHypothesisTransitionRequest
+    engine_hypothesis_mutation_response: EngineHypothesisMutationResponse
     engine_agent_tool_descriptor: EngineAgentToolDescriptor
     engine_image_capability: EngineImageCapability
     engine_dataset_metadata: EngineDatasetMetadata
@@ -77,8 +119,19 @@ class Contracts(BaseModel):
     engine_monitoring_schedule_create: EngineMonitoringScheduleCreate
     engine_monitoring_schedule_update: EngineMonitoringScheduleUpdate
     engine_earth_object_geojson: EngineEarthObjectGeoJSON
+    engine_investigation_comparison: EngineInvestigationComparison
+    engine_investigation_comparison_request: EngineInvestigationComparisonRequest
+    engine_comparison_measurement: EngineComparisonMeasurement
+    engine_measurement_comparison_group: EngineMeasurementComparisonGroup
     engine_investigation_event_page: EngineInvestigationEventPage
     engine_investigation_report: EngineInvestigationReport
+    engine_investigation_reasoning_response: EngineInvestigationReasoningResponse
+    engine_investigation_reproducibility_bundle: EngineInvestigationReproducibilityBundle
+    engine_scientific_finding: EngineScientificFinding
+    engine_scientific_conclusion: EngineScientificConclusion
+    engine_evidence_sufficiency_assessment: EngineEvidenceSufficiencyAssessment
+    engine_scientific_reasoning_report: EngineScientificReasoningReport
+    engine_observation: EngineObservation
     message: Message
     model_info: ModelInfo
     image_asset: ImageAsset
@@ -89,6 +142,20 @@ class Contracts(BaseModel):
     session: Session
     conversation: Conversation
     active_task: ActiveTask
+    project: Project
+    project_activity: ProjectActivity
+    project_create: ProjectCreate
+    project_investigation_ref: ProjectInvestigationRef
+    project_investigation_comparison: ProjectInvestigationComparison
+    project_investigation_comparison_create: ProjectInvestigationComparisonCreate
+    project_note: ProjectNote
+    project_note_create: ProjectNoteCreate
+    project_note_update: ProjectNoteUpdate
+    project_monitoring_link: ProjectMonitoringLink
+    project_earth_view: ProjectEarthView
+    project_earth_view_create: ProjectEarthViewCreate
+    project_update: ProjectUpdate
+    project_session_link: ProjectSessionLink
     plugin_manifest: PluginManifest
     panel: PanelContribution
 
@@ -105,7 +172,13 @@ def _require_defaulted_fields(schema: dict) -> None:
         if name == "AgentTurnRequest":
             definition["required"] = ["message"]
             continue
-        if name == "EngineMonitoringScheduleUpdate":
+        if name == "ProjectNoteCreate":
+            definition["required"] = ["body", "title"]
+            continue
+        if name == "ProjectEarthViewCreate":
+            definition["required"] = ["source_bookmark_id", "source_session_id", "title"]
+            continue
+        if name in {"EngineMonitoringScheduleUpdate", "ProjectUpdate", "ProjectNoteUpdate"}:
             definition["required"] = ["expected_revision"]
             continue
         if name == "ImagePart":

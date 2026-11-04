@@ -49,7 +49,7 @@ None of these phases are isolated products.
 
 Together they become one continuously evolving Earth Intelligence Operating System.
 
-## Current implementation snapshot (2026-11-01)
+## Current implementation snapshot (2026-11-04)
 
 The phase descriptions below define long-term capability goals. This snapshot
 separates those goals from code that currently runs; detailed evidence and
@@ -71,6 +71,35 @@ limitations are in [implementation status](../IMPLEMENTATION_STATUS.md).
 This snapshot is descriptive, not a completion score or release certification.
 Historical reports under `archive/` and `satquery-ai/test_runs/` remain dated
 records and should not override the current implementation documentation.
+
+## Current phase reassessment (2026-11-04)
+
+These are goal-relative engineering estimates, not test coverage or release
+readiness. Each phase is weighted equally; the combined Engine estimate is 48%.
+The classifications identify the primary blocker for each genuinely missing
+capability. No additional Engine-only slice is justified without those inputs.
+
+| Phase | Estimate | Genuinely missing capability | Primary classification |
+|---|---:|---|---|
+| 0 — Core Foundation | 90% | Trusted-code sandboxing, distributed workers, and production security/deployment | Deployment or external infrastructure |
+| 1 — Earth Perception | 65% | Wider source/modality coverage and automatic asset processing | Product decision |
+| 1 — Earth Perception | 65% | Cross-source harmonization and uncertainty propagation | Scientific validation |
+| 2 — Earth Understanding | 45% | Validated image segmentation/classification and general entity resolution | Scientific validation |
+| 3 — Investigation Engine | 75% | Broader language coverage and autonomous investigation adaptation | Product decision |
+| 3 — Investigation Engine | 75% | Remote scheduling and distributed execution | Deployment or external infrastructure |
+| 4 — Earth Reasoning Engine | 35% | A populated, independently validated method library and calibrated/causal inference | Scientific validation |
+| 5 — Multi-Agent Intelligence | 10% | Multi-agent delegation, coordination, and independently bounded agent execution | New Engine contract |
+| 6 — Earth Memory | 45% | Semantic retrieval and durable indexing at product scale | Product decision |
+| 6 — Earth Memory | 45% | Planet-scale distributed memory | Deployment or external infrastructure |
+| 7 — Continuous Earth Observation | 50% | Validated change/anomaly/disaster detection and automatic investigation triggers | Scientific validation |
+| 7 — Continuous Earth Observation | 50% | Distributed scheduling and external alert delivery | Deployment or external infrastructure |
+| 8 — Earth Intelligence Platform | 45% | Production identity, organizations, collaboration, and managed deployment | Product decision |
+| 9 — Earth Intelligence Ecosystem | 15% | Public contribution governance, compatibility policy, and a maintained ecosystem | Product decision |
+
+The 48% Engine estimate reflects the breadth of the long-term Earth Intelligence
+vision. The local deterministic runtime is substantially more complete than
+this score alone suggests; scientific validity, broad coverage, scale, and
+production operation are intentionally not inferred from implemented scaffolds.
 
 ---
 

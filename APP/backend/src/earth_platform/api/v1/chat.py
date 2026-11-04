@@ -20,8 +20,15 @@ from earth_platform.engine.models import (
     EngineAgentSession,
     EngineEarthContext,
     EngineEarthObjectGeoJSON,
+    EngineHypothesisCreateRequest,
+    EngineHypothesisLifecycleResponse,
+    EngineHypothesisMutationResponse,
+    EngineHypothesisTransitionRequest,
     EngineInvestigationEventPage,
+    EngineInvestigationReasoningResponse,
     EngineInvestigationReport,
+    EngineInvestigationReproducibilityBundle,
+    EngineObservation,
 )
 from earth_platform.intelligence.models import RequestPlanResponse
 from earth_platform.shared.errors import UpstreamUnavailableError, ValidationFailedError
@@ -75,6 +82,48 @@ async def get_investigation_report(
 
 
 @router.get(
+    "/sessions/{session_id}/investigations/{investigation_id}/reasoning",
+    response_model=EngineInvestigationReasoningResponse,
+)
+async def get_investigation_reasoning(
+    session_id: str,
+    investigation_id: str,
+    store: SessionStoreDep,
+    runtime: AgentRuntimeDep,
+) -> EngineInvestigationReasoningResponse:
+    await store.sessions.get(session_id)
+    return await runtime.get_investigation_reasoning(session_id, investigation_id)
+
+
+@router.get(
+    "/sessions/{session_id}/investigations/{investigation_id}/reproducibility",
+    response_model=EngineInvestigationReproducibilityBundle,
+)
+async def get_investigation_reproducibility(
+    session_id: str,
+    investigation_id: str,
+    store: SessionStoreDep,
+    runtime: AgentRuntimeDep,
+) -> EngineInvestigationReproducibilityBundle:
+    await store.sessions.get(session_id)
+    return await runtime.get_investigation_reproducibility(session_id, investigation_id)
+
+
+@router.get(
+    "/sessions/{session_id}/investigations/{investigation_id}/observations",
+    response_model=list[EngineObservation],
+)
+async def get_investigation_observations(
+    session_id: str,
+    investigation_id: str,
+    store: SessionStoreDep,
+    runtime: AgentRuntimeDep,
+) -> list[EngineObservation]:
+    await store.sessions.get(session_id)
+    return await runtime.get_investigation_observations(session_id, investigation_id)
+
+
+@router.get(
     "/sessions/{session_id}/investigations/{investigation_id}/earth-objects",
     response_model=EngineEarthObjectGeoJSON,
 )
@@ -106,6 +155,55 @@ async def get_investigation_events(
         investigation_id,
         after_sequence=after_sequence,
         limit=limit,
+    )
+
+
+@router.get(
+    "/sessions/{session_id}/investigations/{investigation_id}/hypotheses",
+    response_model=EngineHypothesisLifecycleResponse,
+)
+async def get_investigation_hypotheses(
+    session_id: str,
+    investigation_id: str,
+    store: SessionStoreDep,
+    runtime: AgentRuntimeDep,
+) -> EngineHypothesisLifecycleResponse:
+    await store.sessions.get(session_id)
+    return await runtime.get_investigation_hypotheses(session_id, investigation_id)
+
+
+@router.post(
+    "/sessions/{session_id}/investigations/{investigation_id}/hypotheses",
+    response_model=EngineHypothesisMutationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_investigation_hypothesis(
+    session_id: str,
+    investigation_id: str,
+    body: EngineHypothesisCreateRequest,
+    store: SessionStoreDep,
+    runtime: AgentRuntimeDep,
+) -> EngineHypothesisMutationResponse:
+    await store.sessions.get(session_id)
+    return await runtime.add_investigation_hypothesis(session_id, investigation_id, body)
+
+
+@router.post(
+    "/sessions/{session_id}/investigations/{investigation_id}/hypotheses/"
+    "{hypothesis_id}/transitions",
+    response_model=EngineHypothesisMutationResponse,
+)
+async def transition_investigation_hypothesis(
+    session_id: str,
+    investigation_id: str,
+    hypothesis_id: str,
+    body: EngineHypothesisTransitionRequest,
+    store: SessionStoreDep,
+    runtime: AgentRuntimeDep,
+) -> EngineHypothesisMutationResponse:
+    await store.sessions.get(session_id)
+    return await runtime.transition_investigation_hypothesis(
+        session_id, investigation_id, hypothesis_id, body
     )
 
 

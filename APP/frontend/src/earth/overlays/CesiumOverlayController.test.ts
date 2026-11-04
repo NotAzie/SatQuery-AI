@@ -115,6 +115,31 @@ describe("Cesium investigation overlays", () => {
     expect(viewer.dataSources.add).not.toHaveBeenCalled();
   });
 
+  it("restores saved overlay snapshots without changing the saved camera", async () => {
+    const { viewer, overlays } = setup();
+    const savedOverlay = {
+      id: "investigation:investigation-1",
+      label: "investigation-1",
+      investigation_id: "investigation-1",
+      features: collection().features.map((feature) => ({
+        id: feature.id,
+        geometry: feature.geometry,
+        properties: Object.fromEntries(Object.entries(feature.properties)),
+      })),
+      omitted_objects: [],
+      geometry_policy: "WGS 84 longitude/latitude only",
+    };
+
+    await overlays.restore([savedOverlay]);
+
+    expect(overlays.getState()).toEqual([savedOverlay]);
+    expect(viewer.flyTo).not.toHaveBeenCalled();
+    expect(cesium.load).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "FeatureCollection", features: collection().features }),
+      expect.any(Object),
+    );
+  });
+
   it("removes all owned sources on destroy", async () => {
     const { source, viewer, overlays } = setup();
     await overlays.showInvestigation("investigation-1", collection());

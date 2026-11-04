@@ -159,8 +159,18 @@ function EarthViewport({ viewId, events }: { viewId: EarthViewId; events: EarthC
     } else {
       attachSecondary(controller);
       const current = useEarthStore.getState();
-      current.setSecondaryCamera(controller.camera.getState());
+      const secondaryCamera = current.secondaryCamera ?? controller.camera.getState();
+      current.setSecondaryCamera(secondaryCamera);
+      controller.camera.restore(secondaryCamera);
       controller.workspace.replaceDrawings(current.drawings);
+      void controller.overlays.restore(current.secondaryOverlays).catch((reason: unknown) => {
+        useSessionStore
+          .getState()
+          .setPersistenceError(
+            reason instanceof Error ? reason.message : "Could not restore the secondary Earth view.",
+          );
+      });
+      controller.overlays.highlight(current.secondarySelectedEvidenceIds);
       if (current.timeline.range) {
         controller.timeline.setRange(current.timeline.range);
         if (current.timeline.instant) controller.timeline.setInstant(current.timeline.instant);

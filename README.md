@@ -8,6 +8,8 @@ This repository contains two cooperating applications:
   sessions, image intake, streaming presentation, and Cesium visualization. It delegates turns
   to the Engine and does not reproduce Engine science or execution.
 
+The Platform workspace is desktop-first and supports viewport widths of 1024 pixels or more.
+
 The Engine can run on its own. For live Platform chat, the Engine must be reachable and have a
 compatible reasoning model registered. The checked-in default configuration does not supply
 provider credentials or a model adapter.

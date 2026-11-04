@@ -276,6 +276,120 @@ Trigger activity is loaded from the Engine in cursor-paged chunks. The UI
 preserves event order, filters duplicate event IDs, and refuses to combine pages across schedule
 revisions or reuse a non-advancing cursor.
 
+## V2 Investigation Workspace and Project ownership
+
+A Platform `Project` is the durable organization container; an Engine investigation remains the
+scientific artifact. A Platform `Session` remains an interaction and Earth-workspace context.
+`project_sessions` associates each session with at most one Project and cascades when a session is
+deleted. Project metadata and associations are stored in the same SQLite database as sessions,
+with optimistic revisions for updates and transactional creation/linking. The Project repository is
+opened after the session schema is initialized.
+
+The Project API and navigation may organize Engine-issued investigation, report, evidence, and
+monitoring identifiers, but may not fabricate their content or claim ownership of execution. Earth
+views, notes, image references, and local measurements remain Platform presentation state unless an
+Engine contract explicitly establishes otherwise. Project links do not replace Engine session
+ownership validation for reports, investigation history, or overlays. See the
+[V2 Phase 7 roadmap](roadmap.md#v2-phase-7--investigation-workspace).
+
+The Project investigation catalog reads `investigation_ids` from the existing Engine Agent
+transcripts of linked sessions. It skips sessions without an Engine session link, does not create
+Engine sessions during catalog reads, and returns `{investigation_id, session_id}` references
+derived from a bounded page of linked sessions in deterministic order. Report and execution-history
+detail remains behind the existing session-scoped Engine validation.
+
+Project review obtains reports, Engine-exported Earth Objects, and source observations through
+session-scoped Platform routes that verify the investigation is present in that session's Engine
+transcript. Source observations are adapted from the Engine's existing observations endpoint into
+typed Platform boundary models. The UI presents Engine report digests/text and typed provenance/
+evidence identifiers without recomputation; Engine remains authoritative for all scientific
+meaning.
+
+Each catalog entry opens a durable investigation route keyed by Project, source session, and
+Engine-issued investigation ID. Before returning the reference, the Platform verifies that the
+session belongs to the Project and that the ID appears in that session's Engine transcript. The
+route then groups the existing Engine report, observations, Earth Object evidence references, and
+cursor-paged execution journal into one review surface. The Platform does not create an
+investigation record or claim the displayed digest proves scientific validity. The source session
+remains the path back to its Earth workspace and conversation.
+
+Project notes and saved Earth views are Platform-owned presentation records. Notes persist in
+`project_notes` with bounded fields, stable pagination, optimistic revision-checked edits, and
+deletion. A note may remain Project-level or carry both an Engine investigation ID and its source
+Platform session ID. The API validates a scoped note against the Project/session association and
+the Engine transcript; the reference organizes the annotation but does not make it Engine evidence.
+A saved
+Project Earth view snapshots the typed `EarthContext` from an existing bookmark in a session
+already linked to that Project. The transaction verifies Project, session ownership, and bookmark
+existence; it does not fabricate Engine state. The saved context is independent of later session
+edits or deletion, while image bytes remain in the original session-scoped image store. Image
+references are rendered only through that session's asset endpoint, so deleting the source session
+may make previews unavailable without deleting the saved Earth-context snapshot. Local
+measurements, camera state, overlays, and notes remain presentation data and are not represented as
+Engine evidence or scientific conclusions.
+
+Notes and saved Earth views remain owned by the Project but can be explicitly associated with one
+investigation. A saved view's investigation ID is validated against the same source session used
+for its bookmark snapshot. The investigation route presents scoped notes as annotations and saved
+views as restorable EarthContext; it does not infer a relationship from UI proximity or label
+presentation data as scientific evidence.
+
+The investigation route also presents the associated snapshot's camera position, presentation
+measurement, and image references. Image previews use the original session-scoped asset endpoint
+only while the source session exists; the Platform does not copy image bytes into the Project.
+
+Project investigation comparisons are durable Platform records containing a user-provided title
+and two distinct `ProjectInvestigationRef` values. Creation validates each reference against the
+Project/session association and Engine transcript, then requests the Engine's existing comparison
+operation. SQLite stores only the Engine comparison ID and full content digest with the references;
+the Engine persists the scientific payload in Earth Memory and serves it by digest after validating
+the stored payload. The comparison route presents that Engine-authored output, method versions,
+and limitations alongside the existing reports, observations, evidence references, and bounded
+journal pages. The Platform performs no scientific alignment or interpretation. Comparison
+creation and deletion are transactionally recorded in the Project activity journal. If a source
+session is later deleted, the comparison record remains, but Engine-backed review is unavailable.
+
+Project activity is an append-only Platform journal in `project_activity`. A Project/session link,
+Project metadata update/archive, note mutation, or saved-view mutation records its activity row in
+the same SQLite transaction as the mutation, so failed writes cannot leave success-shaped history
+and retries of an idempotent session link do not duplicate events. The feed is ordered by timestamp
+and stable activity ID, with bounded offset pagination. It records action/resource references and
+short labels only, not conversation prose or prior scientific state. Engine execution review uses
+the Engine's existing cursor-paged investigation journal via the session-scoped ownership-checked
+route; the Platform displays Engine event sequence, payload, and hash-chain fields without
+reconstructing or validating Engine event history.
+
+The investigation workspace also proxies the Engine's existing hypothesis lifecycle contract.
+The Platform verifies investigation membership in the linked Engine transcript before reading or
+mutating hypotheses. Hypothesis records, versions, lifecycle events, and transition validity stay
+Engine-owned; the Platform only presents them and submits explicit user-provided propositions,
+actors, rationales, and expected versions. It does not derive hypotheses from notes or reports, or
+evaluate their truth.
+
+Project monitoring links persist only Engine-issued schedule and mission IDs plus the link time.
+The Project API validates a schedule ID against the existing Engine schedule catalogue before
+creating an association; the SQLite table has no Engine foreign key and never stores schedule/run
+state. Associations are many-to-many, idempotent per Project/schedule pair, and transactionally
+logged in Project activity. The Project UI reads current schedule and run details through existing
+Engine-backed monitoring routes. Unlinking removes only the Platform association; mission,
+schedule, and run creation, editing, and execution remain Engine-owned.
+
+Restoring a saved Project Earth view first reads its source Platform session and persists the
+snapshot as a new bookmark in that same session. Navigation identifies that bookmark, and the
+workspace reapplies its saved camera, timeline, drawings, measurement, and Engine-exported overlay
+geometry through the existing Earth controllers. Overlay geometry and evidence identifiers are
+restored as presentation snapshots with the current default renderer style; no Engine findings or
+session assets are copied to another session. If the source session has been deleted, the Project
+snapshot remains reviewable, but it cannot be restored because the original session-scoped assets
+and Engine ownership context are unavailable.
+
+The investigation route also exposes the Engine's existing scientific reasoning report and
+reproducibility bundle through session-scoped Platform endpoints. The Engine remains authoritative
+for findings, method-input sufficiency, limitations, and exported artifacts. The Platform validates
+the requested investigation identity and recomputes the bundle's canonical SHA-256 digest before
+returning it; the UI presents the Engine response and permits downloading the verified JSON bundle.
+The Platform does not infer a conclusion, assess scientific sufficiency, or modify the export.
+
 ## Failure model
 
 All client-visible errors derive from `PlatformError` and serialise as

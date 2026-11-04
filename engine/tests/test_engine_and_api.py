@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import pytest
+from conftest import make_sar_scene, make_scene, to_png_bytes
 from fastapi.testclient import TestClient
-
 from satquery.api import create_app, set_engine
 from satquery.errors import QueryError, ResourceNotConfiguredError
 from satquery.orchestrator import SatQueryEngine
-from satquery.schemas import BackendKind, Intent, Modality, StepStatus, ToolName
-
-from conftest import make_scene, make_sar_scene, to_png_bytes
+from satquery.schemas import Intent, Modality, StepStatus, ToolName
 
 
 @pytest.fixture
@@ -249,9 +247,35 @@ def test_query_endpoint_with_an_upload(client):
     body = response.json()
     assert body["intent"] == Intent.GROUNDING.value
     assert body["tools_used"] == [ToolName.GROUNDING.value]
-    assert body["results"][0]["regions"]
+    assert body["results"][0]["regions"], {
+        key: body["results"][0]["data"].get(key)
+        for key in ("target", "present", "peak_response", "mean_response", "response_std")
+    }
     assert body["trace"]
     assert body["latency_ms"] > 0
+
+
+def test_query_endpoint_can_suppress_trace(client):
+    files = {"files": ("scene.png", to_png_bytes(make_scene()), "image/png")}
+    response = client.post(
+        "/api/v1/query",
+        data={"query": "Describe this scene", "include_trace": "false"},
+        files=files,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["trace"] == []
+
+
+def test_query_endpoint_rejects_invalid_trace_flag(client):
+    files = {"files": ("scene.png", to_png_bytes(make_scene()), "image/png")}
+    response = client.post(
+        "/api/v1/query",
+        data={"query": "Describe this scene", "include_trace": "sometimes"},
+        files=files,
+    )
+
+    assert response.status_code == 422
 
 
 def test_query_endpoint_accepts_a_modality_hint(client):

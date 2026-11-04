@@ -8,6 +8,7 @@ from earth_platform.engine import EngineClient
 from earth_platform.intelligence.capabilities import CapabilityDiscovery
 from earth_platform.intelligence.memory import WorkspaceMemory
 from earth_platform.intelligence.planner import RequestPlanner
+from earth_platform.projects.repository import ProjectRepository
 from earth_platform.sessions.repository import SessionStore
 from earth_platform.settings import Settings
 from earth_platform.streaming.bus import EventBus
@@ -32,6 +33,10 @@ def get_agent_runtime(container: Annotated[Container, Depends(get_container)]) -
 
 def get_sessions(container: Annotated[Container, Depends(get_container)]) -> SessionStore:
     return container.sessions
+
+
+def get_projects(container: Annotated[Container, Depends(get_container)]) -> ProjectRepository:
+    return container.projects
 
 
 def get_event_bus(container: Annotated[Container, Depends(get_container)]) -> EventBus:
@@ -59,6 +64,7 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 EngineDep = Annotated[EngineClient, Depends(get_engine)]
 AgentRuntimeDep = Annotated[AgentRuntime, Depends(get_agent_runtime)]
 SessionStoreDep = Annotated[SessionStore, Depends(get_sessions)]
+ProjectRepositoryDep = Annotated[ProjectRepository, Depends(get_projects)]
 EventBusDep = Annotated[EventBus, Depends(get_event_bus)]
 RequestPlannerDep = Annotated[RequestPlanner, Depends(get_request_planner)]
 WorkspaceMemoryDep = Annotated[WorkspaceMemory, Depends(get_workspace_memory)]

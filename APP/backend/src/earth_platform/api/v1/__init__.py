@@ -6,11 +6,22 @@ from earth_platform.api.v1 import (
     intelligence,
     monitoring,
     plugins,
+    projects,
     sessions,
     streams,
     vision,
 )
 
 router = APIRouter()
-for module in (chat, sessions, vision, earth, plugins, streams, intelligence, monitoring):
+for module in (
+    chat,
+    sessions,
+    projects,
+    vision,
+    earth,
+    plugins,
+    streams,
+    intelligence,
+    monitoring,
+):
     router.include_router(module.router)

@@ -105,6 +105,7 @@ export function createCesiumOverlayController(viewer: Viewer): OverlayController
     options: GeoJsonDataSource.LoadOptions,
     palette: OverlayPalette,
     context: EarthOverlay,
+    flyToSource = true,
   ): Promise<void> {
     const generation = (generations.get(id) ?? 0) + 1;
     generations.set(id, generation);
@@ -117,11 +118,13 @@ export function createCesiumOverlayController(viewer: Viewer): OverlayController
       return;
     }
 
-    const flewToSource = await viewer.flyTo(source);
-    if (!flewToSource || destroyed || generations.get(id) !== generation) {
-      viewer.dataSources.remove(source, true);
-      if (destroyed || generations.get(id) !== generation) return;
-      throw new Error("The Earth workspace could not navigate to the Engine geometry.");
+    if (flyToSource) {
+      const flewToSource = await viewer.flyTo(source);
+      if (!flewToSource || destroyed || generations.get(id) !== generation) {
+        viewer.dataSources.remove(source, true);
+        if (destroyed || generations.get(id) !== generation) return;
+        throw new Error("The Earth workspace could not navigate to the Engine geometry.");
+      }
     }
 
     const previous = sources.get(id);
@@ -222,6 +225,36 @@ export function createCesiumOverlayController(viewer: Viewer): OverlayController
     },
     onHighlightChange(listener) {
       return subscribe(highlightListeners, listener);
+    },
+    async restore(overlays) {
+      clear();
+      try {
+        for (const overlay of overlays) {
+          const features = overlay.features.map((feature) => ({
+            type: "Feature",
+            id: feature.id,
+            geometry: feature.geometry,
+            properties: { ...feature.properties },
+          }));
+          await replaceSource(
+            overlay.id,
+            { type: "FeatureCollection", features },
+            {
+              clampToGround: true,
+              fill: DEFAULT_PALETTE.fill,
+              markerColor: DEFAULT_PALETTE.marker,
+              stroke: DEFAULT_PALETTE.stroke,
+              strokeWidth: 3,
+            },
+            DEFAULT_PALETTE,
+            overlay,
+            false,
+          );
+        }
+      } catch (error) {
+        clear();
+        throw error;
+      }
     },
     add,
     async showInvestigation(
