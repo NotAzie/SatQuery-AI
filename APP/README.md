@@ -3,7 +3,10 @@
 > ChatGPT with direct access to the Earth.
 
 The Platform is the application users experience: natural-language conversation, image attachments,
-and a live 3D globe that reacts to user actions. It sits **entirely on top of SatQuery Engine**,
+and the complete God's Eye View Earth environment, with SatQuery's command notch and product
+workspace drawer integrated around its single live globe. God’s Eye owns the Earth workspace UI;
+Platform projects, sessions, saved views, monitoring, and Engine discovery are accessed on demand.
+It sits **entirely on top of SatQuery Engine**,
 which owns reasoning, scientific execution, evidence, and investigation state; the Platform calls
 its published APIs and does not reimplement or duplicate those responsibilities.
 
@@ -43,11 +46,12 @@ and broader lifecycle geometry contracts remain open integration boundaries.
 | Platform sessions | SQLite metadata/event log; Engine Agent transcript remains authoritative for chat |
 | Event delivery | Durable event log + single-process live fan-out + resumable SSE and chat-turn streams |
 | Wire contracts (events, Earth commands, messages) | defined, exported, TypeScript generated |
-| Frontend shell, routing, state, Cesium viewer, camera, capture | working foundation |
-| Earth command dispatcher | Explicit Engine-issued `fly_to` and linked `show_investigation` events are validated and dispatched |
-| Frontend session UI | working sidebar backed by session REST routes |
+| Frontend shell, routing, state, God's Eye Earth runtime | Complete authored Earth frontend and provider services adopted; God's Eye owns Earth UI, while the Platform attaches typed commands, context, and overlays to the one shared Cesium viewer |
+| Earth command dispatcher | Explicit Engine-issued commands are validated and dispatched through SatQuery controllers, including God's Eye layer visibility |
+| Frontend session UI | Projects and sessions drawer backed by Platform REST routes |
 | Frontend chat UI | Engine transcript, streamed assistant text, tool/progress status, execution-consent checkbox |
-| Frontend camera history, bookmarks, selection, drawings, measurements, timeline, split view | implemented as presentation state |
+| Frontend saved Earth views and typed workspace context | persisted Platform presentation state exposed through the command-notch drawer; God’s Eye owns active Earth controls |
+| Split Earth view | Not currently available; the integrated Earth runtime owns one viewer |
 | Investigation overlays | Engine-exported WGS 84 Earth Objects render for transcript-linked investigations; broader lifecycle geometry needs an Engine contract |
 | Scientific layer catalogue | blocked on an Engine-provided layer catalogue/source contract |
 | Project investigation workspace | Durable Project sessions, investigation review, notes, saved Earth views, comparisons, monitoring references, and reproducibility exports |
@@ -86,8 +90,9 @@ in `frontend/src/app/providers.tsx`.
 Follow the repository-level [integrated startup guide](../INSTALL.md) for clean-clone dependency
 installation, the canonical Engine + Platform API + frontend startup order, connection checks,
 and troubleshooting. This README describes the Platform architecture; it is not a second setup
-guide. The Platform requires Python 3.12+ and Node 22; frontend dependencies are locked in
-`frontend/package-lock.json`.
+guide. The Platform requires Python 3.12+ and Node.js `>=24.14 <25` or `>=26 <27`; frontend and
+God's Eye runtime dependencies are locked separately in `frontend/package-lock.json` and
+`earth-view/package-lock.json`.
 
 Common tasks: `make check` (lint, types, layering, tests), `make contracts` (regenerate wire types
 after changing a backend model). These Make targets are optional conveniences; the Python/npm

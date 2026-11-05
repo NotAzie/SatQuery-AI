@@ -17,6 +17,7 @@ endif
 install:
 	$(PYTHON) -m venv "$(VENV)"
 	"$(PY)" -m pip install -e "backend[dev]"
+	cd earth-view && npm ci
 	cd frontend && npm ci
 
 backend:

@@ -1,4 +1,8 @@
+from pathlib import Path
+from typing import Any
+
 from pydantic import Field
+from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -19,6 +23,30 @@ from earth_platform.settings.models import (
     VisionSettings,
 )
 
+_APP_ROOT = Path(__file__).resolve().parents[4]
+_REPOSITORY_ROOT = _APP_ROOT.parent
+
+
+class _SharedDotEnvSource(PydanticBaseSettingsSource):
+    """Keep the Platform fields from a dotenv shared with other services."""
+
+    def __init__(self, source: PydanticBaseSettingsSource) -> None:
+        super().__init__(source.settings_cls)
+        self._source = source
+
+    def get_field_value(
+        self, field: FieldInfo, field_name: str
+    ) -> tuple[Any, str, bool]:
+        return self._source.get_field_value(field, field_name)
+
+    def __call__(self) -> dict[str, Any]:
+        values = self._source()
+        return {
+            name: value
+            for name, value in values.items()
+            if name in self.settings_cls.model_fields
+        }
+
 
 class Settings(BaseSettings):
     """Precedence (highest first): init kwargs > environment (``EARTH_*``, ``__`` nests)
@@ -30,7 +58,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="EARTH_",
         env_nested_delimiter="__",
-        env_file=".env",
+        env_file=(str(_APP_ROOT / ".env"), str(_REPOSITORY_ROOT / ".env")),
         extra="forbid",
     )
 
@@ -61,6 +89,6 @@ class Settings(BaseSettings):
         return (
             init_settings,
             env_settings,
-            dotenv_settings,
+            _SharedDotEnvSource(dotenv_settings),
             file_secret_settings,
         )

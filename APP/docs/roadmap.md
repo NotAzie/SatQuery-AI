@@ -9,6 +9,21 @@ reasoning, tool calling, investigations, evidence, and scientific results.
 durable Platform Project. Projects group work but never replace or duplicate Engine investigation,
 report, evidence, or scientific state.
 
+## Earth experience integration baseline
+
+God's Eye View is now the primary Earth frontend, sharing one Cesium viewer with SatQuery's
+workspace controllers; the SatQuery command notch mounts in God's Eye's native command dock. This
+is an integration of the existing authored Earth
+application, not a second competing Earth roadmap or an Engine science feature. Existing God's Eye
+data providers remain visualizations, not Engine evidence. The remaining Earth gaps are explicit:
+the Engine scientific layer catalogue/source contract, broader investigation geometry contracts,
+and deployment-time provider credentials. Split view and unsupported layer opacity are not
+silently emulated.
+
+The source-to-vendored-code and browser parity evidence is recorded in
+[the God's Eye parity audit](gods-eye-parity.md). Live provider workflows and production API
+deployment remain unverified without their configured services and credentials.
+
 | Slice | Capability | Status | Why it comes next | Contract, reuse, complexity, dependencies |
 |---|---|---|---|---|
 | 1 | Project foundation and Project-owned sessions | Implemented | Establish durable organization and navigation first. | Platform `Project` and `ProjectSessionLink` HTTP models; SQLite Project tables and REST routes. Reuses session persistence, FastAPI container, React session navigation, and generated contracts. Medium. No Engine dependency. |
@@ -108,7 +123,7 @@ baseline was 89%.
 | 1 — Platform foundation | 90% | Multi-worker durability and production operations | Deployment or external infrastructure |
 | 2 — Agent Runtime integration | 80% | Authentication/authorization and interrupted-turn recovery | Product decision |
 | 2 — Agent Runtime integration | 80% | Live validation against a deployed Engine and vision-capable adapter | Deployment or external infrastructure |
-| 3 — Earth Workspace foundation | 90% | Additional live Earth command kinds beyond the initial supported commands | New Engine contract |
+| 3 — Earth Workspace foundation | 90% | Additional live Earth command kinds beyond navigation, investigation display, and layer visibility | New Engine contract |
 | 4 — Earth Workspace | 90% | Layer catalogue, source access, and renderable layer semantics | Product decision |
 | 5 — Vision | 90% | Provider-backed image interpretation | Deployment or external infrastructure |
 | 6 — Earth Intelligence | 85% | Per-user memory isolation and identity ownership | Product decision |
@@ -211,10 +226,11 @@ declares vision support.
 
 ## Phase 3 — Earth Workspace foundation
 
-**Status: first live Engine commands implemented.** The Engine Agent exposes a typed
+**Status: initial live Engine commands implemented.** The Engine Agent exposes a typed
 `earth.command` tool and emits a sequenced SSE event only for explicit presentation requests.
 The Platform validates and persists that event as its shared `EarthCommandIssued` contract.
-`fly_to` and session-linked `show_investigation` are wired to the Earth workspace.
+`fly_to`, session-linked `show_investigation`, and EarthContext-scoped `set_layer_visibility` are
+wired to the Earth workspace.
 
 Commands are never inferred from assistant prose or scientific tool results. The Engine validates
 investigation IDs against the active Agent session before emitting `show_investigation`; the Platform
@@ -222,10 +238,10 @@ rechecks session ownership before loading the report or GeoJSON.
 
 The Engine Agent SSE event uses the existing envelope
 (`session_id`, `turn_id`, `sequence`, `timestamp`), `kind: "earth.command"`, and a `payload.command`
-currently limited to `fly_to` and `show_investigation`. Additional command types remain unavailable
-until Engine-owned data and ownership semantics support them. Any future command geometry must be
-explicit WGS 84 GeoJSON from Engine-owned records, never generated from prose or silently reprojected
-by the Platform.
+that supports `fly_to`, `show_investigation`, and EarthContext-scoped `set_layer_visibility`.
+Additional command types remain unavailable until Engine-owned data and ownership semantics support
+them. Any future command geometry must be explicit WGS 84 GeoJSON from Engine-owned records, never
+generated from prose or silently reprojected by the Platform.
 
 ## Phase 4 — Earth Workspace
 
@@ -244,22 +260,19 @@ created by the Platform.
    sources, approved providers and licensing, credential/access rules, and source-serving endpoints.
    Current Engine dataset metadata describes acquisition capability, not renderable URLs or layer
    ownership; the Platform must not turn it into fabricated layers or arbitrary URLs.
-3. **Timeline** — implemented as a local Earth workspace presentation control: users can select a
-   time range and instant, scrub, and play/pause the Cesium clock. Its current time and playback
-   state are sent as untrusted EarthContext scope; this does not claim data availability or provide
-   Engine-side temporal execution.
-4. **Camera history and bookmarks** — implemented. Camera move-end states support bounded undo/redo
-   and precise restore; named EarthContext bookmarks can be created, renamed, updated, deleted, and
-   flown to. State is persisted in the Platform's SQLite-backed session record, with browser-local
-   storage as a cache/fallback.
-5. **Earth selection and drawings** — implemented as typed local context state. Cesium entity
-   selection publishes `earth.selection.changed`; point, line, polygon, rectangle, and circle are
-   user-created presentation objects only and never trigger Engine work.
-6. **Measurements** — implemented for geodesic distance, spherical polygon area, coordinate
-   inspection, and local terrain elevation where the loaded terrain provider returns a height.
-7. **Split view** — implemented with a second Cesium view, shared timeline, selection and drawings,
-   independent cameras by default, and opt-in camera synchronization. Overlay visibility is tracked
-   per view; only the primary view's active overlays form the chat EarthContext.
+3. **Time and visual controls** — God's Eye owns the active timeline and visual controls. The
+   Platform retains typed time/playback context for saved sessions and Engine requests; temporal
+   Engine execution still requires an Engine data contract.
+4. **Camera history and saved views** — Platform session camera history and named EarthContext
+   bookmarks remain persisted. Saved views can be created, renamed, updated, deleted, and restored
+   from the command-notch workspace drawer; God’s Eye scenes remain separate and are not duplicated.
+5. **Selection and drawings** — God's Eye owns the user-facing selection and drawing interactions.
+   The Platform retains typed serializable context for Engine requests and restoration; local
+   presentation objects never trigger Engine work.
+6. **Measurements** — God's Eye owns the user-facing measurement workflow. Measurements are
+   presentation values, not Engine evidence or scientific results.
+7. **Split view** — unavailable in the integrated workspace, which has one God’s Eye Cesium viewer.
+   The Platform does not mount a competing second-globe interface.
 
 Investigation reports, paged execution history, and explicitly exported WGS 84 Earth Object overlays
 are available from the Engine. Unsupported objects remain omitted according to the Engine's declared

@@ -7,9 +7,11 @@ import type {
 } from "./workspace/types";
 import type { CameraState, EarthOverlay, EarthViewport } from "@/shared/types";
 import type { TimelineState } from "./timeline/types";
+import type { LayerState } from "@/shared/types";
 
 export type EarthEvent =
   | { type: "earth.camera.changed"; camera: CameraState; viewId: EarthViewId }
+  | { type: "earth.layers.changed"; layers: LayerState[]; viewId: EarthViewId }
   | { type: "earth.viewport.changed"; viewport: EarthViewport; viewId: EarthViewId }
   | { type: "earth.timeline.changed"; timeline: TimelineState; viewId: EarthViewId }
   | { type: "earth.overlays.changed"; overlays: EarthOverlay[]; viewId: EarthViewId }

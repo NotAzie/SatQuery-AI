@@ -134,7 +134,7 @@ export function createCesiumWorkspaceController(
 ): EarthWorkspaceController {
   let interaction: Interaction = null;
   let drawings: EarthDrawing[] = [];
-  const handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
+  let handler: ScreenSpaceEventHandler | null = null;
   const renderedDrawingIds = new Set<string>();
 
   const publishSelection = (selection: EarthSelection | null) => {
@@ -166,6 +166,7 @@ export function createCesiumWorkspaceController(
     renderedDrawingIds.add(drawing.id);
     viewer.scene.requestRender();
     interaction = null;
+    releaseHandler();
     publishDrawings();
   }
 
@@ -175,6 +176,7 @@ export function createCesiumWorkspaceController(
     if (kind === "coordinates") {
       publishMeasurement({ kind, value: null, unit: "degrees", position: { lng: position[0], lat: position[1] } });
       interaction = null;
+      releaseHandler();
       return;
     }
     if (kind === "elevation") {
@@ -188,6 +190,7 @@ export function createCesiumWorkspaceController(
         position: { lng: position[0], lat: position[1] },
       });
       interaction = null;
+      releaseHandler();
       return;
     }
     points.push(position);
@@ -200,8 +203,53 @@ export function createCesiumWorkspaceController(
         position: { lng: position[0], lat: position[1] },
       });
       interaction = null;
+      releaseHandler();
       return;
     }
+  }
+
+  function releaseHandler() {
+    handler?.destroy();
+    handler = null;
+  }
+
+  function ensureHandler() {
+    if (handler) return;
+    handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
+    handler.setInputAction(({ position }: { position: Cartesian2 }) => {
+      const coordinate = positionAt(viewer, position);
+      if (!coordinate) return;
+      if (interaction?.type === "drawing") {
+        interaction.points.push(coordinate);
+        if (interaction.kind === "point") finishDrawing();
+        else if (
+          (interaction.kind === "rectangle" || interaction.kind === "circle") &&
+          interaction.points.length === 2
+        ) {
+          finishDrawing();
+        }
+        return;
+      }
+      if (interaction?.type === "measurement") finishMeasurement(coordinate);
+    }, ScreenSpaceEventType.LEFT_CLICK);
+
+    handler.setInputAction(() => {
+      if (interaction?.type === "drawing") finishDrawing();
+      else if (interaction?.type === "measurement" && interaction.kind === "area") {
+        const points = interaction.points;
+        if (points.length < 3) throw new RangeError("Area measurement requires at least three points");
+        const area = polygonAreaSquareMeters(closedRing(points));
+        const last = requiredPoint(points, points.length - 1);
+        publishMeasurement({
+          kind: "area",
+          value: area >= 1_000_000 ? area / 1_000_000 : area,
+          unit: area >= 1_000_000 ? "km2" : "m2",
+          position: { lng: last[0], lat: last[1] },
+        });
+        interaction = null;
+        releaseHandler();
+      }
+    }, ScreenSpaceEventType.RIGHT_CLICK);
   }
 
   function syncDrawings(nextDrawings: readonly EarthDrawing[]) {
@@ -215,56 +263,24 @@ export function createCesiumWorkspaceController(
     viewer.scene.requestRender();
   }
 
-  handler.setInputAction(({ position }: { position: Cartesian2 }) => {
-    const coordinate = positionAt(viewer, position);
-    if (coordinate && interaction?.type === "drawing") {
-      interaction.points.push(coordinate);
-      if (interaction.kind === "point") finishDrawing();
-      else if (
-        (interaction.kind === "rectangle" || interaction.kind === "circle") &&
-        interaction.points.length === 2
-      ) {
-        finishDrawing();
-      }
-      return;
-    }
-    if (coordinate && interaction?.type === "measurement") {
-      finishMeasurement(coordinate);
-      return;
-    }
-
-    const picked = viewer.scene.pick(position);
-    const entity =
-      picked && typeof picked === "object" && "id" in picked && picked.id instanceof Entity
-        ? picked.id
-        : null;
+  const removeSelectionListener = viewer.selectedEntityChanged.addEventListener((entity) => {
     if (!entity) {
       publishSelection(null);
       return;
     }
+    const position = entity.position?.getValue(viewer.clock.currentTime);
+    const cartographic = position ? Cartographic.fromCartesian(position) : null;
     publishSelection({
       entity_id: String(entity.id),
-      position: coordinate ? { lng: coordinate[0], lat: coordinate[1] } : null,
+      position: cartographic
+        ? {
+            lng: CesiumMath.toDegrees(cartographic.longitude),
+            lat: CesiumMath.toDegrees(cartographic.latitude),
+          }
+        : null,
       properties: propertySnapshot(entity, viewer),
     });
-  }, ScreenSpaceEventType.LEFT_CLICK);
-
-  handler.setInputAction(() => {
-    if (interaction?.type === "drawing") finishDrawing();
-    else if (interaction?.type === "measurement" && interaction.kind === "area") {
-      const points = interaction.points;
-      if (points.length < 3) throw new RangeError("Area measurement requires at least three points");
-      const area = polygonAreaSquareMeters(closedRing(points));
-      const last = requiredPoint(points, points.length - 1);
-      publishMeasurement({
-        kind: "area",
-        value: area >= 1_000_000 ? area / 1_000_000 : area,
-        unit: area >= 1_000_000 ? "km2" : "m2",
-        position: { lng: last[0], lat: last[1] },
-      });
-      interaction = null;
-    }
-  }, ScreenSpaceEventType.RIGHT_CLICK);
+  });
 
   const unsubscribe = events.subscribe((event: EarthEvent) => {
     if (
@@ -293,11 +309,13 @@ export function createCesiumWorkspaceController(
     },
     startDrawing(kind) {
       interaction = { type: "drawing", kind, points: [] };
+      ensureHandler();
       publishMeasurement(null);
     },
     finishDrawing,
     cancelInteraction() {
       interaction = null;
+      releaseHandler();
       publishMeasurement(null);
     },
     replaceDrawings(nextDrawings) {
@@ -306,10 +324,12 @@ export function createCesiumWorkspaceController(
     },
     startMeasurement(kind) {
       interaction = { type: "measurement", kind, points: [] };
+      ensureHandler();
       publishMeasurement(null);
     },
     destroy() {
-      handler.destroy();
+      releaseHandler();
+      removeSelectionListener();
       unsubscribe();
       for (const id of renderedDrawingIds) viewer.entities.removeById(`drawing:${id}`);
       renderedDrawingIds.clear();

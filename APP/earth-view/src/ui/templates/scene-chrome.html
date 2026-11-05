@@ -1,0 +1,164 @@
+  <div id="cesiumContainer"></div>
+  <div id="world-overlay-root" aria-hidden="true">
+    <canvas id="world-overlay-canvas"></canvas>
+  </div>
+  <div id="world-overlay-actions" class="world-overlay-accessibility" role="region" aria-label="Visible map targets">
+    <div id="world-overlay-action-list"></div>
+    <div id="world-overlay-status" role="status" aria-live="polite" aria-atomic="true"></div>
+  </div>
+
+  <!-- Title -->
+  <div id="title-bar">
+    <div class="title-glow"></div>
+    <h1><span class="title-logo brand-logo" data-logo-gaze data-logo-src="/logo.svg" aria-hidden="true"><img src="/logo.svg" alt="" /></span> <span>EARTH <span class="title-accent">VIEW</span></span></h1>
+    <p class="subtitle">NO PLACE LEFT BEHIND</p>
+  </div>
+
+  <!-- Style indicator -->
+  <div id="style-indicator">
+    <span class="indicator-label">ACTIVE STYLE</span>
+    <span class="indicator-value" id="active-style-name">NORMAL</span>
+  </div>
+
+  <!-- Top-center camera and share actions -->
+  <nav id="top-center-actions" aria-label="Globe actions">
+    <button id="zoom-in-view" type="button" aria-label="Zoom in" title="Zoom in (+)">
+      <span class="navigation-zoom-icon" aria-hidden="true">+</span>
+    </button>
+    <button id="zoom-out-view" type="button" aria-label="Zoom out" title="Zoom out (−)">
+      <span class="navigation-zoom-icon" aria-hidden="true">−</span>
+    </button>
+    <button id="my-location-view" type="button" aria-label="Fly to my current location" title="Fly to my current location">
+      <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
+    </button>
+    <button id="tilt-map-view" type="button" aria-label="Tilt map to oblique view" aria-pressed="false" title="Toggle straight-down and tilted map views">
+      <span class="material-symbols-outlined" aria-hidden="true">view_in_ar</span>
+    </button>
+    <button id="north-up-view" type="button" aria-label="Reset map to north up" title="Reset map bearing to north (N)">
+      <span class="camera-compass-n" aria-hidden="true">N</span>
+      <span class="camera-compass-needle material-symbols-outlined" aria-hidden="true">navigation</span>
+    </button>
+    <button id="orbit-poi-view" type="button" aria-label="Cinematic 360° Orbit" title="Toggle 360° Cinematic POI Orbit (O)">
+      <span class="material-symbols-outlined" aria-hidden="true">sync</span>
+    </button>
+    <button id="splat-view" type="button" aria-label="3D Gaussian Splats" title="3D Gaussian Splatting (3DGS) Radiance Fields (G)">
+      <span class="material-symbols-outlined" aria-hidden="true">grain</span>
+    </button>
+    <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
+      <span class="material-symbols-outlined" aria-hidden="true">public</span>
+    </button>
+    <button id="zen-mode-view" type="button" aria-label="Zen / Presentation Mode" title="Zen Mode: Hide UI (Z)">
+      <span class="material-symbols-outlined" aria-hidden="true">fullscreen</span>
+    </button>
+    <button id="clear-selected-layers" type="button" aria-label="Clear selected data layers" title="Turn off all selected data layers">
+      <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
+    </button>
+    <button id="share-btn" type="button" aria-label="Copy share link" title="Copy share link">
+      <span class="share-icon" aria-hidden="true">&#x1F517;</span>
+    </button>
+  </nav>
+
+  <!-- Live Earth Telemetry Bar -->
+  <aside id="earth-telemetry-bar" aria-label="Live Earth Telemetry" class="earth-telemetry-bar">
+    <div class="telemetry-item" id="telemetry-coords" title="Camera coordinates (Lat, Lon)">
+      <span class="telemetry-label">COORD</span>
+      <span class="telemetry-val" id="telemetry-coords-val">--</span>
+    </div>
+    <div class="telemetry-item" id="telemetry-altitude" title="Camera elevation / altitude">
+      <span class="telemetry-label">ALT</span>
+      <span class="telemetry-val" id="telemetry-altitude-val">--</span>
+    </div>
+    <div class="telemetry-item" id="telemetry-heading" title="Camera heading & pitch">
+      <span class="telemetry-label">ATTITUDE</span>
+      <span class="telemetry-val" id="telemetry-heading-val">--</span>
+    </div>
+    <div class="telemetry-item" id="telemetry-basemap" title="Active imagery provider">
+      <span class="telemetry-label">IMAGERY</span>
+      <span class="telemetry-val" id="telemetry-basemap-val">SATELLITE</span>
+    </div>
+  </aside>
+  <!-- 3D Gaussian Splatting (3DGS) Console -->
+  <dialog id="splat-dialog" class="splat-dialog" aria-label="3D Gaussian Splatting Radiance Fields">
+    <div class="splat-dialog-inner">
+      <div class="splat-dialog-header">
+        <div class="splat-dialog-title-wrap">
+          <span class="material-symbols-outlined splat-dialog-icon" aria-hidden="true">grain</span>
+          <span class="splat-dialog-title">3D GAUSSIAN SPLATTING</span>
+        </div>
+        <button id="splat-dialog-close" class="splat-dialog-close-btn" type="button" aria-label="Close dialog">✕</button>
+      </div>
+      <div class="splat-dialog-body">
+        <p class="splat-description">
+          Sub-millimeter photorealistic radiance fields geo-anchored on planet Earth, rendered via Cesium WebAssembly Gaussian Splatting and spherical harmonics.
+        </p>
+
+        <div class="splat-section">
+          <span class="splat-section-title">FEATURED 3DGS RECONSTRUCTIONS</span>
+          <div class="splat-preset-list" id="splat-preset-list">
+            <button type="button" class="splat-preset-card" data-splat-id="bhote-koshi">
+              <div class="splat-card-header">
+                <span class="splat-card-title">Bhote Koshi Canyon</span>
+                <span class="splat-badge">HIMALAYAS</span>
+              </div>
+              <p class="splat-card-meta">28.188° N, 85.319° E · High-resolution gorge & landslide reconstruction</p>
+            </button>
+            <button type="button" class="splat-preset-card" data-splat-id="eiffel">
+              <div class="splat-card-header">
+                <span class="splat-card-title">Eiffel Tower & Champ de Mars</span>
+                <span class="splat-badge">PARIS</span>
+              </div>
+              <p class="splat-card-meta">48.858° N, 2.294° E · Geometric lattice & view-dependent radiance</p>
+            </button>
+            <button type="button" class="splat-preset-card" data-splat-id="sf-rotunda">
+              <div class="splat-card-header">
+                <span class="splat-card-title">Palace of Fine Arts</span>
+                <span class="splat-badge">SAN FRANCISCO</span>
+              </div>
+              <p class="splat-card-meta">37.803° N, 122.448° W · Classical architecture & lagoon reflection field</p>
+            </button>
+          </div>
+        </div>
+
+        <div class="splat-section">
+          <span class="splat-section-title">CUSTOM 3DGS MODEL / TILESET</span>
+          <div class="splat-input-group">
+            <input type="url" id="splat-custom-url" class="splat-input-text" placeholder="3D Tileset / Gaussian Splat URL (e.g. https://.../tileset.json)" aria-label="Gaussian Splat 3D Tileset URL" />
+            <button type="button" id="splat-load-btn" class="splat-action-btn">LOAD</button>
+          </div>
+          <div class="splat-coords-row">
+            <input type="number" step="0.0001" id="splat-coord-lat" class="splat-input-num" placeholder="Lat (deg)" aria-label="Latitude" />
+            <input type="number" step="0.0001" id="splat-coord-lon" class="splat-input-num" placeholder="Lon (deg)" aria-label="Longitude" />
+            <input type="number" step="1" id="splat-coord-alt" class="splat-input-num" placeholder="Alt (m)" aria-label="Altitude in meters" />
+          </div>
+        </div>
+
+        <div class="splat-footer">
+          <div class="splat-status-line">
+            <span class="splat-status-dot"></span>
+            <span id="splat-status-label" class="splat-status-label">ENGINE READY (WASM 3DGS)</span>
+          </div>
+          <button type="button" id="splat-unload-btn" class="splat-unload-btn" hidden>UNLOAD</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+  <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
+    <span id="global-loading-label">LOADING LIVE DATA</span>
+    <span id="global-loading-detail"></span>
+  </div>
+  <div id="traffic-sync-chip" aria-live="polite">
+    <span id="traffic-sync-label">syncing road network</span>
+    <span id="traffic-sync-progress">0%</span>
+  </div>
+  <div id="cctv-sync-chip" aria-live="polite">
+    <span id="cctv-sync-label">loading frames</span>
+    <span id="cctv-sync-progress">0/0</span>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Safe frame guides for recording composition -->
+  <div id="safe-frame-overlay">
+    <div id="safe-frame-box"></div>
+  </div>

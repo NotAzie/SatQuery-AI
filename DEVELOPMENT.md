@@ -36,9 +36,15 @@ discovery boundaries.
 Follow [INSTALL.md](INSTALL.md) for clean installs and OS-specific commands. The Platform
 `APP/Makefile` targets are:
 
+After dependencies are installed, run `npm run dev` from the repository root to start the Engine,
+Platform API, and integrated God's Eye frontend together. Press Ctrl+C to stop all three. Use
+`npm run dev:frontend` when the APIs are already running. The root launcher keeps Engine Agent
+sessions in `engine/satquery-ai/.satquery/agent-sessions.sqlite` across restarts unless a Platform
+storage path or Platform config file is already configured in the environment or root `.env`.
+
 | Target | Action |
 |---|---|
-| `make install` | Create `APP/.venv`, install `backend[dev]`, and run `npm ci` |
+| `make install` | Create `APP/.venv`, install `backend[dev]`, and run `npm ci` for God's Eye and frontend |
 | `make backend` / `make frontend` | Run local dev servers |
 | `make lint` | Ruff and ESLint |
 | `make lint-imports` | Backend import boundary checks |
@@ -74,15 +80,26 @@ On POSIX, the corresponding commands are:
 (cd backend && ../.venv/bin/python -m pytest)
 ```
 
-Frontend, from `APP/frontend/`:
+Install both Node dependency sets with Node.js `>=24.14 <25` or `>=26 <27`:
 
 ```sh
-npm ci
+cd APP/earth-view && npm ci
+cd ../frontend && npm ci
 npm run lint
 npm run typecheck
 npm test
 npm run build
 ```
+
+The integrated frontend imports God's Eye's browser entry into the React entry so both run in one
+Vite module graph. React Fast Refresh/HMR is disabled because its inline preamble conflicts with
+God's Eye's strict Content Security Policy; reload the page (and restart Vite if necessary) after
+source changes rather than weakening that policy.
+
+The supplied God's Eye `npm test` baseline is not fully green: a cockpit control-order assertion
+fails against the supplied template, and tests expect `DATA_SOURCES.md` and `docs/KNOWN-ISSUES.md`,
+which are absent from the supplied source. CI runs the integration-specific API pass-through test,
+source-boundary checks, and production builds rather than masking those failures as passing.
 
 Engine deterministic tests, from `engine/satquery-ai/`, use the same test selection as CI:
 
@@ -130,7 +147,9 @@ GitHub workflow checks the JSON Schema and TypeScript output for drift.
 | `APP/contracts/schema.json` | `APP/scripts/export_contracts.py` | Generated shared schema; tracked |
 | `APP/frontend/src/shared/generated/contracts.ts` | `npm run gen:contracts` | Generated frontend types; tracked |
 | `APP/frontend/node_modules/` | `npm ci` | Local npm dependencies; ignored |
+| `APP/earth-view/node_modules/` | `npm ci` | Vendored Earth runtime dependencies; ignored |
 | `APP/frontend/dist/` | `npm run build` | Vite production build and Cesium static worker/assets; ignored |
+| `APP/earth-view/dist/` | `npm run build` | Standalone runtime validation output; ignored |
 | `APP/frontend/*.tsbuildinfo` | `tsc -b` | Incremental compiler cache; ignored |
 | `.venv/` | `python -m venv` | Python environment; ignored |
 | `__pycache__`, `.pytest_cache`, `.ruff_cache`, `.mypy_cache`, import-linter cache | Python tooling | Disposable caches; ignored |

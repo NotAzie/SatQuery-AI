@@ -31,9 +31,10 @@ a second model loop, tool router, investigation runtime, or scientific evidence 
   API that verifies the investigation is linked to the requested Engine Agent session. Feature
   properties validate evidence IDs as string lists; selecting a feature displays those IDs and lets
   the user highlight matching evidence in the loaded overlay.
-- The Engine Agent's explicit `earth.command` tool can emit `fly_to` or `show_investigation`.
-  Investigation commands are restricted to IDs linked to that Engine session; the Platform checks
-  ownership again before loading report or map data.
+- The Engine Agent's explicit `earth.command` tool can emit `fly_to`, `show_investigation`, or
+  `set_layer_visibility`. Investigation commands are restricted to IDs linked to that Engine
+  session; layer visibility commands are restricted to the current EarthContext's layer IDs and
+  validated again by the live God’s Eye layer manager.
 - The Platform sends a typed, bounded EarthContext per turn with primary/secondary viewports and
   cameras, timeline and playback, selection, drawings, imagery references, visible overlays,
   selected evidence, investigation references, and persisted workspace state. The Engine validates it
@@ -52,11 +53,9 @@ a second model loop, tool router, investigation runtime, or scientific evidence 
 3. Configure the Platform with `engine.kind: http`, `engine.base_url`, and `agent.model_id`
    matching that Engine registration.
 
-`engine.api_key_env` is not currently a working authentication mechanism: the adapter sends a
-placeholder authorization value rather than the configured secret. Do not rely on it for a live
-deployment. Before implementing authentication, the Engine/deployment contract must define the
-accepted scheme and header, whether health and streamed endpoints share it, and how missing or
-rejected credentials are reported.
+`engine.api_key_env` is forwarded as a Bearer credential, but the Engine API currently does not
+validate it. It is not an authorization boundary; authenticated deployments still require a trusted
+network or an authenticating deployment proxy.
 
 The Platform's `llm.providers` configuration is not used by this Agent path. Provider SDK
 integration, model/tool orchestration, execution, and transcript persistence remain Engine-owned.
@@ -67,8 +66,8 @@ workspace.
 
 - Validate the adapter against a deployed Engine version, including error responses, cancellation,
   reconnect/disconnect behavior, and session persistence across Engine restarts.
-- Define and validate the Engine/reverse-proxy authentication contract; the current
-  `engine.api_key_env` setting does not send its secret.
+- Define and validate the Engine/reverse-proxy authentication contract; the Engine currently does
+  not validate the forwarded `engine.api_key_env` credential.
 - Decide and implement production authentication and per-user session authorization before exposing
   the chat endpoints to untrusted clients.
 - Investigation progress from the typed `investigation.progress` Engine event is displayed as a

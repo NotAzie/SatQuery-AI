@@ -8,8 +8,8 @@ Open it in Colab from the repository's default branch:
 `https://colab.research.google.com/github/NotAzie/SatQuery-AI/blob/main/SatQuery-Colab.ipynb`
 
 This is a temporary development/demo environment, not a public or production deployment. Python
-3.12 and Node 22 are required. The notebook installs Engine `.[geospatial,raster]`, Platform
-`backend`, and frontend npm dependencies in separate environments. It intentionally does not
+3.12 and Node.js 24.14+ (24.x or 26.x) are required. The notebook installs Engine `.[geospatial,raster]`, Platform
+`backend`, and the two locked Node dependency trees. It intentionally does not
 install the optional PyTorch/Transformers vision extra or local model weights. A GPU is not needed
 for Platform use or hosted OpenAI Agent inference.
 
@@ -17,9 +17,11 @@ for Platform use or hosted OpenAI Agent inference.
 
 | Secret/setting | Required? | Purpose |
 |---|---|---|
-| Colab Secret `OPENAI_API_KEY` | Required for Agent conversation | Used by the Engine's OpenAI Chat Completions Agent adapter. Keep it in Colab Secrets; the notebook does not print it. Provider usage may incur cost and is subject to OpenAI account/model terms. |
-| Notebook `AGENT_MODEL` | Required for Agent conversation | Set to an OpenAI Chat Completions model enabled for your account with tool/function calling. The repository does not pin or guarantee an available model. |
-| Colab Secret `VITE_CESIUM_ION_TOKEN` | Optional | Enables default Cesium ion imagery/terrain; token is bundled into frontend code and browser-visible. Scope it accordingly. The globe can start without it but has no default imagery. |
+| Colab Secret `OPENAI_API_KEY` | Optional; required for Engine Agent conversation | Used by the Engine's OpenAI Chat Completions Agent adapter. Keep it in Colab Secrets; the notebook does not print it. Provider usage may incur cost and is subject to OpenAI account/model terms. |
+| Notebook `AGENT_MODEL` | Optional; required with the Agent key for Agent conversation | Set to an OpenAI Chat Completions model enabled for your account with tool/function calling. The repository does not pin or guarantee an available model. |
+| Colab Secret `VITE_CESIUM_ION_TOKEN` | Optional | Enables Cesium ion imagery/terrain; the integrated frontend passes it to God's Eye as `CESIUM_ION_TOKEN` and it is browser-visible. Scope it accordingly. God's Eye has keyless Esri imagery without it. |
+| Colab Secret `GOOGLE_MAPS_API_KEY` | Optional | Enables Google's photorealistic 3D Tiles and God's Eye place search; used client-side and browser-visible. Restrict its APIs and referrers. |
+| Colab Secret `GEV_OPENAI_API_KEY` plus notebook `GEV_VOICE_ENABLED=True` | Optional, explicit opt-in | Enables God's Eye Realtime voice and HUD summaries through its local provider proxy. The secret is scoped only to the frontend process and is not bundled into browser code; provider usage may incur separate charges. |
 | Notebook `AGENT_SUPPORTS_VISION` | Optional; default false | Set true only when the chosen Agent model accepts image input. It asserts capability; Engine does not discover it. |
 | Drive mount toggle | Optional; default false | Mounts Drive to restore/copy snapshots after Engine/API processes have stopped. Never use SQLite databases directly on mounted Drive. |
 | Earth-data provider credentials | Optional | The default connector manifest uses public interfaces without credentials for this smoke workflow. FIRMS and protected Earthdata/STAC resources require their provider credential when used. |
@@ -61,8 +63,12 @@ the OpenAI API and 120 seconds. See the [Engine environment example](engine/satq
 for the remaining local-model and analysis tuning settings; they are not required for this Colab
 hosted-Agent workflow.
 
-The only credentials this notebook needs are `OPENAI_API_KEY` for hosted Agent turns and,
-optionally, `VITE_CESIUM_ION_TOKEN` for Cesium ion imagery. Other connector credentials are
+The only credentials this notebook needs for its Engine workflow are `OPENAI_API_KEY` for hosted
+Agent turns and, optionally, `VITE_CESIUM_ION_TOKEN` for Cesium ion imagery. The integrated
+frontend can additionally use `GOOGLE_MAPS_API_KEY`; optional God's Eye Realtime voice/HUD uses
+`GEV_OPENAI_API_KEY` only when explicitly enabled. In Colab, place these values in Colab Secrets
+before startup rather than entering them into God's Eye's Provider Settings form, which persists
+form entries to the runtime's `.env`. Other connector credentials are
 feature-specific: `SATQUERY_NASA_FIRMS_MAP_KEY` is required for NASA FIRMS, which is not enabled
 in the example manifest. NASA Earthdata CMR and STAC connectors accept optional bearer tokens via
 their connector credential interface when a configured protected catalog requires them; the
@@ -76,7 +82,7 @@ requires no API key. The services still require outbound network access and prov
 |---|---|---|---|
 | Engine API | Python 3.12 environment synced from `engine/satquery-ai/uv.lock`, with `geospatial` and `raster` extras | No separate database server; SQLite files use the configured local path. Connector calls need outbound Internet. | CPU-compatible API and connector execution; no GPU required. |
 | Platform API | Python 3.12 environment synced from `APP/backend/uv.lock` | Engine HTTP API at loopback port 9000; Platform SQLite and image files under `APP/var`. | Starts on loopback port 8000 and proxies through Vite. |
-| Frontend | Node.js 22.x, npm, `APP/frontend/package-lock.json` | Vite proxy to Platform API; optional Cesium ion client token. | `npm ci`; Vite port 5173 is exposed with Colab's port proxy. |
+| Frontend and Earth runtime | Node.js 24.14+ (24.x or 26.x), npm, both `APP/frontend` and `APP/earth-view` lockfiles | God's Eye View is the primary Earth UI and shares its Cesium viewer with SatQuery; Vite proxies `/api/v1` to Platform. | Both dependency sets use `npm ci`; Vite port 5173 is exposed with Colab's port proxy. |
 | Hosted Agent | Optional OpenAI API key and a model available to the account that supports Chat Completions tool calls | OpenAI API; usage billed under provider account terms. | Remote inference; Colab CPU/GPU does not accelerate it. If no model/key is set, Agent smoke test is skipped and Agent chat is unavailable. |
 | Engine query planning | Deterministic Engine rules; notebook explicitly sets `SATQUERY_ROUTER=rules` | None for the notebook workflow. Legacy LLM routing can separately use `SATQUERY_LLM_*`, but is not enabled. | Avoids hidden planner calls and keeps planning deterministic. |
 | Earth data | Checked-in connector adapters and `engine/configs/connectors.example.json` | Provider APIs/data catalogues listed in the capability table; network, provider uptime, coverage, quotas, and credentials vary. | Open-Meteo smoke request is public and keyless; the notebook verifies actual data rather than only connector registration. |
@@ -86,7 +92,7 @@ requires no API key. The services still require outbound network access and prov
 
 Python versions and lockfiles are checked in, but the Colab VM itself is not pinned by Google;
 the notebook logs the selected Git commit and live CPU/RAM/GPU/storage facts. PyPI/Node package
-availability, NodeSource bootstrap availability when Node 22 is missing, Colab proxy behavior,
+availability, NodeSource bootstrap availability when a supported Node 24 release is missing, Colab proxy behavior,
 model account access, and upstream data availability remain outside the repository's control.
 For exact source reproducibility, run the notebook against a reviewed commit rather than assuming
 the default branch remains unchanged.
@@ -104,7 +110,7 @@ the default branch remains unchanged.
 | Other hosted Agent providers (Anthropic, Gemini, OpenRouter) or Ollama | Not wired to an Engine Agent adapter in this repository. Platform provider YAML entries alone do not enable them. |
 | Legacy local BLIP/CLIP image API | Not installed by the notebook. Requires PyTorch/Transformers, Hugging Face model downloads/cache, and potentially substantial disk/RAM/VRAM. |
 | Raster sampling/zonal statistics/component extraction | Requires installed raster/geospatial extras, compatible declared raster assets, and provider access. |
-| Cesium base imagery | Requires optional ion token; no token means no default imagery. |
+| God's Eye Earth environment | Works with keyless Esri World Imagery; Cesium ion and Google Maps credentials enable additional imagery/terrain options. |
 | External alert delivery, auth, multi-user isolation, distributed workers, production deployment | Not supplied. Colab does not make these available. |
 
 See [supported datasets](engine/docs/datasets/SUPPORTED_DATASETS.md), [Engine setup](engine/docs/development/SETUP.md),
@@ -117,11 +123,13 @@ for provider-specific details, limits, and cost/licensing boundaries.
    runtime; GPU is optional.
 2. For hosted Agent chat, add `OPENAI_API_KEY` to Colab Secrets, grant notebook access, and set
    `AGENT_MODEL` to a Chat Completions model enabled for that account. This is optional for the
-   Platform and Engine-backed data workflow. Optionally add `VITE_CESIUM_ION_TOKEN`; enable vision
-   only when the chosen model supports it.
+   Platform and Engine-backed data workflow. Optionally add `VITE_CESIUM_ION_TOKEN` and
+   `GOOGLE_MAPS_API_KEY` for additional Earth imagery. God's Eye Realtime voice/HUD requires the
+   separate `GEV_OPENAI_API_KEY` Secret and explicit `GEV_VOICE_ENABLED=True`; enable vision only
+   when the chosen Agent model supports it.
 3. Run the notebook cells in order. It inspects CPU/RAM/GPU/storage, installs the Engine and
    Platform Python dependencies from their frozen `uv.lock` files, installs frontend dependencies
-   with `npm ci`, configures the public connector manifest and local SQLite paths, then starts all
+   with `npm ci` in both `APP/earth-view` and `APP/frontend`, configures the public connector manifest and local SQLite paths, then starts all
    three services. It records the checked-out Git revision for reproducibility.
 4. Confirm Engine health, Platform readiness, and frontend startup. Open the Vite UI through the
    Colab port proxy.

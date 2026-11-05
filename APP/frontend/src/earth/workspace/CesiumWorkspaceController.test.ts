@@ -78,9 +78,14 @@ interface MockHandler {
 
 function currentHandler(): MockHandler {
   const mocked = ScreenSpaceEventHandler as unknown as {
-    latest: MockHandler;
+    latest: MockHandler | undefined;
   };
-  return mocked.latest;
+  return {
+    trigger(type, event) {
+      if (!mocked.latest) throw new Error("Workspace interaction handler is not active");
+      mocked.latest.trigger(type, event);
+    },
+  };
 }
 
 function createEntity(
@@ -97,6 +102,7 @@ function createEntity(
 function fakeViewer() {
   const createdEntities: unknown[] = [];
   const requestRender = vi.fn();
+  let selectedEntityListener: ((entity: Entity | null) => void) | null = null;
   const viewer = {
     scene: {
       canvas: {},
@@ -113,6 +119,14 @@ function fakeViewer() {
       pickEllipsoid: () => undefined,
     },
     clock: { currentTime: new Date() },
+    selectedEntityChanged: {
+      addEventListener(listener: (entity: Entity | null) => void) {
+        selectedEntityListener = listener;
+        return () => {
+          selectedEntityListener = null;
+        };
+      },
+    },
     entities: {
       add: (entity: unknown) => createdEntities.push(entity),
       removeById: vi.fn((id: string) => {
@@ -127,7 +141,14 @@ function fakeViewer() {
       }),
     },
   };
-  return { viewer: viewer as unknown as Viewer, createdEntities, requestRender };
+  return {
+    viewer: viewer as unknown as Viewer,
+    createdEntities,
+    requestRender,
+    selectEntity(entity: Entity | null) {
+      selectedEntityListener?.(entity);
+    },
+  };
 }
 
 function click(x: number, y: number): { position: Cartesian2 } {
@@ -137,10 +158,11 @@ function click(x: number, y: number): { position: Cartesian2 } {
 describe("Cesium workspace controller", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete (ScreenSpaceEventHandler as unknown as { latest?: MockHandler }).latest;
   });
 
-  it("publishes entity selection and deselection changes as typed Earth events", () => {
-    const { viewer } = fakeViewer();
+  it("uses the viewer's native entity-selection event without installing a canvas handler", () => {
+    const { viewer, selectEntity } = fakeViewer();
     const events = createEarthEventBus();
     const received = vi.fn();
     events.subscribe(received);
@@ -150,16 +172,17 @@ describe("Cesium workspace controller", () => {
       evidence_ids: { getValue: () => ["evidence-1", "evidence-2"] },
       ignored: { getValue: () => ({ internal: true }) },
     });
-    viewer.scene.pick = () => ({ id: selected });
     const controller = createCesiumWorkspaceController(viewer, events);
-    const pointer = currentHandler();
+    expect(
+      (ScreenSpaceEventHandler as unknown as { latest?: MockHandler }).latest,
+    ).toBeUndefined();
 
-    pointer.trigger(ScreenSpaceEventType.LEFT_CLICK, click(12, 48));
+    selectEntity(selected);
     expect(received).toHaveBeenLastCalledWith({
       type: "earth.selection.changed",
       selection: {
         entity_id: "feature-7",
-        position: { lng: 12, lat: 48 },
+        position: null,
         properties: {
           class: "water",
           count: 3,
@@ -168,8 +191,7 @@ describe("Cesium workspace controller", () => {
       },
     });
 
-    viewer.scene.pick = () => null;
-    pointer.trigger(ScreenSpaceEventType.LEFT_CLICK, click(12, 48));
+    selectEntity(null);
     expect(received).toHaveBeenLastCalledWith({
       type: "earth.selection.changed",
       selection: null,

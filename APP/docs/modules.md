@@ -25,8 +25,8 @@ public interface. This page is the map.
 | Folder | Responsibility | State |
 |---|---|---|
 | `app` | bootstrap, providers, router, `AppShell` | implemented |
-| `earth` | all Cesium code behind `EarthController` | globe, camera, capture, workspace tools, overlays, timeline, selection/drawings, and split view |
-| `features` | chat, Earth tools/data discovery, vision, monitoring, sessions | session sidebar, streamed Engine Agent chat, Engine data catalogue, image attachments, and monitoring |
+| `earth` | Platform EarthContext, Engine command/overlay integration, and shared-viewer attachment | God’s Eye owns the active Earth UI; Platform camera/context persistence and Engine investigation overlays remain typed |
+| `features` | command notch, Platform workspace drawer, vision, monitoring, and Engine discovery | Agent chat and image intake in the notch; Projects/sessions, saved views, monitoring, and read-only capability discovery in one drawer |
 | `components` | feature-agnostic UI primitives | structure |
 | `hooks` | cross-cutting hooks | `useEarthController` |
 | `services` | `api` client, `stream` contract | client + contract |

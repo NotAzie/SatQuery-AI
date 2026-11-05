@@ -5,9 +5,10 @@
 1. **The Engine is a dependency, not part of the Platform.** All contact goes through
    `engine.EngineClient`. Nothing else imports Engine code. (ADR 0001)
 2. **The LLM thinks, the Engine executes.** No science runs in the Platform or in a prompt. (ADR 0002)
-3. **The Earth is the workspace.** The Cesium-backed globe loads as a separate frontend chunk, is
-   mounted once, and persists; the UI floats above it, and the backend can drive it with typed
-   commands. Project and investigation routes are also loaded on navigation. (ADR 0003)
+3. **The Earth is the workspace.** God's Eye View is the primary Earth environment. Its Cesium
+   viewer is mounted once; SatQuery's command notch mounts in God's Eye's native dock, and typed
+   Platform/Engine contracts drive the shared viewer. Project and investigation routes are loaded
+   on navigation. (ADR 0003)
 4. **One wire contract.** Events, Earth commands and shared models are defined once in pydantic,
    exported to `contracts/schema.json`, and generated into TypeScript. The two sides cannot drift.
 5. **Extension points use registries.** Backend plugin loading and frontend module loading remain
@@ -18,7 +19,7 @@
 
 ```mermaid
 flowchart LR
-  U[User] --> FE[Frontend: React + Cesium]
+  U[User] --> FE[Frontend: SatQuery React + God's Eye View]
   FE -- "POST /api/v1/chat/.../turns" --> API[FastAPI chat API]
   API --> PLAN[Earth Intelligence Request Planner]
   PLAN --> CTX[EarthContext + conversation context]
@@ -35,7 +36,7 @@ flowchart LR
   AR --> FE
   FE -- "typed earth.command event from server stream" --> DISP[Earth Command Dispatcher]
   DISP --> ECES[EarthController]
-  ECES --> CESIUM[Cesium workspace]
+  ECES --> CESIUM[Shared God's Eye Cesium viewer]
   FE -- "GET /api/v1/chat/sessions/{id}" --> API
   API --> SQ
   FE -- "GET /api/v1/chat/sessions/{id}/investigations/{investigation_id}/report" --> API
@@ -54,6 +55,33 @@ flowchart LR
   FE -- "Engine dataset and image capability discovery" --> API
   API --> EC
 ```
+
+## Unified Earth environment
+
+The integrated frontend uses God's Eye's authored HTML shell, styles, assets, provider middleware,
+and Vite build plugins alongside SatQuery's React application. This is one same-origin page and
+one Cesium viewer, not an iframe, a second globe, or a separately deployed Earth service. Vite
+forwards `/api/v1` to the Platform API while God's Eye retains its provider routes.
+
+God's Eye owns its live Earth viewer and layer lifecycle. SatQuery's `EarthController` attaches to
+that viewer and adapts supported live layer visibility into the Platform's typed workspace state.
+The Engine's scientific layer catalogue/source contract remains a separate unavailable capability;
+the Platform does not fabricate Engine layers. God's Eye layer opacity is not supported by its
+manager and is rejected when a non-default value is requested. Split view is unavailable because
+the integrated runtime intentionally has one viewer. Provider keys remain scoped to their existing
+client or server owners.
+God's Eye visual presets and native annotation/measurement payloads remain God’s Eye-local because
+the current Engine EarthContext and command contracts do not define corresponding fields; the
+Platform does not infer their scientific meaning.
+
+God's Eye also owns the active Earth workspace chrome and interactions: layer controls, scenes,
+navigation, drawings, measurements, and provider settings are presented by its authored interface.
+SatQuery does not mount its former Earth toolbar, timeline panel, or workspace-tools panel around
+that interface. Its command notch is mounted in the native command dock as the entry point for Engine conversations and opens one
+on-demand Platform workspace drawer for Projects/sessions, persisted session views, monitoring,
+and read-only Engine capability discovery. Image intake remains attached to the expanded command
+notch. This keeps God’s Eye's local Earth scenes distinct from Platform-persisted EarthContext
+views and leaves Engine execution and scientific state with the Engine.
 
 ## Phase 2 Agent turn, end to end
 
@@ -105,14 +133,17 @@ at `GET /api/v1/intelligence/capabilities`.
 
 The Engine Agent exposes `earth.command` as an explicit presentation tool and emits a typed event
 with the existing session/turn/sequence/timestamp envelope. The Platform validates and maps this to
-the shared `EarthCommandIssued` event before persistence and frontend dispatch. The first supported
-commands are `fly_to` and `show_investigation`; Engine and Platform both enforce investigation
-session ownership. Commands are never inferred from assistant prose or tool outputs. Other command
-types remain unavailable until their Engine data contracts exist. See the
+the shared `EarthCommandIssued` event before persistence and frontend dispatch. Supported commands
+are `fly_to`, `show_investigation`, and `set_layer_visibility`. The Engine and Platform enforce
+investigation ownership; the Engine restricts layer visibility to IDs in the current EarthContext,
+and the live God's Eye layer manager validates those IDs again at dispatch. Commands are never
+inferred from assistant prose or tool outputs. Other command types remain unavailable until their
+Engine data and ownership contracts exist. See the
 [Phase 3 and Phase 4 roadmap](roadmap.md).
 
-The Phase 4 timeline is a presentation-owned EarthController slice. Its UI changes the Cesium clock,
-and viewport and clock state are mirrored into the frontend EarthContext store. Phase 6 sends a
+The Phase 4 timeline is a presentation-owned EarthController slice. The former SatQuery timeline
+panel is no longer part of the active Earth UI; God's Eye owns the user-facing Earth experience.
+Viewport and clock state are mirrored into the frontend EarthContext store where available. Phase 6 sends a
 bounded typed workspace snapshot with the Engine turn, including camera and viewport, timeline,
 selection, drawings, imagery references, primary and secondary view state, visible overlay geometry,
 evidence highlights, investigation references, and the remaining serializable workspace state. The Engine treats every value as
@@ -125,13 +156,12 @@ from opaque tool results.
 
 Phase 4 workspace state is kept separate from Engine-owned session transcripts. The Platform's
 session record has an `earth_workspace` value persisted through the existing session API and SQLite
-store: bounded camera history and named EarthContext bookmarks. EarthController owns Cesium picking,
-draw interaction, terrain-height queries, camera restoration, and entity rendering; the frontend
-state stores only serializable selection/drawing values. A typed Earth event bus publishes selection
-and drawing changes to every active view. Split view creates a second EarthController that shares
-presentation events and timeline state while cameras remain independent unless the user enables
-synchronization. Each controller releases its Cesium clock listener and other owned subscriptions
-when its viewport is destroyed.
+store: bounded camera history and named EarthContext bookmarks. Platform-persisted session views
+remain available from the command-notch workspace drawer; God’s Eye scenes remain owned by God's
+Eye. The typed Earth event bus and controller remain the Platform boundary for Engine commands,
+investigation overlays, view restoration, and serializable EarthContext. Earth workspace controls
+are not separately rendered by SatQuery. Each controller releases its owned Cesium subscriptions
+when the shared viewer is detached.
 Session field changes use repository mutations that read, apply, and persist under one SQLite write
 transaction, so concurrent workspace, planner-snapshot, and Engine-link updates preserve unrelated
 fields.

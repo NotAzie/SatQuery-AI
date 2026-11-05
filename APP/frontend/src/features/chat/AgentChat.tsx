@@ -16,12 +16,15 @@ import {
   getInvestigationReport,
   streamAgentTurn,
 } from "@/services/api/chat";
+import { openGodsEyeProviderSettings } from "@/earth/integration/godsEyeRuntime";
+import { VisionAttachments } from "@/features/vision/VisionAttachments";
+import { useWorkspaceDrawer } from "@/features/workspace/SatQueryWorkspaceDrawer";
+import { useEarthController } from "@/hooks/useEarth";
 import { imageContentUrl } from "@/services/api/vision";
 import type { EngineInvestigationReport } from "@/shared/types";
 import { snapshotEarthContext } from "@/state/earthStore";
 import { useSessionStore } from "@/state/sessionStore";
 import { useVisionStore } from "@/state/visionStore";
-import { useEarthController } from "@/hooks/useEarth";
 import { visibleAgentMessage } from "./messageContent";
 import {
   formatInvestigationEventType,
@@ -98,6 +101,7 @@ export function AgentChat() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [canceling, setCanceling] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [executionAuthorized, setExecutionAuthorized] = useState(false);
   const attachments = useVisionStore(
     useShallow((state) =>
@@ -105,6 +109,7 @@ export function AgentChat() {
     ),
   );
   const setVisionPanelOpen = useVisionStore((state) => state.setPanelOpen);
+  const { openWorkspace } = useWorkspaceDrawer();
   const [notice, setNotice] = useState<{
     sessionId: string | null;
     status: string | null;
@@ -198,6 +203,7 @@ export function AgentChat() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!sessionId || busy || (!draft.trim() && attachments.length === 0)) return;
+    setExpanded(true);
     const text = draft.trim() || "Describe the attached image(s).";
     const assetIds = attachments.map((asset) => asset.id);
     const visibleText = attachments.length
@@ -374,6 +380,29 @@ export function AgentChat() {
         );
       }
       setBusy(false);
+    }
+  }
+
+  async function openProviderSettings() {
+    try {
+      const opened = await openGodsEyeProviderSettings();
+      if (!opened) {
+        setNotice({
+          sessionId,
+          status: null,
+          error:
+            "Provider settings are unavailable in this environment. Configure credentials through the deployment environment or Colab Secrets.",
+        });
+      }
+    } catch (reason) {
+      setNotice({
+        sessionId,
+        status: null,
+        error:
+          reason instanceof Error
+            ? `Provider settings could not be opened: ${reason.message}`
+            : "Provider settings could not be opened.",
+      });
     }
   }
 
@@ -600,19 +629,53 @@ export function AgentChat() {
 
   return (
     <section
-      aria-label="Conversation"
-      className="pointer-events-auto absolute bottom-4 left-1/2 mx-auto flex h-[min(68vh,44rem)] w-[min(46rem,calc(100%_-_2rem))] -translate-x-1/2 flex-col overflow-hidden rounded-3xl border border-white/10 bg-surface/90 shadow-2xl shadow-black/50 backdrop-blur-2xl"
+      aria-label="SatQuery command center"
+      data-satquery-agent
+      data-expanded={expanded}
+      className={`pointer-events-auto flex max-h-[min(78vh,52rem)] flex-col overflow-hidden border border-white/10 bg-surface/95 shadow-2xl shadow-black/50 backdrop-blur-2xl transition-[width,height,border-radius] duration-200 ${
+        expanded
+          ? "absolute bottom-[calc(100%+0.75rem)] right-0 h-[min(68vh,44rem)] w-[min(46rem,calc(100vw_-_2rem))] rounded-3xl"
+          : "relative w-full rounded-xl"
+      }`}
     >
       <header className="flex items-center justify-between border-b border-white/10 px-5 py-3">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-ink-dim">
-            SatQuery Agent
+            SatQuery · Earth Intelligence
           </p>
-          <p className="mt-1 text-xs text-ink-dim">
-            The Engine owns analysis, tool execution, and evidence.
+          <p className="mt-1 max-w-[min(28rem,60vw)] truncate text-xs text-ink-dim" role={error ? "alert" : status ? "status" : undefined}>
+            {error ?? status ?? (expanded
+              ? "Engine analysis, scientific execution, and evidence."
+              : "Ask about the Earth or start an investigation.")}
           </p>
         </div>
-        {busy && (
+        <div className="ml-3 flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-ink-dim hover:text-ink"
+            onClick={openWorkspace}
+            aria-label="Open SatQuery workspace"
+          >
+            Workspace
+          </button>
+          <button
+            type="button"
+            className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-ink-dim hover:text-ink"
+            onClick={openProviderSettings}
+            aria-label="Open provider settings"
+          >
+            Settings
+          </button>
+          <button
+            type="button"
+            className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-ink-dim hover:text-ink"
+            onClick={() => setExpanded((value) => !value)}
+            aria-expanded={expanded}
+            aria-label={expanded ? "Collapse command center" : "Expand command center"}
+          >
+            {expanded ? "Collapse" : "Open"}
+          </button>
+          {busy && (
           <button
             type="button"
             className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-ink-dim hover:text-ink disabled:opacity-50"
@@ -621,10 +684,13 @@ export function AgentChat() {
           >
             {canceling ? "Stopping..." : "Stop"}
           </button>
-        )}
+          )}
+        </div>
       </header>
 
+      {expanded && (
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+        <VisionAttachments />
         {!sessionId && (
           <p className="py-6 text-center text-sm text-ink-dim">
             Create or select a workspace session to start a conversation.
@@ -822,8 +888,12 @@ export function AgentChat() {
           </section>
         )}
       </div>
+      )}
 
-      <form className="border-t border-white/10 p-3" onSubmit={(event) => void submit(event)}>
+      <form
+        className={`${expanded ? "border-t border-white/10" : ""} p-3`}
+        onSubmit={(event) => void submit(event)}
+      >
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -836,14 +906,17 @@ export function AgentChat() {
           disabled={!sessionId || busy}
           placeholder={sessionId ? "Message SatQuery Agent..." : "Select a session first"}
           aria-label="Message SatQuery Agent"
-          rows={2}
+          rows={expanded ? 2 : 1}
           className="w-full resize-none bg-transparent px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-dim disabled:opacity-50"
         />
         <div className="flex items-center justify-between gap-3 px-2 pb-1">
           <button
             type="button"
             className="rounded-full border border-white/10 px-3 py-2 text-xs text-ink-dim hover:text-ink"
-            onClick={() => setVisionPanelOpen(true)}
+            onClick={() => {
+              setVisionPanelOpen(true);
+              setExpanded(true);
+            }}
             disabled={!sessionId}
           >
             Images{attachments.length ? ` (${attachments.length})` : ""}

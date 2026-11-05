@@ -73,6 +73,9 @@ class MonitoringConfig:
 @dataclass(frozen=True)
 class AgentConfig:
     model_timeout_seconds: float = 120.0
+    max_tool_rounds: int = 8
+    max_tool_calls_per_turn: int = 24
+    max_context_turns: int = 24
 
 
 @dataclass(frozen=True)
@@ -333,7 +336,12 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
             "enabled", "poll_interval_seconds", "max_runs_per_tick",
             "max_triggered_investigations_per_tick", "max_concurrency", "lease_seconds",
         },
-        "agent": {"model_timeout_seconds"},
+        "agent": {
+            "model_timeout_seconds",
+            "max_tool_rounds",
+            "max_tool_calls_per_turn",
+            "max_context_turns",
+        },
     }
     for section, fields in allowed_fields.items():
         section_values = values.get(section, {})
@@ -433,6 +441,16 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
     )
     if agent_model_timeout is None:
         raise ConfigurationError("agent.model_timeout_seconds must be finite and positive.")
+    agent_limits: dict[str, int] = {}
+    for field_name in (
+        "max_tool_rounds",
+        "max_tool_calls_per_turn",
+        "max_context_turns",
+    ):
+        value = agent.get(field_name, getattr(AgentConfig(), field_name))
+        if type(value) is not int or value < 1:
+            raise ConfigurationError(f"agent.{field_name} must be a positive integer.")
+        agent_limits[field_name] = value
     if (
         monitoring_enabled
         and values["profile"] == "production"
@@ -473,7 +491,10 @@ def _validated_config(values: Mapping[str, Any]) -> PlatformConfig:
             max_concurrency=monitoring_concurrency,
             lease_seconds=monitoring_lease_seconds,
         ),
-        agent=AgentConfig(model_timeout_seconds=agent_model_timeout),
+        agent=AgentConfig(
+            model_timeout_seconds=agent_model_timeout,
+            **agent_limits,
+        ),
     )
 
 

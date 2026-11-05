@@ -44,8 +44,8 @@ function timestamp(value: string): string {
   return new Date(value).toLocaleString();
 }
 
-export function MonitoringPanel() {
-  const [open, setOpen] = useState(false);
+export function MonitoringPanel({ embedded = false }: { embedded?: boolean }) {
+  const [open, setOpen] = useState(embedded);
   const [missions, setMissions] = useState<EngineMission[]>([]);
   const [schedules, setSchedules] = useState<EngineMonitoringSchedule[]>([]);
   const [notifications, setNotifications] = useState<EngineMonitoringNotification[]>([]);
@@ -437,7 +437,11 @@ export function MonitoringPanel() {
   return (
     <section
       aria-label="Monitoring"
-      className="pointer-events-auto w-72 rounded-2xl border border-white/10 bg-surface/95 text-ink shadow-2xl shadow-black/40 backdrop-blur-xl"
+      className={
+        embedded
+          ? "w-full text-ink"
+          : "pointer-events-auto w-72 rounded-2xl border border-white/10 bg-surface/95 text-ink shadow-2xl shadow-black/40 backdrop-blur-xl"
+      }
     >
       <header className="flex items-center justify-between p-3">
         <div>
@@ -446,18 +450,20 @@ export function MonitoringPanel() {
           </p>
           <h2 className="mt-1 text-sm font-semibold">Monitoring</h2>
         </div>
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
-          className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs hover:bg-white/5"
-        >
-          {open ? "Hide" : "Open"}
-        </button>
+        {!embedded && (
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((value) => !value)}
+            className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs hover:bg-white/5"
+          >
+            {open ? "Hide" : "Open"}
+          </button>
+        )}
       </header>
 
       {open && (
-        <div className="max-h-[min(68vh,44rem)] space-y-3 overflow-y-auto border-t border-white/10 p-3">
+        <div className={embedded ? "space-y-3" : "max-h-[min(68vh,44rem)] space-y-3 overflow-y-auto border-t border-white/10 p-3"}>
           <div className="flex items-center justify-between">
             <p className="text-[10px] text-ink-dim">
               Schedules and results are owned by the Engine.

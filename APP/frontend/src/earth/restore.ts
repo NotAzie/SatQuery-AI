@@ -66,18 +66,19 @@ export async function restoreEarthContext(
   events: EarthEventBus,
 ): Promise<void> {
   const earth = useEarthStore.getState();
+  await controller.layers?.restore(context.layers);
   earth.setCamera(context.camera);
   earth.setViewport(context.viewport);
   earth.setLayers(context.layers);
   earth.setCaptures(context.captures);
   earth.setSelection(context.selection);
-  earth.setSplitView(context.split_view.enabled);
-  earth.setSyncCameras(context.split_view.sync_cameras);
-  earth.setSecondaryCamera(context.secondary_view?.camera ?? null);
-  earth.setSecondaryViewport(context.secondary_view?.viewport ?? null);
-  earth.setSecondaryOverlays(context.secondary_view?.overlays ?? []);
+  earth.setSplitView(context.split_view.enabled && Boolean(secondaryController));
+  earth.setSyncCameras(context.split_view.sync_cameras && Boolean(secondaryController));
+  earth.setSecondaryCamera(secondaryController ? context.secondary_view?.camera ?? null : null);
+  earth.setSecondaryViewport(secondaryController ? context.secondary_view?.viewport ?? null : null);
+  earth.setSecondaryOverlays(secondaryController ? context.secondary_view?.overlays ?? [] : []);
   earth.setSecondarySelectedEvidenceIds(
-    context.secondary_view?.selected_evidence_ids ?? [],
+    secondaryController ? context.secondary_view?.selected_evidence_ids ?? [] : [],
   );
   const measurement = context.measurement
     ? {

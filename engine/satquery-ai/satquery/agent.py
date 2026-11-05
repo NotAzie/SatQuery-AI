@@ -46,7 +46,8 @@ AGENT_SYSTEM_PROMPT = """You are the conversational reasoning interface for SatQ
 SatQuery's deterministic engine owns planning, investigation design, execution, scheduling, evidence assessment, scientific reasoning, reports, and Earth Memory. Never reproduce or simulate those systems yourself: use the available tools.
 Treat tool outputs as the source of truth. Distinguish recorded evidence from interpretation, preserve unknowns and limitations, and never claim scientific validation or confidence that the engine did not provide.
 Create an investigation only when useful. Execute it only when the caller supplied execution authorization and the user requested acquisition. Otherwise explain the plan and ask the user to authorize execution.
-Use the earth.command tool only for explicit presentation requests. Never invent coordinates or investigation identifiers.
+Use the earth.command tool only for explicit presentation requests. Layer visibility commands must use an exact layer_id listed in the current Earth context. Never invent coordinates or investigation identifiers.
+An earth.command result confirms only that a request was emitted; it does not confirm that the Earth workspace applied it. Never claim the Earth state changed without explicit application confirmation.
 Use investigation identifiers and source/evidence references when reporting results. Do not invent observations, datasets, or provider availability."""
 
 
@@ -237,8 +238,16 @@ class AgentShowInvestigationCommand(Contract):
     investigation_id: str = Field(min_length=1)
 
 
+class AgentSetLayerVisibilityCommand(Contract):
+    type: Literal["set_layer_visibility"]
+    layer_id: str = Field(min_length=1, max_length=128)
+    visible: bool
+
+
 AgentEarthCommand = Annotated[
-    AgentFlyToCommand | AgentShowInvestigationCommand,
+    AgentFlyToCommand
+    | AgentShowInvestigationCommand
+    | AgentSetLayerVisibilityCommand,
     Field(discriminator="type"),
 ]
 
@@ -731,11 +740,19 @@ class AgentTurnService:
         tools: AgentToolRegistry | None = None,
         *,
         max_tool_rounds: int = 8,
+        max_tool_calls_per_turn: int = 24,
         max_context_turns: int = 24,
         model_timeout_seconds: float = 120.0,
     ) -> None:
-        if max_tool_rounds < 1 or max_context_turns < 1:
-            raise ValueError("agent loop limits must be positive")
+        if any(
+            type(limit) is not int or limit < 1
+            for limit in (
+                max_tool_rounds,
+                max_tool_calls_per_turn,
+                max_context_turns,
+            )
+        ):
+            raise ValueError("agent loop limits must be positive integers")
         if not math.isfinite(model_timeout_seconds) or model_timeout_seconds <= 0:
             raise ValueError("agent model timeout must be finite and positive")
         self.runtime = runtime
@@ -743,6 +760,7 @@ class AgentTurnService:
         self.sessions = sessions
         self.tools = tools or build_satquery_agent_tools()
         self.max_tool_rounds = max_tool_rounds
+        self.max_tool_calls_per_turn = max_tool_calls_per_turn
         self.max_context_turns = max_context_turns
         self.model_timeout_seconds = model_timeout_seconds
         self._session_locks: weakref.WeakValueDictionary[
@@ -932,6 +950,7 @@ class AgentTurnService:
                     "model_id": model_id,
                     "execution_authorized": execution_authorized,
                 })
+                tool_calls_used = 0
                 for tool_round in range(self.max_tool_rounds):
                     if cancellation.is_set():
                         persist_partial_assistant()
@@ -1013,6 +1032,17 @@ class AgentTurnService:
                             "detail": "reasoning model returned duplicate tool call IDs",
                         })
                         return
+                    if len(tool_calls) > self.max_tool_calls_per_turn - tool_calls_used:
+                        persist_partial_assistant()
+                        yield event("agent.error", {
+                            "code": "tool_call_limit",
+                            "detail": (
+                                "Reasoning model requested more tool calls than the "
+                                f"remaining per-turn budget of "
+                                f"{self.max_tool_calls_per_turn - tool_calls_used}."
+                            ),
+                        })
+                        return
                     if not assistant_text and not tool_calls:
                         yield event("agent.error", {
                             "code": "invalid_model_response",
@@ -1043,6 +1073,7 @@ class AgentTurnService:
                         if cancellation.is_set():
                             yield event("turn.cancelled")
                             return
+                        tool_calls_used += 1
                         yield event("tool.started", {
                             "tool_id": call.tool_id,
                             "call_id": call.call_id,
@@ -1072,6 +1103,20 @@ class AgentTurnService:
                                         "earth.command can show only investigations "
                                         "linked to this Agent session"
                                     )
+                                if isinstance(
+                                    earth_command,
+                                    AgentSetLayerVisibilityCommand,
+                                ):
+                                    available_layer_ids = (
+                                        {layer.layer_id for layer in earth_context.layers}
+                                        if earth_context
+                                        else set()
+                                    )
+                                    if earth_command.layer_id not in available_layer_ids:
+                                        raise ValidationError(
+                                            "earth.command can change visibility only for "
+                                            "a layer in the current Earth context"
+                                        )
                             else:
                                 arguments = tool.arguments_model.model_validate(
                                     call.arguments
@@ -1390,13 +1435,17 @@ class _EarthCommandTool(_Tool):
     tool_id = "earth.command"
     description = (
         "Issue a typed Earth presentation command when the user explicitly asks to "
-        "navigate to a stated location or show an investigation already linked to "
-        "this Agent session. This does not perform investigation or change scientific data."
+        "navigate to a stated location, show an investigation already linked to this "
+        "Agent session, or change visibility of a layer listed in the current Earth "
+        "context. This does not perform investigation or change scientific data."
     )
     arguments_model = _EarthCommandArgs
 
     async def execute(self, _runtime: PlatformRuntime, _arguments: Contract) -> Any:
-        return {"issued": True}
+        return {
+            "status": "requested",
+            "workspace_application": "unconfirmed",
+        }
 
 
 def _investigation_ids(value: Any) -> tuple[str, ...]:

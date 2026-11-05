@@ -60,12 +60,23 @@ def test_invalid_profile_or_setting_fails_loudly():
 
 
 def test_agent_model_timeout_is_configurable_and_must_be_finite_positive():
+    defaults = PlatformConfig.load(environ={}).agent
+    assert defaults.max_tool_rounds == 8
+    assert defaults.max_tool_calls_per_turn == 24
+    assert defaults.max_context_turns == 24
+
     config = PlatformConfig.load(
         environ={
             "SATQUERY_PLATFORM__AGENT__MODEL_TIMEOUT_SECONDS": "45.5",
+            "SATQUERY_PLATFORM__AGENT__MAX_TOOL_ROUNDS": "12",
+            "SATQUERY_PLATFORM__AGENT__MAX_TOOL_CALLS_PER_TURN": "36",
+            "SATQUERY_PLATFORM__AGENT__MAX_CONTEXT_TURNS": "40",
         }
     )
     assert config.agent.model_timeout_seconds == 45.5
+    assert config.agent.max_tool_rounds == 12
+    assert config.agent.max_tool_calls_per_turn == 36
+    assert config.agent.max_context_turns == 40
 
     for invalid in ("0", "-1", "NaN", "Infinity", "null"):
         with pytest.raises(ConfigurationError):
@@ -74,6 +85,17 @@ def test_agent_model_timeout_is_configurable_and_must_be_finite_positive():
                     "SATQUERY_PLATFORM__AGENT__MODEL_TIMEOUT_SECONDS": invalid,
                 }
             )
+
+    for field in (
+        "MAX_TOOL_ROUNDS",
+        "MAX_TOOL_CALLS_PER_TURN",
+        "MAX_CONTEXT_TURNS",
+    ):
+        for invalid in ("0", "-1", "1.5", "true"):
+            with pytest.raises(ConfigurationError):
+                PlatformConfig.load(
+                    environ={f"SATQUERY_PLATFORM__AGENT__{field}": invalid}
+                )
 
 
 def test_earth_memory_storage_is_opt_in_and_configurable():

@@ -8,6 +8,9 @@ __pycache__/
 *.egg-info/
 node_modules/
 frontend/dist/
+earth-view/.gev-cache/
+earth-view/.gev-logs/
+earth-view/.freebuff/
 .env
 frontend/.env
 var/

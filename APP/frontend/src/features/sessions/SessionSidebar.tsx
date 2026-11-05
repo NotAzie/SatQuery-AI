@@ -44,7 +44,7 @@ function messageFromError(error: unknown): string {
   return "Could not connect to the Platform API.";
 }
 
-export function SessionSidebar() {
+export function SessionSidebar({ embedded = false }: { embedded?: boolean }) {
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
@@ -151,7 +151,11 @@ export function SessionSidebar() {
   return (
     <section
       aria-label="Investigation workspace"
-      className="pointer-events-auto flex max-h-[min(72vh,48rem)] w-72 flex-col overflow-hidden rounded-2xl border border-white/10 bg-surface shadow-2xl shadow-black/40 backdrop-blur-xl"
+      className={
+        embedded
+          ? "flex min-h-0 w-full flex-col overflow-hidden text-ink"
+          : "pointer-events-auto flex max-h-[min(72vh,48rem)] w-72 flex-col overflow-hidden rounded-2xl border border-white/10 bg-surface shadow-2xl shadow-black/40 backdrop-blur-xl"
+      }
     >
       <header className="border-b border-white/10 px-4 py-3">
         <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-ink-dim">

@@ -1,0 +1,103 @@
+#command-dock > #satquery-agent-slot {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 50%;
+  z-index: 6;
+  width: min(28rem, calc(100vw - 1.5rem));
+  overflow: visible;
+  transform: translateX(-50%);
+}
+
+#satquery-agent-slot > div {
+  width: 100%;
+  min-width: 0;
+}
+
+#satquery-agent-slot [data-satquery-agent] {
+  width: 100%;
+  border-color: rgba(54, 220, 255, 0.32);
+  background: rgba(8, 20, 30, 0.96);
+}
+
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] {
+  position: relative;
+  height: 4.25rem;
+  border-radius: 0.75rem;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.55),
+    0 0 24px rgba(0, 212, 255, 0.08);
+}
+
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] > header {
+  min-height: 1.65rem;
+  padding: 0.25rem 0.5rem;
+}
+
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] > header > div:first-child > p:last-child,
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] button[aria-label="Open SatQuery workspace"],
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] button[aria-label="Open provider settings"] {
+  display: none;
+}
+
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] > header > div:first-child > p:first-child {
+  margin: 0;
+  font-size: 0.5rem;
+  letter-spacing: 0.14em;
+}
+
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] > header > div:last-child {
+  margin-left: 0.25rem;
+  gap: 0.25rem;
+}
+
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] > header button {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.55rem;
+}
+
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] > form {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.4rem 0.4rem;
+}
+
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] > form > textarea {
+  min-height: 1.9rem;
+  max-height: 1.9rem;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.65rem;
+}
+
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] > form > div {
+  flex: 0 0 auto;
+  padding: 0;
+}
+
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] > form > div > button[type="button"],
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] > form > div > label {
+  display: none;
+}
+
+#satquery-agent-slot [data-satquery-agent][data-expanded="false"] > form > div > button[type="submit"] {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.6rem;
+}
+
+#satquery-agent-slot [data-satquery-agent][data-expanded="true"] {
+  bottom: 0;
+  width: min(46rem, calc(100vw - 2rem));
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 720px) {
+  #command-dock > #satquery-agent-slot {
+    width: calc(100vw - 1.5rem);
+  }
+
+  #satquery-agent-slot [data-satquery-agent][data-expanded="true"] {
+    width: calc(100vw - 1.5rem);
+  }
+}

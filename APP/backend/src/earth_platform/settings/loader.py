@@ -17,7 +17,7 @@ import yaml
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
 from earth_platform.settings.models import Environment
-from earth_platform.settings.settings import Settings
+from earth_platform.settings.settings import Settings, _SharedDotEnvSource
 from earth_platform.shared.errors import ConfigurationError
 
 
@@ -110,7 +110,7 @@ def load_settings(
             return (
                 init_settings,
                 env_settings,
-                dotenv_settings,
+                _SharedDotEnvSource(dotenv_settings),
                 _MergedYamlSource(settings_cls, layered),
                 file_secret_settings,
             )

@@ -46,13 +46,17 @@ class ScriptedReasoner:
             yield event
 
 
-def _service(*scripts):
+def _service(*scripts, **service_options):
     runtime = PlatformRuntime()
     models = ComponentRegistry()
     model = ScriptedReasoner(scripts)
     models.register(model.model_id, model)
     sessions = InMemoryAgentSessionStore()
-    return AgentTurnService(runtime, models, sessions), model, sessions
+    return (
+        AgentTurnService(runtime, models, sessions, **service_options),
+        model,
+        sessions,
+    )
 
 
 def test_agent_loop_validates_dispatches_and_returns_tool_observation():
@@ -248,8 +252,121 @@ def test_agent_emits_typed_earth_command_and_scopes_investigation_targets():
         assert "earth.command" in {
             item["name"] for item in model.requests[0][1]
         }
+        tool_observation = json.loads(model.requests[1][0][-1].content)
+        assert tool_observation == {
+            "status": "requested",
+            "workspace_application": "unconfirmed",
+        }
+        assert "does not confirm that the Earth workspace applied it" in (
+            model.requests[1][2]
+        )
         assert sessions.get(session.session_id).investigation_ids == (
             "investigation-1",
+        )
+
+    asyncio.run(run())
+
+
+def test_agent_changes_visibility_only_for_a_layer_in_the_current_earth_context():
+    async def run():
+        service, model, _ = _service(
+            (
+                AgentModelEvent(
+                    kind="tool_call",
+                    tool_call=AgentToolCall(
+                        call_id="layer-call",
+                        tool_id="earth.command",
+                        arguments={
+                            "command": {
+                                "type": "set_layer_visibility",
+                                "layer_id": "flights",
+                                "visible": True,
+                            }
+                        },
+                    ),
+                ),
+                AgentModelEvent(kind="completed"),
+            ),
+            (
+                AgentModelEvent(kind="text_delta", text="Aircraft are visible."),
+                AgentModelEvent(kind="completed"),
+            ),
+        )
+        session = service.create_session()
+        earth_context = AgentEarthContext(
+            camera={"position": {"lng": 0, "lat": 0}, "height_m": 1000},
+            layers=({"layer_id": "flights", "visible": False},),
+        )
+
+        events = [
+            item
+            async for item in service.stream_turn(
+                session.session_id,
+                "Show aircraft",
+                model_id=model.model_id,
+                earth_context=earth_context,
+            )
+        ]
+
+        command = next(item for item in events if item.kind == "earth.command")
+        assert command.payload == {
+            "command": {
+                "type": "set_layer_visibility",
+                "layer_id": "flights",
+                "visible": True,
+            }
+        }
+
+    asyncio.run(run())
+
+
+def test_agent_rejects_layer_visibility_commands_outside_current_earth_context():
+    async def run():
+        service, _, _ = _service(
+            (
+                AgentModelEvent(
+                    kind="tool_call",
+                    tool_call=AgentToolCall(
+                        call_id="layer-call",
+                        tool_id="earth.command",
+                        arguments={
+                            "command": {
+                                "type": "set_layer_visibility",
+                                "layer_id": "ships",
+                                "visible": True,
+                            }
+                        },
+                    ),
+                ),
+                AgentModelEvent(kind="completed"),
+            ),
+            (
+                AgentModelEvent(kind="text_delta", text="That layer is unavailable."),
+                AgentModelEvent(kind="completed"),
+            ),
+        )
+        session = service.create_session()
+        earth_context = AgentEarthContext(
+            camera={"position": {"lng": 0, "lat": 0}, "height_m": 1000},
+            layers=({"layer_id": "flights", "visible": False},),
+        )
+
+        events = [
+            item
+            async for item in service.stream_turn(
+                session.session_id,
+                "Show ships",
+                model_id="fixture.reasoner",
+                earth_context=earth_context,
+            )
+        ]
+
+        assert not any(item.kind == "earth.command" for item in events)
+        assert any(
+            item.kind == "tool.failed"
+            and item.payload["detail"]
+            == "earth.command can change visibility only for a layer in the current Earth context"
+            for item in events
         )
 
     asyncio.run(run())
@@ -716,6 +833,50 @@ def test_unknown_model_is_rejected_before_a_turn_is_persisted():
                     session.session_id, "Hello", model_id="missing"
                 )
             ]
+
+    asyncio.run(run())
+
+
+def test_agent_tool_call_budget_rejects_over_budget_batch_before_dispatch():
+    async def run():
+        service, model, sessions = _service(
+            (
+                AgentModelEvent(
+                    kind="tool_call",
+                    tool_call=AgentToolCall(
+                        call_id="call-1",
+                        tool_id="platform.capabilities",
+                        arguments={},
+                    ),
+                ),
+                AgentModelEvent(
+                    kind="tool_call",
+                    tool_call=AgentToolCall(
+                        call_id="call-2",
+                        tool_id="platform.capabilities",
+                        arguments={},
+                    ),
+                ),
+                AgentModelEvent(kind="completed"),
+            ),
+            max_tool_calls_per_turn=1,
+        )
+        session = service.create_session()
+
+        events = [
+            item
+            async for item in service.stream_turn(
+                session.session_id,
+                "Inspect capabilities",
+                model_id=model.model_id,
+            )
+        ]
+
+        error = next(item for item in events if item.kind == "agent.error")
+        assert error.payload["code"] == "tool_call_limit"
+        assert not any(item.kind == "tool.started" for item in events)
+        stored = sessions.get(session.session_id)
+        assert [message.role for message in stored.messages] == ["user"]
 
     asyncio.run(run())
 

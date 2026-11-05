@@ -14,6 +14,7 @@ import type { TimelineController } from "./timeline/types";
 import { createEarthEventBus, type EarthEventBus, type EarthViewId } from "./events";
 import { createCesiumWorkspaceController } from "./workspace/CesiumWorkspaceController";
 import type { EarthWorkspaceController } from "./workspace/types";
+import type { EarthDataLayerController } from "./integration/godsEyeRuntime";
 
 /**
  * The imperative facade over the globe. UI and the event reducer talk to this, never to Cesium.
@@ -24,6 +25,7 @@ export interface EarthController {
   commands: EarthCommandDispatcher;
   overlays: OverlayController;
   timeline: TimelineController;
+  layers?: EarthDataLayerController;
   workspace: EarthWorkspaceController;
   events: EarthEventBus;
   capture: CaptureController;
@@ -34,6 +36,7 @@ export function createEarthController(
   viewer: Viewer,
   events: EarthEventBus = createEarthEventBus(),
   viewId: EarthViewId = "primary",
+  layers?: EarthDataLayerController,
 ): EarthController {
   const camera = createCameraController(viewer);
   const timeline = createTimelineController(viewer.clock);
@@ -51,9 +54,13 @@ export function createEarthController(
   const stopHighlightEvents = overlays.onHighlightChange((evidenceIds) =>
     events.publish({ type: "earth.evidence.highlighted", evidenceIds, viewId }),
   );
+  const stopLayerEvents = layers?.onChange(() =>
+    events.publish({ type: "earth.layers.changed", layers: layers.getState(), viewId }),
+  );
   return {
     camera,
     timeline,
+    layers,
     workspace,
     overlays,
     events,
@@ -64,6 +71,14 @@ export function createEarthController(
         if (command.instant) timeline.setInstant(new Date(command.instant));
         if (command.playback_speed === null) timeline.pause();
         else if (command.playback_speed !== undefined) timeline.play(command.playback_speed);
+      },
+      set_layer_visibility: (command) => {
+        if (!layers) throw new Error("Earth data layers are unavailable");
+        return layers.setVisibility(
+          command.layer_id,
+          command.visible,
+          command.opacity ?? undefined,
+        );
       },
       add_overlay: (command) => overlays.add(command),
       clear_overlays: (command) => overlays.clear(command.overlay_ids ?? undefined),
@@ -77,6 +92,7 @@ export function createEarthController(
       overlays.destroy();
       stopOverlayEvents();
       stopHighlightEvents();
+      stopLayerEvents?.();
       timeline.destroy();
     },
   };

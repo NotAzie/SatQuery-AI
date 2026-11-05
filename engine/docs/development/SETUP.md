@@ -444,12 +444,27 @@ the configured Earth Memory path is used as the shared local SQLite database.
 Session persistence is single-host and does not supply authentication,
 encryption, or distributed coordination.
 
+The repository-root `npm run dev` launcher configures a local SQLite Agent
+session store at `engine/satquery-ai/.satquery/agent-sessions.sqlite` when no
+Platform storage configuration is supplied. An explicit Platform config or any
+`SATQUERY_PLATFORM__STORAGE__*` setting remains authoritative.
+
 Reasoning-model streaming uses a 120-second per-round deadline by default.
 Set `agent.model_timeout_seconds` (or
 `SATQUERY_PLATFORM__AGENT__MODEL_TIMEOUT_SECONDS`) to a finite positive value
 appropriate for the registered provider and local hardware. Adapters must
 honor asynchronous cancellation so a timed-out request releases provider-side
 and local resources.
+
+The Agent turn also has finite resource budgets: 8 model/tool rounds, 24 tool
+calls, and 24 retained conversation turns by default. Configure
+`agent.max_tool_rounds`, `agent.max_tool_calls_per_turn`, and
+`agent.max_context_turns` in the platform configuration, or set
+`SATQUERY_PLATFORM__AGENT__MAX_TOOL_ROUNDS`,
+`SATQUERY_PLATFORM__AGENT__MAX_TOOL_CALLS_PER_TURN`, and
+`SATQUERY_PLATFORM__AGENT__MAX_CONTEXT_TURNS`. Each value must be a positive
+integer. If a model requests more tool calls than the remaining per-turn
+budget, the Engine rejects that batch before dispatching any of its calls.
 
 When the platform audit store is configured, hypothesis lifecycle transitions
 are also recorded there with the complete versioned hypothesis and transition

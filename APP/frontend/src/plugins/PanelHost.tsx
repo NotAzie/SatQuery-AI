@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useSyncExternalStore } from "react";
 
 import { usePluginHost } from "./PluginHostProvider";
@@ -12,7 +13,7 @@ export function PanelHost({ slot }: { slot: PanelSlot }) {
   const all = useSyncExternalStore(panels.subscribe, panels.list);
   const inSlot = all.filter((p) => p.slot === slot).sort((a, b) => a.order - b.order);
   if (inSlot.length === 0) return null;
-  return (
+  const content = (
     <>
       {inSlot.map(({ id, component: Panel }) => (
         <div
@@ -24,4 +25,11 @@ export function PanelHost({ slot }: { slot: PanelSlot }) {
       ))}
     </>
   );
+  if (slot !== "overlay") return content;
+
+  const target = document.getElementById("satquery-agent-slot");
+  if (!target) {
+    throw new Error("God's Eye command dock is missing the SatQuery agent mount.");
+  }
+  return createPortal(content, target);
 }

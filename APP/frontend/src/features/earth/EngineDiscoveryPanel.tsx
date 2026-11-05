@@ -7,7 +7,7 @@ function formatDate(value: string | null | undefined): string | null {
   return value ? new Date(value).toLocaleDateString() : null;
 }
 
-export function EngineDiscoveryPanel() {
+export function EngineDiscoveryPanel({ embedded = false }: { embedded?: boolean }) {
   const [discovery, setDiscovery] = useState<EngineDiscoveryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +29,11 @@ export function EngineDiscoveryPanel() {
   return (
     <section
       aria-label="Engine data and capabilities"
-      className="pointer-events-auto max-h-[min(74vh,52rem)] w-72 overflow-y-auto rounded-2xl border border-white/10 bg-surface/95 p-3 text-ink shadow-2xl shadow-black/40 backdrop-blur-xl"
+      className={
+        embedded
+          ? "w-full p-1 text-ink"
+          : "pointer-events-auto max-h-[min(74vh,52rem)] w-72 overflow-y-auto rounded-2xl border border-white/10 bg-surface/95 p-3 text-ink shadow-2xl shadow-black/40 backdrop-blur-xl"
+      }
     >
       <header className="mb-3">
         <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-ink-dim">

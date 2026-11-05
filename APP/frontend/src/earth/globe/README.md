@@ -1,13 +1,16 @@
 # `src/earth/globe`
 
-**Purpose.** Viewer creation and lifecycle.
+**Purpose.** Attach Platform Earth controllers to the single God's Eye viewer.
 
 **Belongs here**
-- `createViewer`, `EarthStage`
+- `EarthStage`, the runtime attachment lifecycle
 
 **Never here**
-- Domain behaviour (camera, layers...)
+- A second viewer constructor or viewer-owned data rendering
 
-**Depends on.** `cesium`, `state`.
+**Depends on.** God's Eye's `APP/earth-view` runtime, `EarthController`, `state`.
 
-**Public interface.** `EarthStage`.
+**Public interface.** `EarthStage`. It does not create or destroy a second Cesium viewer; it
+awaits God's Eye's exported startup promise, connects SatQuery camera, layer, timeline, overlay,
+capture, and workspace controllers to God's Eye's page-owned viewer, and reports startup failures
+explicitly.

@@ -41,7 +41,7 @@ distributed database.
 | Governance | Append-only investigation audit events, method certification transitions, plugin manifest compatibility/signature-verifier interfaces, reference benchmark execution, and versioned reproducibility exports with the capability snapshots used by planning and acquisition. SQLite audit and benchmark inputs can be supplied locally. | No benchmark truth data, external reviewer identity, signed institutional certification, package sandbox, or cryptographic protection against a storage administrator is bundled. Capability snapshots preserve the safe selection view, not raw provider data or acquired source data. |
 | Earth Memory | Deterministic artifact indexing and search, source links, Earth Object and observation lineage, capability snapshot artifacts, same-CRS envelope and exact GeoJSON-intersection filters, revision-bound cursors, and optional SQLite schema migrations. | Default memory is process-local. Spatial filters never reproject or repair geometry; exact geometry search requires the optional geospatial dependencies and valid indexed geometry. Semantic embedding search and learning are absent. |
 | Continuous observation | Mission-linked recurring EarthQuery schedules, optional rolling windows resolved at persisted run start, durable local leases/events when configured, explicit run-due operation or opt-in local polling, recovery, bounded dispatch, overlap and retry policy, operational trigger rules, local notifications, history pages, and run comparisons. Revising a schedule interval resets its next due time using the new cadence. | Rolling windows cannot be combined with fixed query times; each effective interval is retained in the run and its investigation query. Trigger thresholds are user-authored operational predicates, not validated change detection. No external notifications, exactly-once upstream acquisition, distributed scheduling, or guaranteed provider freshness. |
-| Agent interface | Model-neutral streaming reasoning protocol with finite per-round deadlines, explicit typed Earth tool registry and read-only `GET /api/v1/agent/tools` descriptors, conversational tool/observation loop, SQLite or in-memory session state, SSE lifecycle events, cooperative cancellation, session-scoped bounded execution-journal history, and delegation to the existing planner, runtime, evidence, and Earth Memory services. Explicit presentation requests can emit `earth.command` SSE events for `fly_to` and session-linked `show_investigation`. | A compatible cancellation-aware provider adapter must be registered in the reasoner registry. Turn-level execution consent is not authentication. Agent turn SSE replay, user/tenant isolation, and distributed session/event storage are not implemented. Other Earth command types need corresponding Engine-owned data and ownership contracts. |
+| Agent interface | Model-neutral streaming reasoning protocol with finite per-round deadlines, configurable round/context/tool-call budgets, explicit typed Earth tool registry and read-only `GET /api/v1/agent/tools` descriptors, conversational tool/observation loop, SQLite or in-memory session state, SSE lifecycle events, cooperative cancellation, session-scoped bounded execution-journal history, and delegation to the existing planner, runtime, evidence, and Earth Memory services. Explicit presentation requests can emit `earth.command` SSE events for `fly_to`, session-linked `show_investigation`, and EarthContext-scoped `set_layer_visibility`. | A compatible cancellation-aware provider adapter must be registered in the reasoner registry. Turn-level execution consent is not authentication. Agent turn SSE replay, user/tenant isolation, and distributed session/event storage are not implemented. Other Earth command types need corresponding Engine-owned data and ownership contracts. |
 
 ### Agent Earth command event
 
@@ -65,10 +65,12 @@ actions. The Engine validates the command and emits the existing Agent event env
 }
 ```
 
-Currently accepted commands are `fly_to` with a WGS 84 longitude/latitude or bounding box, and
-`show_investigation` with an investigation ID already linked to the Agent session. The latter is
-checked both by the Engine before emission and by the Platform before it fetches report or map data.
-Layer visibility, arbitrary overlays, and evidence highlighting are not exposed through this tool.
+Currently accepted commands are `fly_to` with a WGS 84 longitude/latitude or bounding box,
+`show_investigation` with an investigation ID already linked to the Agent session, and
+`set_layer_visibility` with a layer ID present in the current typed EarthContext. The Engine checks
+both ownership constraints before emission; the Platform also checks investigation ownership before
+fetching report or map data, and the browser validates the layer against the live provider manager.
+Arbitrary overlays and evidence highlighting are not exposed through this tool.
 
 ### Agent EarthContext input
 

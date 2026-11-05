@@ -37,6 +37,23 @@ describe("EarthCommandDispatcher", () => {
     expect(flyTo).toHaveBeenCalledWith(command);
   });
 
+  it("routes layer visibility commands to the live layer controller", async () => {
+    const setVisibility = vi.fn();
+    const dispatcher = createEarthCommandDispatcher({
+      set_layer_visibility: setVisibility,
+    });
+    const command: EarthCommandIssued["command"] = {
+      type: "set_layer_visibility",
+      layer_id: "flights",
+      visible: true,
+      opacity: null,
+    };
+
+    await expect(dispatcher.dispatch(event(command))).resolves.toBe(true);
+    expect(setVisibility).toHaveBeenCalledOnce();
+    expect(setVisibility).toHaveBeenCalledWith(command);
+  });
+
   it("ignores non-command Agent events", async () => {
     const flyTo = vi.fn();
     const dispatcher = createEarthCommandDispatcher({ fly_to: flyTo });

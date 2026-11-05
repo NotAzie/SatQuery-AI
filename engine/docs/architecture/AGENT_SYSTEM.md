@@ -35,8 +35,8 @@ Adapters are registered under a stable identifier in
 `SatQueryEngine.platform_registries.reasoners`. The registry identity must
 match the adapter's `model_id`. An adapter must stream normalized events and
 honor cancellation; SatQuery owns validation, dispatch, context persistence,
-event sequencing, and the maximum tool-round limit. No provider SDK is a core
-dependency. Each model streaming round has a finite deadline controlled by
+event sequencing, and configurable round, tool-call, and conversation-context
+budgets. No provider SDK is a core dependency. Each model streaming round has a finite deadline controlled by
 `agent.model_timeout_seconds` (120 seconds by default); timeout is reported as
 an explicit `reasoning_model_timeout` event. Adapters must cooperate with
 async task cancellation as well as the supplied cancellation event so an
@@ -86,6 +86,12 @@ tool lifecycle, execution-journal progress, completion, cancellation, and
 errors. Private model reasoning is not exposed as an event. Investigation
 progress is projected from the existing append-only execution journal; the
 agent does not create a parallel scheduler or progress journal.
+
+Earth presentation commands are emitted as typed events for the workspace to
+apply. Their tool observation records the request as emitted but explicitly
+marks workspace application unconfirmed; the Engine does not currently receive
+a workspace acknowledgement. The model is instructed not to claim the Earth
+state changed based only on the command request.
 
 Cancelling an agent turn signals the provider adapter. If the turn is executing
 an investigation, the service also requests cancellation from the existing

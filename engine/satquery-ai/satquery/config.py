@@ -19,6 +19,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .errors import ConfigurationError
 
+_REPOSITORY_ENV = Path(__file__).resolve().parents[3] / ".env"
+
+
+def _default_dotenv_path() -> str:
+    """Prefer the repository-wide local configuration, retaining standalone use."""
+    return str(_REPOSITORY_ENV) if _REPOSITORY_ENV.is_file() else ".env"
+
 _TRUE = {"1", "true", "yes", "on", "y", "t"}
 _FALSE = {"0", "false", "no", "off", "n", "f"}
 
@@ -219,7 +226,9 @@ class Settings:
     # ----------------------------------------------------------------------
 
     @classmethod
-    def from_env(cls, *, dotenv_path: Optional[str] = ".env") -> "Settings":
+    def from_env(
+        cls, *, dotenv_path: Optional[str] = _default_dotenv_path()
+    ) -> "Settings":
         if dotenv_path:
             load_dotenv(dotenv_path)
 
@@ -427,7 +436,9 @@ class Settings:
 _SETTINGS: Optional[Settings] = None
 
 
-def get_settings(*, refresh: bool = False, dotenv_path: Optional[str] = ".env") -> Settings:
+def get_settings(
+    *, refresh: bool = False, dotenv_path: Optional[str] = _default_dotenv_path()
+) -> Settings:
     """Process-wide settings singleton."""
     global _SETTINGS
     if _SETTINGS is None or refresh:

@@ -18,7 +18,7 @@ lockfiles; local setup commands below remain pip-based.
 | Git | Clone and update the repository | Any version supporting HTTPS clone |
 | Python | Engine and Platform backend | Use Python 3.12 for both. Platform requires `>=3.12`; Engine requires `>=3.10` and CI uses 3.12 |
 | pip and `venv` | Python installation and isolation | Included with standard CPython distributions used by the setup commands |
-| Node.js and npm | Platform frontend | Node 22; npm ships with Node. CI uses Node 22 and `npm ci` |
+| Node.js and npm | Platform frontend and integrated God's Eye runtime | Node.js `>=24.14 <25` or `>=26 <27`; npm ships with Node |
 | Web browser | Platform UI | Modern browser with WebGL support for Cesium |
 
 `make` is an optional convenience for the Platform commands on systems with GNU Make. The
@@ -109,8 +109,18 @@ Development/build/test packages:
 | `vitest` | Frontend unit tests |
 | `json-schema-to-typescript` | Generates frontend types from shared JSON Schema |
 
-`package-lock.json` fixes the npm dependency graph. Always use `npm ci` for a clean install; do
-not use `npm install` as the reproducible CI/setup command.
+`APP/frontend/package-lock.json` and `APP/earth-view/package-lock.json` fix separate dependency
+graphs. Both are required by the integrated Vite app; use `npm ci` in each directory before
+starting/building. Vite deduplicates Cesium to one browser runtime across the two source trees.
+Always use `npm ci` for clean installs; do not use `npm install` as the reproducible setup command.
+
+### God's Eye Earth runtime (`APP/earth-view`)
+
+God's Eye View is the Platform's primary Earth interface, not a second service. Its complete
+browser source, templates, styles, assets, and local provider middleware remain in this directory.
+The React workspace attaches its typed `EarthController` to the runtime's single Cesium viewer.
+For integrated local use, all settings are read from the repository-root `.env`; the standalone
+God's Eye `.env.example` remains the reference for its full provider options.
 
 ## External services, binaries, and optional assets
 
@@ -119,14 +129,15 @@ not use `npm install` as the reproducible CI/setup command.
   OpenAI Chat Completions Agent adapter when configured; without a model and API key, chat remains
   unavailable. See the model provider settings below and [Google Colab setup](COLAB.md).
 - **Model provider and credentials:** optional; the Engine includes an OpenAI Chat Completions
-  Agent adapter. Set `SATQUERY_AGENT_OPENAI_MODEL` and `SATQUERY_AGENT_OPENAI_API_KEY` (or
-  `OPENAI_API_KEY`) in the Engine environment. Set Platform `EARTH_AGENT__MODEL_ID` to the exact
-  `openai/<model>` ID. Keep keys in environment variables or a secret manager, never committed
-  YAML. The Platform does not call model providers directly; other Agent providers need their
-  own Engine adapter.
-- **Cesium ion:** `VITE_CESIUM_ION_TOKEN` is optional and enables the configured default Cesium
-  imagery/terrain. Without it, Cesium opens with no default imagery; it does not prevent app
-  startup. Treat the token as browser-visible and scope it appropriately.
+  Agent adapter. In the shared root `.env`, set `SATQUERY_AGENT_OPENAI_MODEL` and either
+  `SATQUERY_AGENT_OPENAI_API_KEY` or the already-used `OPENAI_API_KEY`; set
+  `EARTH_AGENT__MODEL_ID` to the exact `openai/<model>` ID. For example:
+  `SATQUERY_AGENT_OPENAI_MODEL=gpt-4o-mini` and `EARTH_AGENT__MODEL_ID=openai/gpt-4o-mini`.
+  The Platform does not call model providers directly; other Agent providers need their own Engine
+  adapter.
+- **Cesium ion:** `CESIUM_ION_TOKEN` (or legacy `VITE_CESIUM_ION_TOKEN`) is optional and enables
+  the configured default Cesium imagery/terrain. Without it, Cesium opens with no default imagery;
+  it does not prevent app startup. Treat the token as browser-visible and scope it appropriately.
 - **Upstream Earth data:** optional connectors require network access, and some require provider
   credentials. They do not need to be installed to boot the service.
 - **Ollama:** not required by the current Platform runtime. An Ollama profile exists in config,
@@ -138,7 +149,8 @@ not use `npm install` as the reproducible CI/setup command.
 
 ## Windows (PowerShell)
 
-Install Python 3.12 and Node 22 from their official installers, then clone the repository.
+Install Python 3.12 and a supported Node.js release (`>=24.14 <25` or `>=26 <27`) from their
+official installers, then clone the repository.
 No administrator shell or execution-policy change is required when invoking venv Python directly.
 
 ```powershell
@@ -151,6 +163,9 @@ cd ..\..\APP
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -e "backend[dev]"
+Push-Location .\earth-view
+npm ci
+Pop-Location
 Push-Location .\frontend
 npm ci
 Pop-Location
@@ -163,7 +178,8 @@ image-model capability.
 
 ## Linux and macOS (POSIX shell)
 
-Install Python 3.12, Node 22, and npm using the platform's package manager or official installers.
+Install Python 3.12 and Node.js `>=24.14 <25` or `>=26 <27` using the platform's package manager
+or official installers.
 The project itself does not require `apt`, Homebrew, or other system-package installations when
 compatible wheels are available.
 
@@ -177,20 +193,39 @@ cd ../../APP
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -e 'backend[dev]'
-cd frontend
+cd earth-view
+npm ci
+cd ../frontend
 npm ci
 cd ../..
 ```
 
 ## Start the complete product locally
 
-Use three PowerShell terminals (or three POSIX terminals). Keep each server running in its own
-terminal. The Engine and Platform API both default to port 8000, so this guide runs the Engine on
-9000 and the Platform API on 8000.
+Use one shared local configuration file: `C:\Users\mazin\SatQuery-AI\.env` (the repository-root
+`.env`, beside this guide). It is ignored by Git. On a clean checkout, copy `.env.example` to `.env`.
+For this checkout, the previous `engine\.env` settings have been copied to the root file, and the
+original `engine\.env` has been kept. Never overwrite an existing root `.env` while migrating.
+
+PowerShell: `Copy-Item .env.example .env`
+
+POSIX shell: `cp .env.example .env`
+
+The optional Provider Settings panel also saves to this same root `.env`; it does not open during
+normal startup. A saved key remains there across restarts. Restart the affected service after
+changing its settings: Vite reloads itself after a panel save, but Engine and Platform settings
+take effect when those processes start. Never put secrets in `VITE_` variables. Google Maps and
+Cesium ion keys are intentionally exposed to the browser and must be restricted at their providers.
+The OpenAI key in Provider Settings enables God's Eye voice features; to enable SatQuery Engine
+chat too, set the commented model and matching `EARTH_AGENT__MODEL_ID` entries in this same file,
+then restart Engine and Platform. Chat is unavailable until a valid provider key is supplied.
+
+Start the services in three terminals (PowerShell or POSIX) and leave each running. Engine and
+Platform both default to port 8000, so this guide runs Engine on 9000 and Platform on 8000.
 
 ### Terminal 1 — SatQuery Engine
 
-From `engine/satquery-ai`:
+From `engine/satquery-ai` (Engine reads the repository-root `.env`):
 
 ```powershell
 .\.venv\Scripts\python.exe -m satquery serve --port 9000
@@ -202,13 +237,12 @@ From `engine/satquery-ai`:
 
 ### Terminal 2 — Platform API
 
-From the repository root, configure the Engine URL and start the API:
+From the repository root, the Platform reads `EARTH_ENGINE__KIND` and
+`EARTH_ENGINE__BASE_URL` from `.env`:
 
 PowerShell:
 
 ```powershell
-$env:EARTH_ENGINE__KIND = "http"
-$env:EARTH_ENGINE__BASE_URL = "http://127.0.0.1:9000"
 cd APP
 .\.venv\Scripts\python.exe -m uvicorn earth_platform.main:create_app --factory --reload --app-dir backend/src --host 127.0.0.1 --port 8000
 ```
@@ -216,15 +250,24 @@ cd APP
 POSIX shell:
 
 ```sh
-export EARTH_ENGINE__KIND=http
-export EARTH_ENGINE__BASE_URL=http://127.0.0.1:9000
 cd APP
 .venv/bin/python -m uvicorn earth_platform.main:create_app --factory --reload --app-dir backend/src --host 127.0.0.1 --port 8000
 ```
 
 ### Terminal 3 — Frontend
 
-From `APP/frontend`:
+Install both locked npm dependency sets from the repository root:
+
+```powershell
+Push-Location APP\earth-view
+npm ci
+Pop-Location
+Push-Location APP\frontend
+npm ci
+Pop-Location
+```
+
+There is no root `package.json`, so run npm from `APP/frontend` (not the repository root):
 
 ```powershell
 npm run dev -- --host 127.0.0.1
@@ -291,9 +334,10 @@ need default Cesium ion imagery. Stop the stack with `Ctrl+C`; remove its contai
 
 The root workflows are:
 
-- `.github/workflows/platform-ci.yml`: Python 3.12 and Node 22; Platform backend lint, import
-  layering, strict types, tests, contract export; frontend `npm ci`, lint, type-check, tests, build,
-  and generated TypeScript contract check.
+- `.github/workflows/platform-ci.yml`: Python 3.12 and Node 24.14; Platform backend lint, import
+  layering, strict types, tests, contract export; God's Eye runtime tests, boundaries, and
+  standalone build; frontend `npm ci`, lint, type-check, tests, integrated build, and generated
+  TypeScript contract check.
 - `.github/workflows/platform-tests.yml`: Python 3.12; Engine deterministic tests installed with
   `.[dev,geospatial,raster]`. Rasterio is installed here through the optional `raster` extra.
 
@@ -305,7 +349,7 @@ jobs.
 | Symptom | Check |
 |---|---|
 | `python3.12`/`py -3.12` not found | Install CPython 3.12; on Windows use the Python Launcher or the explicit interpreter path |
-| Vite reports an unsupported Node version | Verify `node --version` is 22.x and rerun `npm ci` |
+| Vite reports an unsupported Node version | Verify Node.js is `>=24.14 <25` or `>=26 <27`; rerun `npm ci` in both `APP/earth-view` and `APP/frontend` |
 | Cesium globe has no default imagery | Expected without `VITE_CESIUM_ION_TOKEN`; configure a scoped token if desired |
 | Platform `/readyz` is degraded | Call `/api/v1/intelligence/engine-discovery` to test Engine API connectivity; Engine readiness can remain degraded until its optional image backend is warmed |
 | Chat rejects model ID | The default Engine has no Agent reasoning adapter; provide a compatible adapter, then set `EARTH_AGENT__MODEL_ID` to its exact registered ID |

@@ -1,29 +1,28 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 
+// @ts-expect-error Vendored JavaScript startup module; the runtime is guarded below.
+import { applicationReady } from "../../../../earth-view/src/main.js";
 import { useEarthRegistry } from "@/hooks/useEarth";
 import { useEarthStore } from "@/state/earthStore";
 import { useSessionStore } from "@/state/sessionStore";
 
 import { createEarthController } from "../controller";
-import type { EarthController } from "../controller";
-import type { EarthEvent, EarthViewId } from "../events";
-import { createViewer } from "./createViewer";
+import type { EarthEvent } from "../events";
+import {
+  createGodsEyeLayerController,
+  isGodsEyeRuntime,
+} from "../integration/godsEyeRuntime";
 
-/** Persistent primary and optional secondary globe, with one shared presentation event stream. */
+/** Connect SatQuery's typed workspace controllers to God's Eye's single live viewer. */
 export function EarthStage() {
   const registry = useEarthRegistry();
-  const splitView = useEarthStore((state) => state.splitView);
-  const syncCameras = useEarthStore((state) => state.syncCameras);
+  const { events, attach, detach } = registry;
+  const [startupError, setStartupError] = useState<string | null>(null);
   const setCamera = useEarthStore((state) => state.setCamera);
-  const setSecondaryCamera = useEarthStore((state) => state.setSecondaryCamera);
   const setViewport = useEarthStore((state) => state.setViewport);
-  const setSecondaryViewport = useEarthStore((state) => state.setSecondaryViewport);
+  const setLayers = useEarthStore((state) => state.setLayers);
   const setOverlays = useEarthStore((state) => state.setOverlays);
-  const setSecondaryOverlays = useEarthStore((state) => state.setSecondaryOverlays);
   const setSelectedEvidenceIds = useEarthStore((state) => state.setSelectedEvidenceIds);
-  const setSecondarySelectedEvidenceIds = useEarthStore(
-    (state) => state.setSecondarySelectedEvidenceIds,
-  );
   const setTimeline = useEarthStore((state) => state.setTimeline);
   const setSelection = useEarthStore((state) => state.setSelection);
   const setDrawings = useEarthStore((state) => state.setDrawings);
@@ -32,42 +31,26 @@ export function EarthStage() {
   const recordCamera = useSessionStore((state) => state.recordCamera);
 
   useEffect(() => {
-    if (splitView && syncCameras && registry.controller && registry.secondaryController) {
-      registry.secondaryController.camera.restore(registry.controller.camera.getState());
-    }
-    const unsubscribe = registry.events.subscribe((event: EarthEvent) => {
+    const unsubscribe = events.subscribe((event: EarthEvent) => {
       switch (event.type) {
         case "earth.camera.changed":
-          if (event.viewId === "primary") {
-            setCamera(event.camera);
-            recordCamera(event.camera);
-          } else {
-            setSecondaryCamera(event.camera);
-          }
-          if (syncCameras && splitView) {
-            synchronizeCamera(event.viewId, event.camera, registry.controller, registry.secondaryController);
-          }
+          setCamera(event.camera);
+          recordCamera(event.camera);
+          break;
+        case "earth.layers.changed":
+          setLayers(event.layers);
           break;
         case "earth.viewport.changed":
-          if (event.viewId === "primary") setViewport(event.viewport);
-          else setSecondaryViewport(event.viewport);
+          setViewport(event.viewport);
           break;
         case "earth.timeline.changed":
-          if (event.viewId === "primary") {
-            setTimeline(event.timeline);
-            if (splitView) synchronizeTimeline(event.timeline, registry.secondaryController);
-          }
+          setTimeline(event.timeline);
           break;
         case "earth.overlays.changed":
-          if (event.viewId === "primary") setOverlays(event.overlays);
-          else setSecondaryOverlays(event.overlays);
+          setOverlays(event.overlays);
           break;
         case "earth.evidence.highlighted":
-          if (event.viewId === "primary") {
-            setSelectedEvidenceIds(event.evidenceIds);
-          } else {
-            setSecondarySelectedEvidenceIds(event.evidenceIds);
-          }
+          setSelectedEvidenceIds(event.evidenceIds);
           break;
         case "earth.selection.changed":
           setSelection(event.selection);
@@ -82,24 +65,17 @@ export function EarthStage() {
     });
     return unsubscribe;
   }, [
-    registry.events,
-    registry.controller,
-    registry.secondaryController,
-    splitView,
-    syncCameras,
+    events,
     recordCamera,
     setCamera,
-    setSecondaryCamera,
-    setViewport,
-    setSecondaryViewport,
-    setOverlays,
-    setSecondaryOverlays,
-    setSelectedEvidenceIds,
-    setSecondarySelectedEvidenceIds,
-    setTimeline,
-    setSelection,
     setDrawings,
+    setLayers,
     setMeasurement,
+    setOverlays,
+    setSelectedEvidenceIds,
+    setSelection,
+    setTimeline,
+    setViewport,
   ]);
 
   useEffect(() => {
@@ -115,149 +91,106 @@ export function EarthStage() {
     }
   }, [activeSessionId, registry.controller, recordCamera, setCamera]);
 
-  return (
-    <div className="absolute inset-0 flex">
-      <EarthViewport viewId="primary" events={registry.events} />
-      {splitView && (
-        <EarthViewport viewId="secondary" events={registry.events} />
-      )}
-    </div>
-  );
-}
-
-function EarthViewport({ viewId, events }: { viewId: EarthViewId; events: EarthController["events"] }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { attach, attachSecondary, detach, detachSecondary } = useEarthRegistry();
-
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    let active = true;
+    let attached = false;
+    let cleanupRuntime = () => {};
 
-    const viewer = createViewer(container);
-    const controller = createEarthController(viewer, events, viewId);
-    const publishViewport = () => {
-      const bounds = container.getBoundingClientRect();
-      const width = Math.round(bounds.width);
-      const height = Math.round(bounds.height);
-      if (width <= 0 || height <= 0) return;
-      events.publish({
-        type: "earth.viewport.changed",
-        viewport: {
-          width_px: width,
-          height_px: height,
-          pixel_ratio: window.devicePixelRatio || 1,
-        },
-        viewId,
-      });
-    };
-    const resizeObserver = new ResizeObserver(publishViewport);
-    resizeObserver.observe(container);
-    publishViewport();
-    if (viewId === "primary") {
-      attach(controller);
-      setInitialEarthState(controller);
-    } else {
-      attachSecondary(controller);
-      const current = useEarthStore.getState();
-      const secondaryCamera = current.secondaryCamera ?? controller.camera.getState();
-      current.setSecondaryCamera(secondaryCamera);
-      controller.camera.restore(secondaryCamera);
-      controller.workspace.replaceDrawings(current.drawings);
-      void controller.overlays.restore(current.secondaryOverlays).catch((reason: unknown) => {
-        useSessionStore
-          .getState()
-          .setPersistenceError(
-            reason instanceof Error ? reason.message : "Could not restore the secondary Earth view.",
-          );
-      });
-      controller.overlays.highlight(current.secondarySelectedEvidenceIds);
-      if (current.timeline.range) {
-        controller.timeline.setRange(current.timeline.range);
-        if (current.timeline.instant) controller.timeline.setInstant(current.timeline.instant);
+    const attachRuntime = (value: unknown) => {
+      if (!active || attached) return;
+      if (!isGodsEyeRuntime(value)) {
+        setStartupError("Earth View started without a compatible Cesium viewer or data-layer manager.");
+        return;
       }
-      if (current.timeline.playing) controller.timeline.play(current.timeline.speed);
-    }
+      const container = document.getElementById("cesiumContainer");
+      if (!container) {
+        setStartupError("Earth View did not create its Cesium container.");
+        return;
+      }
+
+      const layers = createGodsEyeLayerController(value.dataManager);
+      const controller = createEarthController(value.viewer, events, "primary", layers);
+      const publishViewport = () => {
+        const bounds = container.getBoundingClientRect();
+        const width = Math.round(bounds.width);
+        const height = Math.round(bounds.height);
+        if (width <= 0 || height <= 0) return;
+        events.publish({
+          type: "earth.viewport.changed",
+          viewport: {
+            width_px: width,
+            height_px: height,
+            pixel_ratio: window.devicePixelRatio || 1,
+          },
+          viewId: "primary",
+        });
+      };
+      const resizeObserver = new ResizeObserver(publishViewport);
+      resizeObserver.observe(container);
+      const syncLayers = () => {
+        const state = layers.getState();
+        setLayers(state);
+        events.publish({
+          type: "earth.layers.changed",
+          layers: state,
+          viewId: "primary",
+        });
+      };
+      const unsubscribeLayers = layers.onChange(syncLayers);
+      attached = true;
+      attach(controller);
+      setStartupError(null);
+      setInitialEarthState(controller);
+      syncLayers();
+      publishViewport();
+      cleanupRuntime = () => {
+        resizeObserver.disconnect();
+        unsubscribeLayers();
+        detach();
+        controller.destroy();
+        attached = false;
+      };
+    };
+
+    void applicationReady
+      .then((runtime: unknown) => {
+        attachRuntime(runtime);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setStartupError(
+            error instanceof Error ? error.message : "Earth View could not initialize.",
+          );
+        }
+      });
 
     return () => {
-      resizeObserver.disconnect();
-      if (viewId === "primary") detach();
-      else {
-        detachSecondary();
-        const store = useEarthStore.getState();
-        store.setSecondaryCamera(null);
-        store.setSecondaryViewport(null);
-        store.setSecondaryOverlays([]);
-        store.setSecondarySelectedEvidenceIds([]);
-      }
-      controller.destroy();
-      viewer.destroy();
+      active = false;
+      cleanupRuntime();
     };
-  }, [viewId, events, attach, attachSecondary, detach, detachSecondary]);
+  }, [attach, detach, events, setLayers]);
 
+  if (!startupError) return null;
   return (
-    <div
-      ref={containerRef}
-      className={`relative h-full ${viewId === "secondary" ? "min-w-0 flex-1 border-l border-white/10" : "min-w-0 flex-1"}`}
-      aria-label={viewId === "primary" ? "Primary Earth view" : "Secondary Earth view"}
-    />
+    <p
+      className="pointer-events-auto fixed bottom-4 left-1/2 z-[100] max-w-[min(42rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl border border-rose-300/30 bg-black/90 px-4 py-3 text-sm text-rose-100 shadow-xl"
+      role="alert"
+    >
+      Earth environment failed to start: {startupError}
+    </p>
   );
 }
 
-function setInitialEarthState(controller: EarthController): void {
+function setInitialEarthState(controller: ReturnType<typeof createEarthController>): void {
   const initialCamera = controller.camera.getState();
   const savedCamera = useSessionStore.getState().cameraHistory.present;
   if (savedCamera) {
     useEarthStore.getState().setCamera(savedCamera);
     controller.camera.restore(savedCamera);
-  }
-  else {
+  } else {
     useEarthStore.getState().setCamera(initialCamera);
     useSessionStore.getState().recordCamera(initialCamera);
   }
   useEarthStore.getState().setTimeline(controller.timeline.getState());
   controller.workspace.replaceDrawings(useEarthStore.getState().drawings);
-}
-
-function synchronizeCamera(
-  source: EarthViewId,
-  camera: Parameters<EarthController["camera"]["restore"]>[0],
-  primary: EarthController | null,
-  secondary: EarthController | null,
-): void {
-  const target = source === "primary" ? secondary : primary;
-  if (!target || sameCamera(target.camera.getState(), camera)) return;
-  target.camera.restore(camera);
-}
-
-function sameCamera(
-  first: Parameters<EarthController["camera"]["restore"]>[0],
-  second: Parameters<EarthController["camera"]["restore"]>[0],
-): boolean {
-  return (
-    Math.abs(first.position.lng - second.position.lng) < 0.00001 &&
-    Math.abs(first.position.lat - second.position.lat) < 0.00001 &&
-    Math.abs(first.height_m - second.height_m) < 0.1 &&
-    Math.abs(first.heading_deg - second.heading_deg) < 0.001 &&
-    Math.abs(first.pitch_deg - second.pitch_deg) < 0.001 &&
-    Math.abs(first.roll_deg - second.roll_deg) < 0.001
-  );
-}
-
-function synchronizeTimeline(
-  timeline: ReturnType<EarthController["timeline"]["getState"]>,
-  secondary: EarthController | null,
-): void {
-  if (!secondary) return;
-  const current = secondary.timeline.getState();
-  if (JSON.stringify(current.range) !== JSON.stringify(timeline.range)) {
-    if (timeline.range) secondary.timeline.setRange(timeline.range);
-  }
-  if (
-    timeline.instant &&
-    current.instant?.getTime() !== timeline.instant.getTime()
-  ) {
-    secondary.timeline.setInstant(timeline.instant);
-  }
-  if (timeline.playing && !current.playing) secondary.timeline.play(timeline.speed);
-  else if (!timeline.playing && current.playing) secondary.timeline.pause();
 }

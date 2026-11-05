@@ -15,13 +15,38 @@ generation, or scientific reasoning.
 |---|---|---|
 | Phase 1 — Platform foundation | Foundation implemented | Backend/frontend modular shells, contracts, transactional session mutations, Cesium shell, bounded live event queues and paged durable replay |
 | Phase 2 — Agent Runtime integration | Integration slice implemented; production closure blocked on deployment contracts and decisions | Delegates turns, cancellation, complete bounded typed EarthContext, and image attachments to Engine; reports, paged session-scoped execution history, and WGS 84 overlays; live deployment validation, authentication/authorization, and recovery are deferred |
-| Phase 3 — Earth Workspace foundation | Initial Engine integration implemented | Typed `earth.command` SSE events for explicit `fly_to` and session-linked `show_investigation` requests are validated, persisted, and dispatched |
-| Phase 4 — Earth Workspace | Workspace and investigation visualization implemented; layer management blocked | Camera history, bookmarks, selection, drawings, measurements, split view, local timeline, Engine execution history, and evidence-linked GeoJSON selection/highlighting are implemented; layers require a typed Engine catalogue/source contract |
+| Phase 3 — Earth Workspace foundation | Initial Engine integration implemented | Typed `earth.command` SSE events for `fly_to`, session-linked `show_investigation`, and EarthContext-scoped `set_layer_visibility` are validated, persisted, and dispatched |
+| Phase 4 — Earth Workspace | Unified Earth UI integrated; Engine scientific layers blocked | God's Eye owns the active Earth workspace UI. SatQuery's competing Earth timeline and workspace-tools panels have been removed; Platform-persisted saved EarthContext views remain available from the command-notch workspace drawer. Engine investigation reports, history, and evidence-linked GeoJSON remain available through SatQuery. Scientific layers still require a typed Engine catalogue/source contract; split view is unavailable in the single-viewer integration. |
 | Phase 5 — Vision | End-to-end attachment contract implemented; image interpretation deployment-dependent | Session-scoped images, bounded concurrent intake, browser capture, viewer, manual georeference metadata, and typed image delivery; image interpretation requires a deployed vision-capable Engine adapter |
 | Phase 6 — Earth Intelligence | Platform context/planning and Engine dataset/image-capability/Earth modality/Agent tool discovery implemented | Canonical EarthContext snapshots, bounded transcript context, searchable Platform memory, retrieval, prompt assembly, capability reporting, recommendations, pre-turn planning, and a user-facing Engine catalogue with read-only Agent tool descriptors and consent visibility |
 | V1 Phase 7 — Recurring monitoring | Engine-backed management and review workflow implemented; external delivery blocked | Mission/schedule creation, revision-checked schedule editing, optional Engine-executed rolling temporal windows, run history, comparisons, cursor-paged trigger activity, and operational notification acknowledgement are available; external delivery remains blocked |
 | V2 Phase 7 — Investigation Workspace | Implemented within the defined scope | Durable Projects, sessions, Engine-backed investigation review, Project activity, investigation-scoped notes and Earth views, Engine-authored saved comparisons, monitoring references, Engine-owned hypothesis lifecycle review, Engine-authored reasoning review, and verified reproducibility exports exist. |
 | Phase 8 — Platform Intelligence | Complete for the current Project-scoped Platform boundary | Researchers can find Project work, connect validated investigations, filter provenance-bearing workflow history, evolve reusable checklists without changing prior runs, and curate explicit investigation subsets as campaigns or review groups. The Platform does not generate Engine plans, scientific methods, or inferred group membership. |
+
+## Unified Earth environment baseline (2026-11-05)
+
+God's Eye View is the primary Earth UI, integrated in the frontend's same-page Vite build. Its
+authored interface, provider services, assets, Earth controls, and Cesium viewer remain the Earth
+implementation. SatQuery's command notch is mounted in God's Eye's native command dock and is the
+AI interaction surface; a single on-demand workspace drawer holds Platform projects/sessions,
+persisted session views, monitoring, and read-only Engine capability discovery. Image intake is
+part of the expanded notch. EarthStage consumes God's Eye's exported startup promise directly.
+The typed `EarthController` attaches to the one viewer for Platform persistence, Engine commands,
+and investigation overlays. The notch opens God's Eye's actual provider-settings panel rather
+than introducing a duplicate settings store. See the [God's Eye parity audit](gods-eye-parity.md)
+for the source comparison and unverified provider workflows.
+
+The integration does not make God's Eye data feeds into Engine evidence or Engine layers. Engine
+science, Agent execution, investigations, and persistence remain Engine-owned; Platform sessions,
+projects, workspace state, and presentation remain Platform-owned. God's Eye owns live viewer and
+provider state. The current typed bridge supplies camera and supported enabled-layer state, shared
+clock state, and Engine-authored overlays. SatQuery's screen-space handler is lazy and selection
+uses the native Cesium selection event. God's Eye visual presets and native annotation/measurement
+payloads do not have a corresponding Engine context/command contract and are not translated into
+Engine evidence or scientific state. Current boundaries also include unavailable split view,
+unsupported God's Eye layer opacity, and Engine scientific layers awaiting a real catalogue/source
+contract. Colab/browser deployment must still provide user credentials where desired and a
+WebGL-capable browser.
 
 ## Current phase reassessment (2026-11-04)
 
@@ -152,11 +177,11 @@ mutations and Project activity events are transactional; comparisons remain as r
 source sessions are later removed, while the review route reports that the Engine records can no
 longer be loaded.
 
-The optional `engine.api_key_env` setting is not currently usable for authentication: the adapter
-sends a placeholder authorization value. A supported auth scheme/header, protected endpoint scope,
-and error contract must be defined with the Engine or deployment proxy before authenticated Engine
-deployments are supported. Platform user authentication additionally needs an identity/tenant and
-resource ownership decision.
+The optional `engine.api_key_env` setting is forwarded as a Bearer credential by the Platform
+adapter. The Engine API currently does not validate this credential, so it is not an authorization
+boundary; authenticated deployments still require a trusted network or an authenticating deployment
+proxy. Platform user authentication additionally needs an identity/tenant and resource ownership
+decision.
 
 ## Deferred roadmap dependencies
 
@@ -192,24 +217,25 @@ These are blocked rather than dropped. Resume each capability when its dependenc
 | Capability | Status | Boundary |
 |---|---|---|
 | Timeline range, instant, scrub, playback | Implemented locally | Range, instant, and playback state are forwarded in typed EarthContext; this does not assert Engine data availability or temporal execution; Cesium tick subscription is released on teardown |
-| Camera history | Implemented | Move-end states, undo/redo and restore; persisted per Platform session |
-| Bookmarks | Implemented | Named EarthContext capture, rename/update/delete/fly-to; persisted per Platform session |
-| Earth selection | Implemented | Cesium entity picks produce typed context state and `earth.selection.changed` events |
-| Drawings | Implemented | Point/line/polygon/rectangle/circle GeoJSON presentation context; no automatic Engine action |
-| Measurements | Implemented | Local geodesic distance/area, coordinates and terrain-provider height when available |
-| Split view | Implemented | Two EarthController-backed views share drawings, selection and timeline; cameras independent unless synchronized |
+| Camera history | Persisted compatibility capability | Camera snapshots and restoration remain Platform-session state; God’s Eye owns active navigation UI |
+| Bookmarks / saved views | Implemented | Named EarthContext capture, rename/update/delete/fly-to; persisted per Platform session and available in the command-notch workspace drawer |
+| Earth selection | Platform context bridge | Typed context state and `earth.selection.changed` event are retained for Engine context and investigation overlays |
+| Drawings | Platform context contract | GeoJSON presentation context remains serializable; God's Eye owns user-facing drawing interactions |
+| Measurements | Platform context contract | Local presentation measurements are not Engine evidence; God's Eye owns user-facing measurement interactions |
+| Split view | Unavailable in integrated UI | The primary God’s Eye runtime uses one shared viewer; a second SatQuery Earth interface is not mounted |
 | Investigation visualization | Implemented for Engine-recorded execution history and materialized geometry | Paged session-scoped journal history; feature selection exposes linked evidence IDs and permits highlighting matching loaded evidence; active geometry remains in bounded EarthContext |
 | Layer manager | Blocked by product/deployment decisions | Supported source kinds, approved providers/licensing, credential/access rules, and source-serving endpoints must be selected before an Engine-owned catalogue can be implemented |
 
 ## Phase 3 Engine command boundary
 
-The Engine Agent emits typed `earth.command` events from an explicit tool call. The initial command
-set is deliberately limited to `fly_to` and `show_investigation`; the Engine validates investigation
-IDs against its Agent session, and the Platform rechecks ownership before resource reads. The
-Platform maps valid events to its shared `EarthCommandIssued` contract, persists them, and dispatches
-them to the workspace. It does not infer commands from assistant text or tool results. Time changes,
-arbitrary overlays, evidence highlighting, and layer visibility need additional Engine-owned data
-contracts and remain unavailable as live commands.
+The Engine Agent emits typed `earth.command` events from an explicit tool call. The supported command
+set is `fly_to`, `show_investigation`, and `set_layer_visibility`. The Engine validates investigation
+IDs against its Agent session and permits layer visibility changes only for IDs in the current
+EarthContext; the Platform rechecks investigation ownership and the live layer manager validates
+layer availability before applying a command. The Platform maps valid events to its shared
+`EarthCommandIssued` contract, persists them, and dispatches them to the workspace. It does not infer
+commands from assistant text or tool results. Time changes, arbitrary overlays, and evidence
+highlighting are not exposed through the Agent tool.
 
 ## Phase 4 Engine-owned data boundaries
 

@@ -121,6 +121,11 @@ class SatQueryEngine:
             self.platform_runtime,
             self.platform_registries.reasoners,
             self.platform_runtime.config.create_agent_session_store(),
+            max_tool_rounds=self.platform_runtime.config.agent.max_tool_rounds,
+            max_tool_calls_per_turn=(
+                self.platform_runtime.config.agent.max_tool_calls_per_turn
+            ),
+            max_context_turns=self.platform_runtime.config.agent.max_context_turns,
             model_timeout_seconds=(
                 self.platform_runtime.config.agent.model_timeout_seconds
             ),
