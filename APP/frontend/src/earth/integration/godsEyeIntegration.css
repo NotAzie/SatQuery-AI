@@ -2,10 +2,25 @@
   position: absolute;
   bottom: calc(100% + 0.5rem);
   left: 50%;
-  z-index: 6;
+  z-index: 15;
   width: min(28rem, calc(100vw - 1.5rem));
   overflow: visible;
   transform: translateX(-50%);
+  transition: opacity 220ms ease, transform 220ms ease, visibility 220ms ease;
+}
+
+/* When dock popovers (Location or Visual Presets) are open, hide the collapsed agent bar to prevent ugly overlapping */
+#command-dock:has(#location-bar:not(.collapsed)) > #satquery-agent-slot:has([data-satquery-agent][data-expanded="false"]),
+#command-dock:has(#control-panel:not(.collapsed)) > #satquery-agent-slot:has([data-satquery-agent][data-expanded="false"]) {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transform: translateX(-50%) translateY(12px);
+}
+
+/* Ensure dock popovers take clean layer precedence */
+#command-dock .dock-popover-content {
+  z-index: 30 !important;
 }
 
 #satquery-agent-slot > div {
@@ -15,8 +30,9 @@
 
 #satquery-agent-slot [data-satquery-agent] {
   width: 100%;
-  border-color: rgba(54, 220, 255, 0.32);
+  border-color: rgba(54, 220, 255, 0.45);
   background: rgba(8, 20, 30, 0.96);
+  font-family: 'Pixelify Sans', 'Silkscreen', monospace;
 }
 
 #satquery-agent-slot [data-satquery-agent][data-expanded="false"] {
@@ -67,6 +83,7 @@
   max-height: 1.9rem;
   padding: 0.3rem 0.45rem;
   font-size: 0.65rem;
+  color: #ffffff;
 }
 
 #satquery-agent-slot [data-satquery-agent][data-expanded="false"] > form > div {
@@ -85,11 +102,14 @@
 }
 
 #satquery-agent-slot [data-satquery-agent][data-expanded="true"] {
-  bottom: 0;
+  position: fixed;
+  bottom: 5rem;
   width: min(46rem, calc(100vw - 2rem));
   left: 50%;
   right: auto;
+  z-index: 160;
   transform: translateX(-50%);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75);
 }
 
 @media (max-width: 720px) {

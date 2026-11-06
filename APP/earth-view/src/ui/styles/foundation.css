@@ -5,19 +5,19 @@
 
 :root {
   --bg-dark: #0a0a0f;
-  --glass-bg: rgba(12, 12, 20, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-border-hover: rgba(255, 255, 255, 0.15);
-  --accent: #00d4ff;
-  --accent-dim: rgba(0, 212, 255, 0.15);
-  --accent-glow: rgba(0, 212, 255, 0.4);
-  --text-primary: #e8eaed;
-  --text-secondary: rgba(232, 234, 237, 0.5);
-  --text-dim: rgba(232, 234, 237, 0.3);
+  --glass-bg: rgba(12, 12, 20, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-border-hover: rgba(255, 255, 255, 0.22);
+  --accent: #00e5ff;
+  --accent-dim: rgba(0, 229, 255, 0.18);
+  --accent-glow: rgba(0, 229, 255, 0.5);
+  --text-primary: #ffffff;
+  --text-secondary: #e2e8f0;
+  --text-dim: #94a3b8;
   /* Opaque surface for browser-painted menus, which cannot use --glass-bg. */
   --menu-bg: #12121c;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Pixelify Sans', 'Silkscreen', 'JetBrains Mono', 'SF Mono', monospace;
+  --font-sans: 'Pixelify Sans', 'Silkscreen', 'Inter', system-ui, sans-serif;
   --panel-radius: 16px;
   --btn-radius: 10px;
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -587,9 +587,9 @@ body.cockpit-mode #cockpit-cloud-effects.active {
 
 #title-bar .subtitle {
   font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 3px;
-  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 2.5px;
+  color: var(--text-secondary);
   margin-top: 4px;
   text-transform: uppercase;
 }

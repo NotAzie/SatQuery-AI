@@ -1,4 +1,28 @@
 /* ── Responsive ───────────────────────────────── */
+@media (max-width: 1280px) {
+  #top-center-actions {
+    gap: 4px;
+    padding: 3px 6px;
+  }
+  #top-center-actions button {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    max-width: 28px;
+  }
+  #top-center-actions .material-symbols-outlined {
+    font-size: 16px;
+  }
+  #title-bar {
+    top: 20px;
+    left: 20px;
+  }
+  #style-indicator {
+    top: 20px;
+    right: 20px;
+  }
+}
+
 @media (max-width: 720px) {
   #pp-toggles {
     --pp-expanded-width: 176px;

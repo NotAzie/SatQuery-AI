@@ -463,7 +463,22 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
   user-select: none;
   pointer-events: auto;
-  transition: opacity var(--transition-smooth), transform var(--transition-smooth);
+  transition: opacity var(--transition-smooth), transform var(--transition-smooth), bottom var(--transition-smooth);
+}
+
+@media (max-width: 1440px) {
+  .earth-telemetry-bar {
+    bottom: 5.5rem;
+    right: 20px;
+  }
+}
+
+@media (max-width: 900px) {
+  .earth-telemetry-bar {
+    top: 68px;
+    bottom: auto;
+    right: 16px;
+  }
 }
 
 .earth-telemetry-bar:hover {

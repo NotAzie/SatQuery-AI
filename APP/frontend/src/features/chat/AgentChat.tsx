@@ -641,7 +641,7 @@ export function AgentChat() {
       <header className="flex items-center justify-between border-b border-white/10 px-5 py-3">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-ink-dim">
-            SatQuery · Earth Intelligence
+            Altas · Satellite Intelligence
           </p>
           <p className="mt-1 max-w-[min(28rem,60vw)] truncate text-xs text-ink-dim" role={error ? "alert" : status ? "status" : undefined}>
             {error ?? status ?? (expanded
